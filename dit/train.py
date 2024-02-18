@@ -19,7 +19,7 @@ import torch.distributed as dist
 from diffusers.models import AutoencoderKL
 from models.diffusion import create_diffusion
 from models.dit import DiT_models
-from models.utils.ckpt_utils import create_logger
+from models.utils.ckpt_utils import create_logger, load, save
 from models.utils.data_utils import center_crop_arr, prepare_dataloader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
@@ -109,17 +109,15 @@ def main(args):
     # ==============================
     # Setup an experiment folder
     # ==============================
+    # Make outputs folder (holds all experiment subfolders)
+    os.makedirs(args.outputs, exist_ok=True)
+    experiment_index = len(glob(f"{args.outputs}/*"))
+    # e.g., DiT-XL/2 --> DiT-XL-2 (for naming folders)
+    model_string_name = args.model.replace("/", "-")
+    # Create an experiment folder
+    experiment_dir = f"{args.outputs}/{experiment_index:03d}-{model_string_name}"
     if coordinator.is_master():
-        # Make results folder (holds all experiment subfolders)
-        os.makedirs(args.results_dir, exist_ok=True)
-        experiment_index = len(glob(f"{args.results_dir}/*"))
-        # e.g., DiT-XL/2 --> DiT-XL-2 (for naming folders)
-        model_string_name = args.model.replace("/", "-")
-        # Create an experiment folder
-        experiment_dir = f"{args.results_dir}/{experiment_index:03d}-{model_string_name}"
-        # Stores saved model checkpoints
-        checkpoint_dir = f"{experiment_dir}/checkpoints"
-        os.makedirs(checkpoint_dir, exist_ok=True)
+        os.makedirs(experiment_dir, exist_ok=True)
         with open(f"{experiment_dir}/config.txt", "w") as f:
             json.dump(args.__dict__, f, indent=4)
         logger = create_logger(experiment_dir)
@@ -203,6 +201,8 @@ def main(args):
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
     optimizer = HybridAdam(model.parameters(), lr=args.lr, weight_decay=0, adamw_mode=True)
+    # You can use a lr scheduler if you want
+    lr_scheduler = None
 
     # Prepare models for training
     # Ensure EMA is initialized with synced weights
@@ -211,11 +211,6 @@ def main(args):
     model.train()
     # EMA model should always be in eval mode
     ema.eval()
-
-    # Boost model for distributed training
-    torch.set_default_dtype(dtype)
-    model, optimizer, _, _, _ = booster.boost(model=model, optimizer=optimizer)
-    torch.set_default_dtype(torch.float)
 
     # Setup data:
     transform = transforms.Compose(
@@ -237,10 +232,22 @@ def main(args):
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
 
+    # Boost model for distributed training
+    torch.set_default_dtype(dtype)
+    model, optimizer, _, dataloader, lr_scheduler = booster.boost(
+        model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, dataloader=dataloader
+    )
+    torch.set_default_dtype(torch.float)
+
     # Variables for monitoring/logging purposes:
     start_epoch = 0
     start_step = 0
     sampler_start_idx = 0
+    if args.load is not None:
+        logger.info("Loading checkpoint")
+        start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
+        logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
+
     num_steps_per_epoch = len(dataloader)
 
     logger.info(f"Training for {args.epochs} epochs...")
@@ -287,8 +294,20 @@ def main(args):
                     writer.add_scalar("loss", loss.item(), epoch * num_steps_per_epoch + step)
 
                 if args.ckpt_every > 0 and (step + 1) % args.ckpt_every == 0:
-                    coordinator.print_on_master(f"Saving checkpoint")
-                    coordinator.print_on_master(f"Saved checkpoint at epoch {epoch} step {step + 1}")
+                    logger.info(f"Saving checkpoint")
+                    save(
+                        booster,
+                        model,
+                        ema,
+                        optimizer,
+                        lr_scheduler,
+                        epoch,
+                        step + 1,
+                        args.batch_size,
+                        coordinator,
+                        experiment_dir,
+                    )
+                    logger.info(f"Saved checkpoint at epoch {epoch} step {step + 1} to {experiment_dir}")
 
         # the continue epochs are not resumed, so we need to reset the sampler start index and start step
         dataloader.sampler.set_start_index(0)
@@ -307,7 +326,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--plugin", type=str, default="zero2", choices=["gemini", "gemini_auto", "zero2", "zero2_cpu", "3d"]
     )
-    parser.add_argument("--results-dir", type=str, default="results")
+    parser.add_argument("--outputs", type=str, default="outputs")
+    parser.add_argument("--load", type=str, default=None)
     parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
@@ -316,8 +336,8 @@ if __name__ == "__main__":
     parser.add_argument("--global-seed", type=int, default=0)
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=100)
-    parser.add_argument("--ckpt-every", type=int, default=50_000)
+    parser.add_argument("--log-every", type=int, default=2)
+    parser.add_argument("--ckpt-every", type=int, default=10)
     parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
