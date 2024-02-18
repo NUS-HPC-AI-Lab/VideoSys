@@ -1,6 +1,8 @@
 import torch
 import torch.distributed as dist
 
+
+# using all_to_all_single api to perform all to all communication
 def _all_to_all_single(input_, seq_world_size, group, scatter_dim, gather_dim):
     inp_shape = list(input_.shape)
     inp_shape[scatter_dim] = inp_shape[scatter_dim] // seq_world_size
@@ -28,11 +30,13 @@ def _all_to_all_single(input_, seq_world_size, group, scatter_dim, gather_dim):
     ).contiguous()
 
 
+# using all_to_all api to perform all to all communication
 def _all_to_all(input_, world_size, group, scatter_dim, gather_dim):
     input_list = [t.contiguous() for t in torch.tensor_split(input_, world_size, scatter_dim)]
     output_list = [torch.empty_like(input_list[0]) for _ in range(world_size)]
     dist.all_to_all(output_list, input_list, group=group)
     return torch.cat(output_list, dim=gather_dim).contiguous()
+
 
 class _AllToAll(torch.autograd.Function):
     """All-to-all communication.
@@ -52,7 +56,7 @@ class _AllToAll(torch.autograd.Function):
         world_size = dist.get_world_size(process_group)
         bsz, _, _ = input_.shape
 
-        #Todo: Try to make all_to_all_single compatible with a large batch size
+        # Todo: Try to make all_to_all_single compatible with a large batch size
         if bsz == 1:
             return _all_to_all_single(input_, world_size, process_group, scatter_dim, gather_dim)
         else:
