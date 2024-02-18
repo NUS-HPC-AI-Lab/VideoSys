@@ -226,6 +226,8 @@ def main(args):
     model = DiT_models[args.model](input_size=latent_size, num_classes=args.num_classes).to(device).to(dtype)
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
+    if args.grad_checkpoint:
+        model.gradient_checkpointing_enable()
 
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
@@ -375,5 +377,6 @@ if __name__ == "__main__":
     parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
+    parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
     args = parser.parse_args()
     main(args)
