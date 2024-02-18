@@ -15,6 +15,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 from timm.models.vision_transformer import Attention, Mlp, PatchEmbed
 
 
@@ -182,6 +183,11 @@ class DiT(nn.Module):
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
 
+        self.gradient_checkpointing = False
+
+    def gradient_checkpointing_enable(self):
+        self.gradient_checkpointing = True
+
     def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):
@@ -234,6 +240,13 @@ class DiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
+    @staticmethod
+    def create_custom_forward(module):
+        def custom_forward(*inputs):
+            return module(*inputs)
+
+        return custom_forward
+
     def forward(self, x, t, y):
         """
         Forward pass of DiT.
@@ -245,8 +258,13 @@ class DiT(nn.Module):
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
+
         for block in self.blocks:
-            x = block(x, c)  # (N, T, D)
+            if self.gradient_checkpointing:
+                x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
+            else:
+                x = block(x, c)  # (N, T, D)
+
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
         return x
