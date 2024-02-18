@@ -62,8 +62,10 @@ class TimestepEmbedder(nn.Module):
             embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
         return embedding
 
-    def forward(self, t):
+    def forward(self, t, dtype):
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
+        if t_freq.dtype != dtype:
+            t_freq = t_freq.to(dtype)
         t_emb = self.mlp(t_freq)
         return t_emb
 
@@ -240,7 +242,7 @@ class DiT(nn.Module):
         y: (N,) tensor of class labels
         """
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
-        t = self.t_embedder(t)  # (N, D)
+        t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
         for block in self.blocks:
