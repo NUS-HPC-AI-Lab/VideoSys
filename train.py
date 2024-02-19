@@ -1,12 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
-"""
-A minimal training script for DiT using PyTorch DDP.
-"""
 import argparse
 import json
 import os
@@ -241,6 +232,7 @@ def main(args):
         model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, dataloader=dataloader
     )
     torch.set_default_dtype(torch.float)
+    logger.info("Boost model for distributed training")
 
     # Variables for monitoring/logging purposes:
     start_epoch = 0
