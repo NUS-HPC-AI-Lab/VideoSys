@@ -1,3 +1,0 @@
-[submodule "examples/tutorial/fastfold/FastFold"]
-	path = examples/tutorial/fastfold/FastFold
-	url = https://github.com/hpcaitech/FastFold
