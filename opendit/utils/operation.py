@@ -1,6 +1,6 @@
 import torch
 import torch.distributed as dist
-
+import os
 
 # using all_to_all_single api to perform all to all communication
 def _all_to_all_single(input_, seq_world_size, group, scatter_dim, gather_dim):
@@ -69,3 +69,10 @@ class _AllToAll(torch.autograd.Function):
         gather_dim = ctx.scatter_dim
         return_grad = _AllToAll.apply(*grad_output, process_group, scatter_dim, gather_dim)
         return (return_grad, None, None, None)
+
+def model_sharding(model: torch.nn.Module):
+    global_rank = os.environ["RANK"]
+    global_size = dist.get_world_size()
+    for name, param in model.named_parameters():
+        param.data = torch.chunk(param.data, global_size, dim=-1)[int(global_rank)].contiguous()
+

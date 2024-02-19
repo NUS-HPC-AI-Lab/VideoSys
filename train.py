@@ -26,12 +26,14 @@ from diffusers.models import AutoencoderKL
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
 from opendit.models.dit import DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, save
 from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
+from opendit.utils.operation import model_sharding
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -67,12 +69,14 @@ def all_reduce_mean(tensor: torch.Tensor) -> torch.Tensor:
 
 
 @torch.no_grad()
-def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999) -> None:
+def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999, sharded=True) -> None:
     """
     Step the EMA model towards the current model.
     """
     ema_params = OrderedDict(ema_model.named_parameters())
     model_params = OrderedDict(model.named_parameters())
+    global_rank = os.environ["RANK"]
+    world_size = dist.get_world_size()
 
     for name, param in model_params.items():
         if name == "pos_embed":
@@ -80,7 +84,10 @@ def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float 
         param_data = param.data
         if param.data.dtype != torch.float32:
             param_data = param_data.to(torch.float32)
-        ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
+        if not sharded:
+            ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
+        else:
+            ema_params[name].mul_(decay).add_(torch.chunk(param_data, world_size, dim=-1)[int(global_rank)], alpha=1 - decay)
 
 
 def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
@@ -209,7 +216,7 @@ def main(args):
 
     # Prepare models for training
     # Ensure EMA is initialized with synced weights
-    update_ema(ema, model, decay=0)
+    update_ema(ema, model, decay=0, sharded=False)
     # important! This enables embedding dropout for classifier-free guidance
     model.train()
     # EMA model should always be in eval mode
@@ -240,6 +247,9 @@ def main(args):
     model, optimizer, _, dataloader, lr_scheduler = booster.boost(
         model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, dataloader=dataloader
     )
+
+
+
     torch.set_default_dtype(torch.float)
 
     # Variables for monitoring/logging purposes:
@@ -250,7 +260,7 @@ def main(args):
         logger.info("Loading checkpoint")
         start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
-
+    model_sharding(ema)
     num_steps_per_epoch = len(dataloader)
 
     logger.info(f"Training for {args.epochs} epochs...")
