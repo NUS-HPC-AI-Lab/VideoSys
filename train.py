@@ -77,7 +77,10 @@ def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float 
     for name, param in model_params.items():
         if name == "pos_embed":
             continue
-        ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
+        param_data = param.data
+        if param.data.dtype != torch.float32:
+            param_data = param_data.to(torch.float32)
+        ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
 
 
 def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
@@ -192,7 +195,7 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema = deepcopy(model).to(device)
+    ema = deepcopy(model).to(torch.float32).to(device)
     requires_grad(ema, False)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
