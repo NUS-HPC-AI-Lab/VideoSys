@@ -13,16 +13,13 @@ from colossalai.booster.plugin import GeminiPlugin, HybridParallelPlugin, LowLev
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
-from diffusers.models import AutoencoderKL
 from torch.utils.tensorboard import SummaryWriter
-from torchvision import transforms
-from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
 from opendit.models.dit import DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, save
-from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
+from opendit.utils.data_utils import VideoDataset, prepare_dataloader
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -190,7 +187,6 @@ def main(args):
     requires_grad(ema, False)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
@@ -207,15 +203,7 @@ def main(args):
     ema.eval()
 
     # Setup data:
-    transform = transforms.Compose(
-        [
-            transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-        ]
-    )
-    dataset = CIFAR10(args.data_path, transform=transform, download=True)
+    dataset = VideoDataset(args.data_path)
     dataloader = prepare_dataloader(
         dataset,
         batch_size=args.batch_size,
@@ -264,11 +252,9 @@ def main(args):
                 x = x.to(device)
                 y = y.to(device)
 
-                # VAE encode
-                with torch.no_grad():
-                    # Map input images to latent space + normalize latents:
-                    x = vae.encode(x).latent_dist.sample().mul_(0.18215)
-                    x = x.to(dtype)
+                # TODO: deal with 4d x
+                x = x.view(x.shape[0], -1, x.shape[-2], x.shape[-1])
+                x = x[:, :4, :, :].contiguous()
 
                 # Diffusion
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
@@ -317,19 +303,17 @@ def main(args):
 if __name__ == "__main__":
     # Default args here will train DiT-XL/2 with the hyperparameters we used in our paper (except training iters).
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-path", type=str, default="./datasets")
+    parser.add_argument("--data-path", type=str, required=True)
     parser.add_argument(
         "--plugin", type=str, default="zero2", choices=["gemini", "gemini_auto", "zero2", "zero2_cpu", "3d"]
     )
     parser.add_argument("--outputs", type=str, default="outputs")
     parser.add_argument("--load", type=str, default=None)
     parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
-    parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1400)
     parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--global-seed", type=int, default=0)
-    parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
+    parser.add_argument("--global-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--log-every", type=int, default=2)
     parser.add_argument("--ckpt-every", type=int, default=10)

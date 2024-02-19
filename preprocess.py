@@ -7,6 +7,7 @@
 import argparse
 import os
 
+import numpy as np
 import torch
 import tqdm
 from matplotlib import animation
@@ -73,7 +74,7 @@ def encode_video(
     file_path: str,
     save_dir: str,
     sequence_length: int = 32,
-    resolution: int = 256,
+    resolution: int = 128,
     video_type: str = ".mp4",
 ) -> None:
     video_filename = file_path
@@ -86,13 +87,12 @@ def encode_video(
 
     # encode
     encodings = model.encode(video, include_embeddings=True)[1]
-    encodings = encodings.cpu().numpy()
+    encodings = encodings.squeeze().cpu().numpy()
 
     # save encodings
     os.makedirs(save_dir, exist_ok=True)
     embed_path = os.path.join(save_dir, os.path.basename(file_path).replace(video_type, ".npy"))
-    with open(embed_path, "wb") as f:
-        f.write(encodings.tobytes())
+    np.save(embed_path, encodings)
 
 
 def preprocess_video(args):
