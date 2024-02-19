@@ -24,7 +24,7 @@ from torch.jit import Final
 from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
 
 torch.manual_seed(1024)
-ULYSSES = False
+ULYSSES = True
 SP_SIZE = 2
 
 
@@ -152,12 +152,18 @@ class DistAttention(nn.Module):
 
         if ULYSSES:
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
+            q = q.reshape(1, -1, self.head_dim * self.num_heads)
+            k = k.reshape(1, -1, self.head_dim * self.num_heads)
+            v = v.reshape(1, -1, self.head_dim * self.num_heads)
+
             q = all_to_all_comm(q, None)
             k = all_to_all_comm(k, None)
             v = all_to_all_comm(v, None)
+
             q = q.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
             k = k.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
             v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+
         else:
             qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             q, k, v = qkv.unbind(0)
@@ -180,7 +186,10 @@ class DistAttention(nn.Module):
         x_output_shape = (B, N, C) if not ULYSSES else (B, N * SP_SIZE, num_heads * self.head_dim)
         x = x.transpose(1, 2).reshape(x_output_shape)
         if ULYSSES:
+            # Todo: Use all_to_all_single for x
+            # x = x.reshape(1, -1, num_heads * self.head_dim)
             x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
+            # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -335,29 +344,26 @@ class DiT(nn.Module):
         """
 
         # Todo: Mock video input by repeating the same frame for all timesteps
+        # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
         # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
-        # # Chunk x in Sequence Dimension
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
 
-        # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
-
-        # Chunk x on dimension 1 to each GPU
+        # Chunk x on sequence dimension to sp group
         if ULYSSES:
             x = x.chunk(SP_SIZE, dim=1)[dist.get_rank()]
+
         for block in self.blocks:
             if self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
             else:
                 x = block(x, c)  # (N, T, D)
+
         if ULYSSES:
-            gather_forward_split_backward(x, dim=1, process_group=None)
-        # print_rank('x', x.shape)
-        # if dist.get_rank() == 0:
-        #     torch.save(x, '/home/zhaozhongkai/workspace/zzk/personal_utils/compare_two_tensor/final-sp.pt')
-        # exit(0)
+            x = gather_forward_split_backward(x, dim=1, process_group=None)
+
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
         return x
