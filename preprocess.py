@@ -13,44 +13,48 @@ from torchvision.io import read_video, write_video
 from opendit.vqvae.data import preprocess
 from opendit.vqvae.download import load_vqvae
 
-video_filename = "/data/personal/nus-zxl/OpenDiT/videos/art-museum.mp4"
-sequence_length = 80
-resolution = 256
-device = torch.device("cuda")
 
-vqvae = load_vqvae("ucf101_stride4x4x4").to(device)
-video = read_video(video_filename, pts_unit="sec")[0]
-video = preprocess(video, resolution, sequence_length).unsqueeze(0).to(device)
+@torch.no_grad()
+def visualize(path: str) -> None:
+    video_filename = path
+    sequence_length = 80
+    resolution = 256
+    device = torch.device("cuda")
 
-with torch.no_grad():
+    # build model and load weights
+    vqvae = load_vqvae("ucf101_stride4x4x4").to(device)
+
+    # read video and preprocess
+    video = read_video(video_filename, pts_unit="sec")[0]
+    video = preprocess(video, resolution, sequence_length).unsqueeze(0).to(device)
+
+    # encode and decode
     encodings = vqvae.encode(video)
     video_recon = vqvae.decode(encodings)
     video_recon = torch.clamp(video_recon, -0.5, 0.5)
 
-videos = video_recon[0].permute(1, 2, 3, 0)
-videos = ((videos + 0.5) * 255).cpu().to(torch.uint8)
-write_video("output.mp4", videos, 20)
+    # save reconstruction video
+    videos = video_recon[0].permute(1, 2, 3, 0)
+    videos = ((videos + 0.5) * 255).cpu().to(torch.uint8)
+    write_video("output.mp4", videos, 20)
 
+    # compare real and reconstruction video
+    videos = torch.cat((video, video_recon), dim=-1)
+    videos = videos[0].permute(1, 2, 3, 0)  # CTHW -> THWC
+    videos = ((videos + 0.5) * 255).cpu().to(torch.uint8).numpy()
+    fig = plt.figure()
+    plt.title("real (left), reconstruction (right)")
+    plt.axis("off")
+    im = plt.imshow(videos[0, :, :, :])
+    plt.close()
 
-videos = torch.cat((video, video_recon), dim=-1)
-videos = videos[0].permute(1, 2, 3, 0)  # CTHW -> THWC
-videos = ((videos + 0.5) * 255).cpu().to(torch.uint8).numpy()
-fig = plt.figure()
-plt.title("real (left), reconstruction (right)")
-plt.axis("off")
-im = plt.imshow(videos[0, :, :, :])
-plt.close()
+    def init():
+        im.set_data(videos[0, :, :, :])
 
+    def animate(i):
+        im.set_data(videos[i, :, :, :])
+        return im
 
-def init():
-    im.set_data(videos[0, :, :, :])
-
-
-def animate(i):
-    im.set_data(videos[i, :, :, :])
-    return im
-
-
-anim = animation.FuncAnimation(fig, animate, init_func=init, frames=videos.shape[0], interval=50)
-mp4_writer = animation.FFMpegWriter(fps=20, bitrate=1800)
-anim.save("compare.mp4", writer=mp4_writer)
+    anim = animation.FuncAnimation(fig, animate, init_func=init, frames=videos.shape[0], interval=50)
+    mp4_writer = animation.FFMpegWriter(fps=20, bitrate=1800)
+    anim.save("compare.mp4", writer=mp4_writer)
