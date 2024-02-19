@@ -1,3 +1,13 @@
+## Usage
+```
+# Train
+bash preprocess.sh
+bash train.sh
+
+# Infer
+bash sample.sh
+```
+
 ## Install ColossalAI
 ```
 git clone https://github.com/hpcaitech/ColossalAI.git
