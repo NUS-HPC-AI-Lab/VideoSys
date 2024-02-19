@@ -14,12 +14,22 @@ import math
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.checkpoint
-from timm.models.vision_transformer import Attention, Mlp, PatchEmbed
+from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
+from torch.jit import Final
+
+from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
+
+torch.manual_seed(1024)
+ULYSSES = False
+SP_SIZE = 2
 
 
 def modulate(x, shift, scale):
+    # Suppose x is (N, T, D), shift is (N, D), scale is (N, D)
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
@@ -107,6 +117,75 @@ class LabelEmbedder(nn.Module):
 #################################################################################
 
 
+class DistAttention(nn.Module):
+    fused_attn: Final[bool]
+
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int = 8,
+        qkv_bias: bool = False,
+        qk_norm: bool = False,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+        norm_layer: nn.Module = nn.LayerNorm,
+    ) -> None:
+        super().__init__()
+        assert dim % num_heads == 0, "dim should be divisible by num_heads"
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim**-0.5
+        self.fused_attn = use_fused_attn()
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, N, C = x.shape
+        qkv = self.qkv(x)
+        # Todo: Change num_heads in somewhere else for a better code style
+        num_heads = self.num_heads if not ULYSSES else self.num_heads // SP_SIZE
+
+        if ULYSSES:
+            q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
+            q = all_to_all_comm(q, None)
+            k = all_to_all_comm(k, None)
+            v = all_to_all_comm(v, None)
+            q = q.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            k = k.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+        else:
+            qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            q, k, v = qkv.unbind(0)
+        q, k = self.q_norm(q), self.k_norm(k)
+
+        if self.fused_attn:
+            x = F.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+            )
+        else:
+            q = q * self.scale
+            attn = q @ k.transpose(-2, -1)
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = attn @ v
+
+        x_output_shape = (B, N, C) if not ULYSSES else (B, N * SP_SIZE, num_heads * self.head_dim)
+        x = x.transpose(1, 2).reshape(x_output_shape)
+        if ULYSSES:
+            x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+
 class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
@@ -115,7 +194,7 @@ class DiTBlock(nn.Module):
     def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        self.attn = DistAttention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
@@ -254,17 +333,31 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
+
+        # Todo: Mock video input by repeating the same frame for all timesteps
+        # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
+        # # Chunk x in Sequence Dimension
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
 
+        # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
+
+        # Chunk x on dimension 1 to each GPU
+        if ULYSSES:
+            x = x.chunk(SP_SIZE, dim=1)[dist.get_rank()]
         for block in self.blocks:
             if self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
             else:
                 x = block(x, c)  # (N, T, D)
-
+        if ULYSSES:
+            gather_forward_split_backward(x, dim=1, process_group=None)
+        # print_rank('x', x.shape)
+        # if dist.get_rank() == 0:
+        #     torch.save(x, '/home/zhaozhongkai/workspace/zzk/personal_utils/compare_two_tensor/final-sp.pt')
+        # exit(0)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
         return x
