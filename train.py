@@ -26,7 +26,6 @@ from diffusers.models import AutoencoderKL
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
