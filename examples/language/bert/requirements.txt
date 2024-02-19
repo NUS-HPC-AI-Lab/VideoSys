@@ -1,9 +1,0 @@
-colossalai
-evaluate
-datasets
-torch
-tqdm
-transformers
-scipy
-scikit-learn
-ptflops

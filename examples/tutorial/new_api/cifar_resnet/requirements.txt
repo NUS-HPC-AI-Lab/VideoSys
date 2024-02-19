@@ -1,4 +1,0 @@
-colossalai
-torch
-torchvision
-tqdm

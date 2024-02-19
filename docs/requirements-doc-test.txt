@@ -1,7 +1,0 @@
-colossalai
-torch
-packaging
-tensornvme
-psutil
-transformers
-pytest
