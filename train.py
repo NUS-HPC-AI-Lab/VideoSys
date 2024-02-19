@@ -67,7 +67,7 @@ def all_reduce_mean(tensor: torch.Tensor) -> torch.Tensor:
 
 
 @torch.no_grad()
-def update_ema(ema_model, model, decay=0.9999):
+def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999) -> None:
     """
     Step the EMA model towards the current model.
     """
@@ -75,12 +75,12 @@ def update_ema(ema_model, model, decay=0.9999):
     model_params = OrderedDict(model.named_parameters())
 
     for name, param in model_params.items():
-        # TODO: Consider applying only to params that require_grad
-        # to avoid small numerical changes of pos_embed
+        if name == "pos_embed":
+            continue
         ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
 
 
-def requires_grad(model, flag=True):
+def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
     """
     Set requires_grad flag for all parameters in a model.
     """
