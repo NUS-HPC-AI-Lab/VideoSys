@@ -1,3 +1,4 @@
+import os
 import random
 from typing import Iterator, Optional
 
@@ -108,3 +109,29 @@ def center_crop_arr(pil_image, image_size):
     crop_y = (arr.shape[0] - image_size) // 2
     crop_x = (arr.shape[1] - image_size) // 2
     return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
+
+
+class VideoDataset(Dataset):
+    def __init__(self, data_path: str):
+        self.data_path = data_path
+        file_list = os.listdir(data_path)
+        self.video_list = [v for v in file_list if v.endswith(".npy")]
+
+        # if toy dataset, repeat the video list
+        if set(self.video_list) == set(["art-museum.npy", "lagos.npy", "man-on-the-cloud.npy", "suv-in-the-dust.npy"]):
+            print("Using toy dataset, repeating the video data 100 times")
+            self.video_list = self.video_list * 100
+        else:
+            raise ValueError("Invalid dataset")
+
+        self.num_samples = len(self.video_list)
+        # TODO: add label
+        self.label_list = [random.randint(0, 9) for _ in self.video_list]
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        video = torch.tensor(np.load(os.path.join(self.data_path, self.video_list[idx])))
+        label = torch.tensor(self.label_list[idx])
+        return video, label
