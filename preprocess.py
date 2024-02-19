@@ -4,10 +4,13 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 
 import torch
+import tqdm
 from matplotlib import animation
 from matplotlib import pyplot as plt
+from torch import nn
 from torchvision.io import read_video, write_video
 
 from opendit.vqvae.data import preprocess
@@ -58,3 +61,45 @@ def visualize(path: str) -> None:
     anim = animation.FuncAnimation(fig, animate, init_func=init, frames=videos.shape[0], interval=50)
     mp4_writer = animation.FFMpegWriter(fps=20, bitrate=1800)
     anim.save("compare.mp4", writer=mp4_writer)
+
+
+@torch.no_grad()
+def encode_video(
+    model: nn.Module,
+    file_path: str,
+    save_dir: str,
+    sequence_length: int = 32,
+    resolution: int = 256,
+    video_type: str = ".mp4",
+) -> None:
+    video_filename = file_path
+    assert video_filename.endswith(video_type)
+    device = torch.device("cuda")
+
+    # read video and preprocess
+    video = read_video(video_filename, pts_unit="sec")[0]
+    video = preprocess(video, resolution, sequence_length).unsqueeze(0).to(device)
+
+    # encode
+    encodings = model.encode(video, include_embeddings=True)[1]
+    encodings = encodings.cpu().numpy()
+
+    # save encodings
+    os.makedirs(save_dir, exist_ok=True)
+    embed_path = os.path.join(save_dir, os.path.basename(file_path).replace(video_type, ".npy"))
+    with open(embed_path, "wb") as f:
+        f.write(encodings.tobytes())
+
+
+def preprocess_video(data_dir: str, model: str = "ucf101_stride4x4x4", video_type=".mp4"):
+    vqvae = load_vqvae(model).to("cuda")
+    video_list = os.listdir(data_dir)
+    for v in tqdm.tqdm(video_list):
+        if v.endswith(video_type):
+            encode_video(model=vqvae, file_path=os.path.join(data_dir, v), save_dir="processed", video_type=video_type)
+
+
+if "__main__" == __name__:
+    # visualize("./videos/art-museum.mp4")
+    preprocess_video("./videos")
+    print("Done!")
