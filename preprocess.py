@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import argparse
 import os
 
 import torch
@@ -15,6 +16,9 @@ from torchvision.io import read_video, write_video
 
 from opendit.vqvae.data import preprocess
 from opendit.vqvae.download import load_vqvae
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 
 @torch.no_grad()
@@ -91,15 +95,24 @@ def encode_video(
         f.write(encodings.tobytes())
 
 
-def preprocess_video(data_dir: str, model: str = "ucf101_stride4x4x4", video_type=".mp4"):
-    vqvae = load_vqvae(model).to("cuda")
-    video_list = os.listdir(data_dir)
+def preprocess_video(args):
+    vqvae = load_vqvae(args.model).to("cuda")
+    video_list = os.listdir(args.data_dir)
     for v in tqdm.tqdm(video_list):
-        if v.endswith(video_type):
-            encode_video(model=vqvae, file_path=os.path.join(data_dir, v), save_dir="processed", video_type=video_type)
+        if v.endswith(args.video_type):
+            encode_video(
+                model=vqvae, file_path=os.path.join(args.data_dir, v), save_dir="processed", video_type=args.video_type
+            )
+
+    print("Done!")
 
 
 if "__main__" == __name__:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_dir", type=str, required=True)
+    parser.add_argument("--model", type=str, default="ucf101_stride4x4x4")
+    parser.add_argument("--video_type", type=str, default=".mp4")
+    args = parser.parse_args()
+    print(f"Args: {args}")
+    preprocess_video(args)
     # visualize("./videos/art-museum.mp4")
-    preprocess_video("./videos")
-    print("Done!")
