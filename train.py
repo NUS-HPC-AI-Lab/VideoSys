@@ -171,6 +171,7 @@ def main(args):
     # Initialize Model, Objective, Optimizer
     # ======================================================
     # Create model
+    # TODO: use real size
     assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
     latent_size = args.image_size // 8
     dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
@@ -315,11 +316,12 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--global-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=2)
-    parser.add_argument("--ckpt-every", type=int, default=10)
+    parser.add_argument("--log-every", type=int, default=10)
+    parser.add_argument("--ckpt-every", type=int, default=5000)
     parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
+    parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     args = parser.parse_args()
     main(args)
