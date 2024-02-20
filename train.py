@@ -9,7 +9,7 @@ import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.booster import Booster
-from colossalai.booster.plugin import GeminiPlugin, HybridParallelPlugin, LowLevelZeroPlugin
+from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
@@ -127,41 +127,12 @@ def main(args):
     # ==============================
     # Initialize Booster
     # ==============================
-    if args.plugin == "gemini":
-        plugin = GeminiPlugin(
-            precision=args.mixed_precision,
-            initial_scale=2**16,
-            max_norm=args.grad_clip,
-        )
-    elif args.plugin == "gemini_auto":
-        plugin = GeminiPlugin(
-            precision=args.mixed_precision,
-            placement_policy="auto",
-            initial_scale=2**16,
-            max_norm=args.grad_clip,
-        )
-    elif args.plugin == "zero2":
+    if args.plugin == "zero2":
         plugin = LowLevelZeroPlugin(
             stage=2,
             precision=args.mixed_precision,
             initial_scale=2**16,
             max_norm=args.grad_clip,
-        )
-    elif args.plugin == "zero2_cpu":
-        plugin = LowLevelZeroPlugin(
-            stage=2,
-            precision=args.mixed_precision,
-            initial_scale=2**16,
-            cpu_offload=True,
-            max_norm=args.grad_clip,
-        )
-    elif args.plugin == "3d":
-        plugin = HybridParallelPlugin(
-            tp_size=args.tp,
-            pp_size=1,
-            zero_stage=args.zero,
-            max_norm=args.grad_clip,
-            precision=args.mixed_precision,
         )
     else:
         raise ValueError(f"Unknown plugin {args.plugin}")
