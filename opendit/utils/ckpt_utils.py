@@ -68,7 +68,7 @@ def save(
     booster.save_model(model, os.path.join(save_dir, "model"), shard=True)
     # ema is not boosted, so we don't need to use booster.save_model
     model_gathering(ema, shape_dict)
-    global_rank = os.environ["RANK"]
+    global_rank = dist.get_rank()
     if int(global_rank) == 0:
         torch.save(ema.state_dict(), os.path.join(save_dir, "ema.pt"))
         model_sharding(ema)
