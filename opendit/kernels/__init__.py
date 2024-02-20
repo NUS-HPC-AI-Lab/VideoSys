@@ -8,8 +8,8 @@ except ImportError:
 
 
 if HAS_TRITON:
-    from .layernorm import FusedLayerNorm
+    from .fused_modulate import fused_modulate
 
-    __all__ = ["FusedLayerNorm"]
+    __all__ = ["fused_modulate"]
 else:
     __all__ = []

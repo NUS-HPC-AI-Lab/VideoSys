@@ -7,32 +7,52 @@ from .k_fused_modulate import _modulate_bwd, _modulate_fwd
 class _FusedModulate(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, scale, shift):
-        # allocate output
         y = torch.empty_like(x)
-        n_elements = y.numel()
-        s_stride = y.shape[1]
-        x = x.contiguous()
-        scale = scale.unsqueeze(1).repeat(1, s_stride, 1).contiguous()
-        shift = shift.unsqueeze(1).repeat(1, s_stride, 1).contiguous()
-        grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
-        _modulate_fwd[grid](x, y, scale, shift, n_elements, BLOCK_SIZE=1024)
+        batch, seq_len, dim = x.shape
+        M = batch * seq_len
+        N = dim
+        x = x.view(-1, dim).contiguous()
+        scale = scale.view(-1, dim).contiguous()
+        shift = shift.view(-1, dim).contiguous()
 
-        ctx.save_for_backward(x)
+        def grid(meta):
+            return (
+                triton.cdiv(batch * seq_len, meta["BLOCK_M"]),
+                triton.cdiv(dim, meta["BLOCK_N"]),
+            )
+
+        _modulate_fwd[grid](x, y, scale, shift, x.stride(0), scale.stride(0), M, N, seq_len)
+
+        ctx.save_for_backward(x, scale)
+        ctx.batch = batch
+        ctx.seq_len = seq_len
+        ctx.dim = dim
         return y
 
     @staticmethod
     def backward(ctx, dy):  # pragma: no cover  # this is covered, but called directly from C++
-        (x,) = ctx.saved_tensors
+        x, scale = ctx.saved_tensors
+
+        batch, seq_len, dim = ctx.batch, ctx.seq_len, ctx.dim
+        M = batch * seq_len
+        N = dim
 
         # allocate output
         dy = dy.contiguous()
         dx = torch.empty_like(dy)
+        dscale = torch.empty_like(dy)
+        dshift = torch.sum(dy, dim=1)
 
-        n_elements = x.numel()
-        grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
-        _modulate_bwd[grid](dx, dy, n_elements, BLOCK_SIZE=1024)
+        def grid(meta):
+            return (
+                triton.cdiv(batch * seq_len, meta["BLOCK_M"]),
+                triton.cdiv(dim, meta["BLOCK_N"]),
+            )
 
-        return dx, dx, dx
+        _modulate_bwd[grid](dx, x, dy, scale, dscale, x.stride(0), scale.stride(0), M, N, seq_len)
+
+        dscale = torch.sum(dscale, dim=1)
+        return dx, dscale, dshift
 
 
 def fused_modulate(
