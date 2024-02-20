@@ -18,3 +18,5 @@ pytorch_lightning
 h5py
 gdown
 scikit-video
+flash_attn
+pyav
