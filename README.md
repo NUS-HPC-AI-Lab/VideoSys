@@ -1,5 +1,10 @@
 ## Usage
+
 ```
+# Prerequisite
+cd OpenDiT
+pip install -e .
+
 # Train
 bash preprocess.sh
 bash train.sh

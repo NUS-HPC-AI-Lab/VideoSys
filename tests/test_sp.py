@@ -5,14 +5,13 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-
-# from opendit.utils.operation import all_to_all_comm
-from colossalai.shardformer.layer import all_to_all_comm
 from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
 from flash_attn import flash_attn_func
 from timm.models.vision_transformer import use_fused_attn
 from torch.jit import Final
 from torch.testing import assert_close
+
+from opendit.utils.operation import all_to_all_comm
 
 WORKERS = 4
 
