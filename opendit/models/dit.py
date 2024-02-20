@@ -1,5 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
+# Modified from Meta DiT
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -7,7 +6,7 @@
 # References:
 # DiT:   https://github.com/facebookresearch/DiT/tree/main
 # GLIDE: https://github.com/openai/glide-text2im
-# MAE: https://github.com/facebookresearch/mae/blob/main/models_mae.py
+# MAE:   https://github.com/facebookresearch/mae/blob/main/models_mae.py
 # --------------------------------------------------------
 
 import math
@@ -37,7 +36,7 @@ def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kerne
 
             return FusedLayerNorm(hidden_size, elementwise_affine=affine, eps=eps)
         except ImportError:
-            print("FusedLayerNorm not available, falling back to PyTorch LayerNorm. Please install apex.")
+            raise RuntimeError("FusedLayerNorm not available. Please install apex.")
     else:
         return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
 
@@ -47,9 +46,12 @@ def modulate(norm_func, x, shift, scale, use_kernel=False):
     dtype = x.dtype
     x = norm_func(x.to(torch.float32))
     if use_kernel:
-        from opendit.kernels import fused_modulate
+        try:
+            from opendit.kernels.fused_modulate import fused_modulate
 
-        x = fused_modulate(x, scale.to(torch.float32), shift.to(torch.float32))
+            x = fused_modulate(x, scale.to(torch.float32), shift.to(torch.float32))
+        except ImportError:
+            raise RuntimeError("FusedModulate kernel not available. Please install triton.")
     else:
         x = x * (scale.to(torch.float32) + 1) + shift.to(torch.float32)
     x = x.to(dtype)
