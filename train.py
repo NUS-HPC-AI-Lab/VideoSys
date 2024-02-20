@@ -9,7 +9,7 @@ import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.booster import Booster
-from colossalai.booster.plugin import GeminiPlugin, HybridParallelPlugin, LowLevelZeroPlugin
+from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
@@ -127,41 +127,12 @@ def main(args):
     # ==============================
     # Initialize Booster
     # ==============================
-    if args.plugin == "gemini":
-        plugin = GeminiPlugin(
-            precision=args.mixed_precision,
-            initial_scale=2**16,
-            max_norm=args.grad_clip,
-        )
-    elif args.plugin == "gemini_auto":
-        plugin = GeminiPlugin(
-            precision=args.mixed_precision,
-            placement_policy="auto",
-            initial_scale=2**16,
-            max_norm=args.grad_clip,
-        )
-    elif args.plugin == "zero2":
+    if args.plugin == "zero2":
         plugin = LowLevelZeroPlugin(
             stage=2,
             precision=args.mixed_precision,
             initial_scale=2**16,
             max_norm=args.grad_clip,
-        )
-    elif args.plugin == "zero2_cpu":
-        plugin = LowLevelZeroPlugin(
-            stage=2,
-            precision=args.mixed_precision,
-            initial_scale=2**16,
-            cpu_offload=True,
-            max_norm=args.grad_clip,
-        )
-    elif args.plugin == "3d":
-        plugin = HybridParallelPlugin(
-            tp_size=args.tp,
-            pp_size=1,
-            zero_stage=args.zero,
-            max_norm=args.grad_clip,
-            precision=args.mixed_precision,
         )
     else:
         raise ValueError(f"Unknown plugin {args.plugin}")
@@ -183,10 +154,8 @@ def main(args):
     logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
     
     # Create model
-    # latent_size = args.image_size // 8
     img_size = dataset[0][0].shape[-1]
     dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
-    # model = DiT_models[args.model](input_size=latent_size, num_classes=args.num_classes).to(device).to(dtype)
     model = DiT_models[args.model](input_size=img_size, num_classes=args.num_classes).to(device).to(dtype)
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
@@ -322,5 +291,6 @@ if __name__ == "__main__":
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
+    parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     args = parser.parse_args()
     main(args)
