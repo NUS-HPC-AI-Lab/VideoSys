@@ -170,11 +170,24 @@ def main(args):
     # ======================================================
     # Initialize Model, Objective, Optimizer
     # ======================================================
+    # Setup data:
+    dataset = VideoDataset(args.data_path)
+    dataloader = prepare_dataloader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        drop_last=True,
+        pin_memory=True,
+        num_workers=args.num_workers,
+    )
+    logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
+    
     # Create model
-    assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
-    latent_size = args.image_size // 8
+    # latent_size = args.image_size // 8
+    img_size = dataset[0][0].shape[-1]
     dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
-    model = DiT_models[args.model](input_size=latent_size, num_classes=args.num_classes).to(device).to(dtype)
+    # model = DiT_models[args.model](input_size=latent_size, num_classes=args.num_classes).to(device).to(dtype)
+    model = DiT_models[args.model](input_size=img_size, num_classes=args.num_classes).to(device).to(dtype)
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
     if args.grad_checkpoint:
@@ -201,18 +214,6 @@ def main(args):
     model.train()
     # EMA model should always be in eval mode
     ema.eval()
-
-    # Setup data:
-    dataset = VideoDataset(args.data_path)
-    dataloader = prepare_dataloader(
-        dataset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        drop_last=True,
-        pin_memory=True,
-        num_workers=args.num_workers,
-    )
-    logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
 
     # Boost model for distributed training
     torch.set_default_dtype(dtype)
@@ -315,8 +316,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--global-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=2)
-    parser.add_argument("--ckpt-every", type=int, default=10)
+    parser.add_argument("--log-every", type=int, default=50)
+    parser.add_argument("--ckpt-every", type=int, default=1000)
     parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")

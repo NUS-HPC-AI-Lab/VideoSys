@@ -12,6 +12,7 @@
 
 import math
 
+from flash_attn import flash_attn_func
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -25,6 +26,7 @@ from opendit.utils.operation import all_to_all_comm, gather_forward_split_backwa
 
 torch.manual_seed(1024)
 ULYSSES = True
+FLASH_ATTN = True
 SP_SIZE = 2
 
 
@@ -146,7 +148,7 @@ class DistAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
-        qkv = self.qkv(x)
+        qkv = self.qkv(x) # (B, N, C), N here is N_total // SP_SIZE
         # Todo: Change num_heads in somewhere else for a better code style
         num_heads = self.num_heads if not ULYSSES else self.num_heads // SP_SIZE
 
@@ -169,7 +171,14 @@ class DistAttention(nn.Module):
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
-        if self.fused_attn:
+        if FLASH_ATTN:
+            x = flash_attn_func(
+                q,
+                k,
+                v,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+            )
+        elif self.fused_attn:
             x = F.scaled_dot_product_attention(
                 q,
                 k,
