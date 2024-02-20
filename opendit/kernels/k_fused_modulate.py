@@ -3,66 +3,58 @@ import triton.language as tl
 
 
 @triton.jit
-def fused_modulate_fwd(X, Y, SCALE, SHIFT, seq_stride, stride, N, BLOCK_SIZE_N: tl.constexpr):
-    row = tl.program_id(0)
-    cols = tl.arange(0, BLOCK_SIZE_N)
-    mask = cols < N
-
-    # get scale and shift
-    scale_ptrs = SCALE + row // seq_stride * stride + cols
-    scale = tl.load(scale_ptrs, mask=mask, other=0.0)
-    shift_ptrs = SHIFT + row // seq_stride * stride + cols
-    shift = tl.load(shift_ptrs, mask=mask, other=0.0)
-
-    # Move to this row
-    x_ptrs = X + row * stride + cols
-    x = tl.load(x_ptrs, mask=mask, other=0.0).to(tl.float32)
-
-    # scale and shift
-    y = x * (1 + scale) + shift
-
-    mask = cols < N
-    y_ptrs = Y + row * stride + cols
-    tl.store(y_ptrs, y, mask=mask)
+def _modulate_fwd(
+    x_ptr,  # *Pointer* to first input vector.
+    output_ptr,  # *Pointer* to output vector.
+    scale_ptr,
+    shift_ptr,
+    n_elements,  # Size of the vector.
+    BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process.
+    # NOTE: `constexpr` so it can be used as a shape value.
+):
+    # There are multiple 'programs' processing different data. We identify which program
+    # we are here:
+    pid = tl.program_id(axis=0)  # We use a 1D launch grid so axis is 0.
+    # This program will process inputs that are offset from the initial data.
+    # For instance, if you had a vector of length 256 and block_size of 64, the programs
+    # would each access the elements [0:64, 64:128, 128:192, 192:256].
+    # Note that offsets is a list of pointers:
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    # Create a mask to guard memory operations against out-of-bounds accesses.
+    mask = offsets < n_elements
+    # Load x and y from DRAM, masking out any extra elements in case the input is not a
+    # multiple of the block size.
+    x = tl.load(x_ptr + offsets, mask=mask)
+    scale = tl.load(scale_ptr + offsets, mask=mask)
+    shift = tl.load(shift_ptr + offsets, mask=mask)
+    output = x * (1 + scale) + shift
+    # Write x + y back to DRAM.
+    tl.store(output_ptr + offsets, output, mask=mask)
 
 
 @triton.jit
-def fused_modulate_bwd(
-    DX,
-    DY,
-    D_SCALE,
-    SCALE,
-    X,
-    stride,
-    seq_stride,
-    N,
-    BLOCK_SIZE_N: tl.constexpr,
+def _modulate_bwd(
+    x_ptr,  # *Pointer* to first input vector.
+    output_ptr,  # *Pointer* to output vector.
+    n_elements,  # Size of the vector.
+    BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process.
+    # NOTE: `constexpr` so it can be used as a shape value.
 ):
-    # position of elements processed by this program
-    row = tl.program_id(0)
-    cols = tl.arange(0, BLOCK_SIZE_N)
-    mask = cols < N
-
-    # offset data pointers to start at the row of interest
-    x_ptrs = X + row * stride + cols
-    dy_ptrs = DY + row * stride + cols
-
-    # scale and shift
-    scale_ptrs = SCALE + (row // seq_stride) * stride + cols
-    scale = tl.load(scale_ptrs, mask=mask, other=0.0)
-    dscale_ptrs = D_SCALE + row * stride + cols
-
-    # load data to SRAM
-    x = tl.load(x_ptrs, mask=mask, other=0)
-    dy = tl.load(dy_ptrs, mask=mask, other=0)
-
-    # unscale
-    dx = dy * (1 + scale)
-    dscale = dy * x
-    tl.store(dscale_ptrs, dscale, mask=mask)
-
-    # write-back dx
-    cols = tl.arange(0, BLOCK_SIZE_N)
-    mask = cols < N  # re-materialize the mask to save registers
-    dx_ptrs = DX + row * stride + cols
-    tl.store(dx_ptrs, dx, mask=mask)
+    # There are multiple 'programs' processing different data. We identify which program
+    # we are here:
+    pid = tl.program_id(axis=0)  # We use a 1D launch grid so axis is 0.
+    # This program will process inputs that are offset from the initial data.
+    # For instance, if you had a vector of length 256 and block_size of 64, the programs
+    # would each access the elements [0:64, 64:128, 128:192, 192:256].
+    # Note that offsets is a list of pointers:
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    # Create a mask to guard memory operations against out-of-bounds accesses.
+    mask = offsets < n_elements
+    # Load x and y from DRAM, masking out any extra elements in case the input is not a
+    # multiple of the block size.
+    x = tl.load(x_ptr + offsets, mask=mask)
+    output = x * x
+    # Write x + y back to DRAM.
+    tl.store(output_ptr + offsets, output, mask=mask)
