@@ -1,19 +1,18 @@
 import copy
 
+import colossalai
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
-from torch.testing import assert_close
+
 # from opendit.utils.operation import all_to_all_comm
 from colossalai.shardformer.layer import all_to_all_comm
-import colossalai
 from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
+from flash_attn import flash_attn_func
 from timm.models.vision_transformer import use_fused_attn
 from torch.jit import Final
-from flash_attn import flash_attn_func
-
+from torch.testing import assert_close
 
 WORKERS = 4
 
@@ -50,10 +49,9 @@ class DistAttention(nn.Module):
         self.use_flash_attn = use_flash_attn
         self.enable_sequence_parallelism = enable_sequence_parallelism
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
-        qkv = self.qkv(x) # (B, N, C), N here is N_total // SP_SIZE
+        qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
         # Todo: Change num_heads in somewhere else for a better code style
         num_heads = self.num_heads if not self.enable_sequence_parallelism else self.num_heads // WORKERS
 
@@ -74,13 +72,17 @@ class DistAttention(nn.Module):
         else:
             if self.use_flash_attn:
                 # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
-                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 3, 0, 1, 4).reshape(3, B * num_heads, 1, N, self.head_dim)
+                qkv = (
+                    qkv.reshape(B, N, 3, num_heads, self.head_dim)
+                    .permute(2, 3, 0, 1, 4)
+                    .reshape(3, B * num_heads, 1, N, self.head_dim)
+                )
             else:
                 qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
-        
+
         if self.use_flash_attn:
             x = flash_attn_func(
                 q,
@@ -102,7 +104,9 @@ class DistAttention(nn.Module):
             attn = self.attn_drop(attn)
             x = attn @ v
 
-        x_output_shape = (B, N, C) if not self.enable_sequence_parallelism else (B, N * WORKERS, num_heads * self.head_dim)
+        x_output_shape = (
+            (B, N, C) if not self.enable_sequence_parallelism else (B, N * WORKERS, num_heads * self.head_dim)
+        )
         x = x.transpose(1, 2).reshape(x_output_shape)
         if self.enable_sequence_parallelism:
             # Todo: Use all_to_all_single for x
@@ -133,30 +137,28 @@ def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size):
     x_shard = torch.chunk(x.clone(), world_size, dim=1)[dist.get_rank()]
     x_shard.requires_grad_(True)
 
-
     # DistAttention without sequence parallel
     dist_attn_without_sp = DistAttention(
-        dim = hidden_dim, 
-        num_heads = head_num, 
-        qkv_proj = qkv_proj, 
-        output_proj = out_proj,
-        use_flash_attn = False,
-        enable_sequence_parallelism = False
-        ).cuda()
+        dim=hidden_dim,
+        num_heads=head_num,
+        qkv_proj=qkv_proj,
+        output_proj=out_proj,
+        use_flash_attn=False,
+        enable_sequence_parallelism=False,
+    ).cuda()
 
     # Attention forward (Without Sequence parallel)
     no_sp_output = dist_attn_without_sp(x_unshard)
 
     # DistAttention with sequence parallel
     dist_attn_with_sp = DistAttention(
-        dim = hidden_dim, 
-        num_heads = head_num, 
-        qkv_proj = qkv_proj_copy, 
-        output_proj = out_proj_copy,
-        use_flash_attn = False,
-        enable_sequence_parallelism = True
-        ).cuda()
-
+        dim=hidden_dim,
+        num_heads=head_num,
+        qkv_proj=qkv_proj_copy,
+        output_proj=out_proj_copy,
+        use_flash_attn=False,
+        enable_sequence_parallelism=True,
+    ).cuda()
 
     # Attention forward (With Sequence parallel)
     sp_output = dist_attn_with_sp(x_shard)

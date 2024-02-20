@@ -12,18 +12,18 @@
 
 import math
 
-from flash_attn import flash_attn_func
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from flash_attn import flash_attn_func
 from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
 from torch.jit import Final
 
 from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
-from opendit.utils.debug_utils import print_rank
+
 torch.manual_seed(1024)
 ULYSSES = False
 FLASH_ATTN = True
@@ -150,10 +150,9 @@ class DistAttention(nn.Module):
         self.use_flash_attn = use_flash_attn
         self.enable_sequence_parallelism = enable_sequence_parallelism
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
-        qkv = self.qkv(x) # (B, N, C), N here is N_total // SP_SIZE
+        qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
         # Todo: Change num_heads in somewhere else for a better code style
         num_heads = self.num_heads if not self.enable_sequence_parallelism else self.num_heads // SP_SIZE
 
@@ -174,17 +173,21 @@ class DistAttention(nn.Module):
         else:
             if self.use_flash_attn:
                 # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
-                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 3, 0, 1, 4).reshape(3, B * num_heads, 1, N, self.head_dim)
+                qkv = (
+                    qkv.reshape(B, N, 3, num_heads, self.head_dim)
+                    .permute(2, 3, 0, 1, 4)
+                    .reshape(3, B * num_heads, 1, N, self.head_dim)
+                )
             else:
                 qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
-        
+
         if self.use_flash_attn:
             # Perform flash attention in attention head group (dim 0), each time use B as dim 0
             for i in range(0, q.shape[0], B):
-                q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
+                q_i, k_i, v_i = q[i : i + B], k[i : i + B], v[i : i + B]
                 x_i = flash_attn_func(
                     q_i,
                     k_i,
@@ -195,6 +198,7 @@ class DistAttention(nn.Module):
                     x = x_i
                 else:
                     x = torch.cat([x, x_i], dim=0)
+
             # x = flash_attn_func(
             #     q,
             #     k,
@@ -217,7 +221,9 @@ class DistAttention(nn.Module):
             attn = self.attn_drop(attn)
             x = attn @ v
 
-        x_output_shape = (B, N, C) if not self.enable_sequence_parallelism else (B, N * SP_SIZE, num_heads * self.head_dim)
+        x_output_shape = (
+            (B, N, C) if not self.enable_sequence_parallelism else (B, N * SP_SIZE, num_heads * self.head_dim)
+        )
         x = x.transpose(1, 2).reshape(x_output_shape)
         if self.enable_sequence_parallelism:
             # Todo: Use all_to_all_single for x
@@ -308,7 +314,6 @@ class DiT(nn.Module):
         self.gradient_checkpointing = False
         self.use_flash_attention = False
 
-
     def enable_gradient_checkpointing(self):
         self.gradient_checkpointing = True
 
@@ -382,7 +387,7 @@ class DiT(nn.Module):
         # Todo: Mock video input by repeating the same frame for all timesteps
         # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
         # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
-        
+
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         repeat_times = 1
         x = x.repeat(1, repeat_times, 1)
@@ -394,7 +399,7 @@ class DiT(nn.Module):
         # Chunk x on sequence dimension to sp group
         if ULYSSES:
             x = x.chunk(SP_SIZE, dim=1)[dist.get_rank()]
-        
+
         for block in self.blocks:
             if self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
@@ -405,10 +410,10 @@ class DiT(nn.Module):
             x = gather_forward_split_backward(x, dim=1, process_group=None)
 
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-        
+
         x = x.view(x.shape[0], repeat_times, -1, x.shape[-1])
         x = torch.mean(x, dim=1)  # (N, patch_size ** 2 * out_channels)
-        
+
         x = self.unpatchify(x)  # (N, out_channels, H, W)
         return x
 
