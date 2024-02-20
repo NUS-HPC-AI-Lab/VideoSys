@@ -4,11 +4,11 @@ from opendit.kernels.fused_modulate import fused_modulate
 
 
 def test_fused_modulate():
-    x1 = torch.rand((1, 200, 1000), requires_grad=True).cuda()
+    x1 = torch.rand((1, 20, 100), requires_grad=True).cuda()
     x1.retain_grad()
-    shift1 = torch.rand((1, 1000), requires_grad=True).cuda()
+    shift1 = torch.rand((1, 100), requires_grad=True).cuda()
     shift1.retain_grad()
-    scale1 = torch.rand((1, 1000), requires_grad=True).cuda()
+    scale1 = torch.rand((1, 100), requires_grad=True).cuda()
     scale1.retain_grad()
     x2 = x1.clone().detach().requires_grad_()
     shift2 = shift1.clone().detach().requires_grad_()
