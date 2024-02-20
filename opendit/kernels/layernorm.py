@@ -6,21 +6,17 @@
 # CREDITS: the underlying kernel comes straight from the Triton tutorials
 # see https://github.com/openai/triton/blob/master/python/tutorials/05-layer-norm.py
 
-import logging
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import triton
 import triton.language as tl
-from k_layernorm import layer_norm_bwd_dwdb, layer_norm_bwd_dx_fused, layer_norm_fw
 from torch.cuda.amp import custom_bwd, custom_fwd
 
-logger = logging.getLogger("xformers")
-
+from .k_layernorm import layer_norm_bwd_dwdb, layer_norm_bwd_dx_fused, layer_norm_fw
 
 _triton_layernorm_fp16_enabled = False  # NOTE: PyTorch keeps layernorm as fp32
-_triton_registered_warnings = False
 
 
 class _LayerNorm(torch.autograd.Function):
@@ -30,6 +26,9 @@ class _LayerNorm(torch.autograd.Function):
         # catch eps being too small if the tensors are fp16
         if x.dtype == torch.float16:
             eps = max(eps, 1.6e-5)
+
+        shift = shift.contiguous()
+        scale = scale.contiguous()
 
         # allocate output
         y = torch.empty_like(x)
@@ -49,15 +48,6 @@ class _LayerNorm(torch.autograd.Function):
             raise RuntimeError("This layer norm doesn't support feature dim >= 64KB.")
 
         if not x_arg.is_contiguous() or not y.is_contiguous():
-            global _triton_registered_warnings
-            if not _triton_registered_warnings:
-                logger.warning(
-                    "Non-contiguous input tensor found. Making it contiguous,"
-                    + " but could have perf or trainer implications"
-                )
-
-                _triton_registered_warnings = True
-
             x_arg = x_arg.contiguous()
             y = y.contiguous()
 
@@ -161,7 +151,7 @@ class _LayerNorm(torch.autograd.Function):
 
         dx = dx.reshape_as(dy)
         d_scale = torch.sum(d_scale, dim=-2)
-        return dx, dw, db, None, d_scale, d_shift
+        return dx, None, None, None, d_scale, d_shift
 
 
 class FusedLayerNorm(nn.Module):
@@ -187,8 +177,8 @@ class FusedLayerNorm(nn.Module):
             self.weight = self.bias = None
         self.epsilon = eps
 
-    def forward(self, x):
-        return layer_norm(x, self.weight, self.bias, self.epsilon)
+    def forward(self, x, scale=None, shift=None):
+        return layer_norm(x, self.weight, self.bias, self.epsilon, scale, shift)
 
     def init_weights(self, *args, **kwargs):
         with torch.no_grad():
@@ -245,15 +235,3 @@ def layer_norm_bwd_dwdb(
 
     tl.store(FINAL_DW + cols, sum_dw, mask=mask_cols)
     tl.store(FINAL_DB + cols, sum_db, mask=mask_cols)
-
-
-if __name__ == "__main__":
-    x = torch.rand((1, 100, 1024), requires_grad=True).cuda()
-    shift = torch.rand((1, 1024), requires_grad=True).cuda()
-    scale = torch.rand((1, 1024), requires_grad=True).cuda()
-    a = layer_norm(x.clone(), None, None, 1e-5, scale.clone(), shift.clone())
-    a.mean().backward()
-    c = torch.nn.functional.layer_norm(x.clone(), (1024,), weight=None, bias=None, eps=1e-5) * (1 + scale.clone().unsqueeze(1)) + shift.clone().unsqueeze(1)
-    c.mean().backward()
-    # cc = triton.testing.do_bench(lambda: torch.nn.functional.layer_norm(x, (1024,), weight=w, bias=b, eps=1e-5) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1))
-    print(a - c)

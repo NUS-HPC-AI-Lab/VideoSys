@@ -87,9 +87,9 @@ def layer_norm_bwd_dx_fused(
     dy_ptrs = DY + row * stride + cols
 
     # scale and shift
-    # scale_ptrs = SCALE + row // seq_stride * stride + cols
-    # scale = tl.load(scale_ptrs, mask=mask, other=0.0)
-    # dscale_ptrs = D_SCALE + row * stride + cols
+    scale_ptrs = SCALE + (row // seq_stride) * stride + cols
+    scale = tl.load(scale_ptrs, mask=mask, other=0.0)
+    dscale_ptrs = D_SCALE + row * stride + cols
 
     # load data to SRAM
     x = tl.load(x_ptrs, mask=mask, other=0)
@@ -101,9 +101,9 @@ def layer_norm_bwd_dx_fused(
     xhat = (x - mean) * rstd
 
     # unscale
-    # dy = dy / (1 + scale)
-    # dscale = dy / xhat - 1
-    # tl.store(dscale_ptrs, dscale, mask=mask)
+    dy = dy * (1 + scale)
+    dscale = dy * xhat
+    tl.store(dscale_ptrs, dscale, mask=mask)
 
     if affine:
         w = tl.load(W + cols, mask=mask, other=0)
