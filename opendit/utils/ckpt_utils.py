@@ -1,5 +1,7 @@
+import functools
 import json
 import logging
+import operator
 import os
 from typing import Tuple
 
@@ -10,7 +12,9 @@ from colossalai.booster import Booster
 from colossalai.cluster import DistCoordinator
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
+
 from opendit.utils.operation import model_sharding
+
 
 def load_json(file_path: str):
     with open(file_path, "r") as f:
@@ -21,17 +25,28 @@ def save_json(data, file_path: str):
     with open(file_path, "w") as f:
         json.dump(data, f, indent=4)
 
-def model_gathering(model: torch.nn.Module):
-    global_rank = os.environ["RANK"]
+
+def remove_padding(tensor: torch.Tensor, original_shape: Tuple) -> torch.Tensor:
+    return tensor[: functools.reduce(operator.mul, original_shape)]
+
+
+def model_gathering(model: torch.nn.Module, model_shape_dict: dict):
+    global_rank = dist.get_rank()
     global_size = dist.get_world_size()
-    # gather the model from all ranks to rank 0
     for name, param in model.named_parameters():
         all_params = [torch.empty_like(param.data) for _ in range(global_size)]
         dist.all_gather(all_params, param.data, group=dist.group.WORLD)
         if int(global_rank) == 0:
-            all_params = torch.cat(all_params, dim=-1)
-            param.data = all_params
-        dist.barrier()
+            all_params = torch.cat(all_params)
+            param.data = remove_padding(all_params, model_shape_dict[name]).view(model_shape_dict[name])
+    dist.barrier()
+
+
+def record_model_param_shape(model: torch.nn.Module) -> dict:
+    param_shape = {}
+    for name, param in model.named_parameters():
+        param_shape[name] = param.shape
+    return param_shape
 
 
 def save(
@@ -45,13 +60,14 @@ def save(
     batch_size: int,
     coordinator: DistCoordinator,
     save_dir: str,
+    shape_dict: dict,
 ):
     save_dir = os.path.join(save_dir, f"epoch{epoch}-step{step}")
     os.makedirs(os.path.join(save_dir, "model"), exist_ok=True)
 
     booster.save_model(model, os.path.join(save_dir, "model"), shard=True)
     # ema is not boosted, so we don't need to use booster.save_model
-    model_gathering(ema)
+    model_gathering(ema, shape_dict)
     global_rank = os.environ["RANK"]
     if int(global_rank) == 0:
         torch.save(ema.state_dict(), os.path.join(save_dir, "ema.pt"))

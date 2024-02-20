@@ -30,7 +30,7 @@ from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
 from opendit.models.dit import DiT_models
-from opendit.utils.ckpt_utils import create_logger, load, save
+from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
 from opendit.utils.operation import model_sharding
 
@@ -68,25 +68,29 @@ def all_reduce_mean(tensor: torch.Tensor) -> torch.Tensor:
 
 
 @torch.no_grad()
-def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999, sharded=True) -> None:
+def update_ema(
+    ema_model: torch.nn.Module, model: torch.nn.Module, optimizer=None, decay: float = 0.9999, sharded: bool = True
+) -> None:
     """
     Step the EMA model towards the current model.
     """
     ema_params = OrderedDict(ema_model.named_parameters())
     model_params = OrderedDict(model.named_parameters())
-    global_rank = os.environ["RANK"]
-    world_size = dist.get_world_size()
 
     for name, param in model_params.items():
         if name == "pos_embed":
             continue
-        param_data = param.data
-        if param.data.dtype != torch.float32:
-            param_data = param_data.to(torch.float32)
         if not sharded:
+            param_data = param.data
             ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
         else:
-            ema_params[name].mul_(decay).add_(torch.chunk(param_data, world_size, dim=-1)[int(global_rank)], alpha=1 - decay)
+            if param.data.dtype != torch.float32:
+                param_id = id(param)
+                master_param = optimizer._param_store.working_to_master_param[param_id]
+                param_data = master_param.data
+            else:
+                param_data = param.data
+            ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
 
 
 def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
@@ -203,6 +207,7 @@ def main(args):
     # Create an EMA of the model for use after training
     ema = deepcopy(model).to(torch.float32).to(device)
     requires_grad(ema, False)
+    ema_shape_dict = record_model_param_shape(ema)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
@@ -246,8 +251,6 @@ def main(args):
     model, optimizer, _, dataloader, lr_scheduler = booster.boost(
         model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, dataloader=dataloader
     )
-
-
 
     torch.set_default_dtype(torch.float)
 
@@ -297,7 +300,7 @@ def main(args):
                 optimizer.zero_grad()
 
                 # Update EMA
-                update_ema(ema, model.module)
+                update_ema(ema, model.module, optimizer=optimizer)
 
                 # Log loss values:
                 all_reduce_mean(loss)
@@ -318,6 +321,7 @@ def main(args):
                         args.batch_size,
                         coordinator,
                         experiment_dir,
+                        ema_shape_dict,
                     )
                     logger.info(f"Saved checkpoint at epoch {epoch} step {step + 1} to {experiment_dir}")
 
