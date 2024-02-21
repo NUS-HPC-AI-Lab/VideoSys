@@ -2,33 +2,23 @@ import os
 import shutil
 
 import colossalai
+import pytest
 import torch
 import torch.distributed as dist
 from colossalai.booster import Booster
 from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.nn.optimizer import HybridAdam
-from colossalai.testing import (
-    check_state_dict_equal,
-    clear_cache_before_run,
-    parameterize,
-    rerun_if_address_is_in_use,
-    spawn,
-)
+from colossalai.testing import check_state_dict_equal, clear_cache_before_run, rerun_if_address_is_in_use, spawn
 from colossalai.zero import LowLevelZeroOptimizer
 
 from opendit.models.dit import DiT_S_2
 
 
-# stage 1 and 2 process the optimizer/mode the same way
-# only test 2 is fine
 @clear_cache_before_run()
-@parameterize("stage", [2])
-@parameterize("shard", [True, False])
-@parameterize("offload", [False, True])
-def _test_zero_checkpoint(stage: int, shard: bool, offload: bool):
-    plugin = LowLevelZeroPlugin(stage=stage, max_norm=1.0, initial_scale=32, cpu_offload=offload)
+def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
+    plugin = LowLevelZeroPlugin(precision="fp16", stage=stage, max_norm=1.0, initial_scale=32, cpu_offload=offload)
     booster = Booster(plugin=plugin)
-    model = DiT_S_2()
+    model = DiT_S_2().half()
     criterion = lambda x: x.mean()
     optimizer = HybridAdam((model.parameters()), lr=0.001)
     model, optimizer, criterion, _, _ = booster.boost(model, optimizer, criterion)
@@ -56,7 +46,7 @@ def _test_zero_checkpoint(stage: int, shard: bool, offload: bool):
 
     dist.barrier()
 
-    new_model = DiT_S_2()
+    new_model = DiT_S_2().half()
     new_optimizer = HybridAdam((new_model.parameters()), lr=0.001)
     new_model, new_optimizer, _, _, _ = booster.boost(new_model, new_optimizer)
 
@@ -77,24 +67,25 @@ def _test_zero_checkpoint(stage: int, shard: bool, offload: bool):
 
     booster.load_optimizer(new_optimizer, optimizer_ckpt_path)
     check_state_dict_equal(optimizer.optim.state_dict(), new_optimizer.optim.state_dict(), False)
-    torch.cuda.empty_cache()
 
     if dist.get_rank() == 0:
         shutil.rmtree(tempdir)
     dist.barrier()
 
 
-def run_dist(rank, world_size, port):
+def run_dist(rank, world_size, port, stage: int, shard: bool, offload: bool):
     colossalai.launch(config=(dict()), rank=rank, world_size=world_size, port=port, host="localhost")
-    _test_zero_checkpoint()
+    run_zero_checkpoint(stage=stage, shard=shard, offload=offload)
     torch.cuda.empty_cache()
 
 
+@pytest.mark.parametrize("stage", [2])
+@pytest.mark.parametrize("shard", [True, False])
+@pytest.mark.parametrize("offload", [False, True])
 @rerun_if_address_is_in_use()
-@clear_cache_before_run()
-def test_zero_checkpoint():
-    spawn(run_dist, 2)
+def test_zero_checkpoint(stage, shard, offload):
+    spawn(run_dist, 2, stage=stage, shard=shard, offload=offload)
 
 
 if __name__ == "__main__":
-    test_zero_checkpoint()
+    test_zero_checkpoint(2, True, False)

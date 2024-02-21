@@ -1,13 +1,11 @@
 import argparse
 import json
 import os
-from collections import OrderedDict
 from copy import deepcopy
 from glob import glob
 
 import colossalai
 import torch
-import torch.distributed as dist
 from colossalai.booster import Booster
 from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
@@ -17,71 +15,15 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
-from opendit.models.dit import DiT_models
-from opendit.utils.ckpt_utils import create_logger, load, save
+from opendit.models.dit import DiT, DiT_models
+from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import VideoDataset, prepare_dataloader
+from opendit.utils.operation import model_sharding
+from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-
-#################################################################################
-#                             Training Helper Functions                         #
-#################################################################################
-
-
-def get_model_numel(model: torch.nn.Module) -> int:
-    return sum(p.numel() for p in model.parameters())
-
-
-def format_numel_str(numel: int) -> str:
-    B = 1024**3
-    M = 1024**2
-    K = 1024
-    if numel >= B:
-        return f"{numel / B:.2f} B"
-    elif numel >= M:
-        return f"{numel / M:.2f} M"
-    elif numel >= K:
-        return f"{numel / K:.2f} K"
-    else:
-        return f"{numel}"
-
-
-def all_reduce_mean(tensor: torch.Tensor) -> torch.Tensor:
-    dist.all_reduce(tensor=tensor, op=dist.ReduceOp.SUM)
-    tensor.div_(dist.get_world_size())
-    return tensor
-
-
-@torch.no_grad()
-def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999) -> None:
-    """
-    Step the EMA model towards the current model.
-    """
-    ema_params = OrderedDict(ema_model.named_parameters())
-    model_params = OrderedDict(model.named_parameters())
-
-    for name, param in model_params.items():
-        if name == "pos_embed":
-            continue
-        param_data = param.data
-        if param.data.dtype != torch.float32:
-            param_data = param_data.to(torch.float32)
-        ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
-
-
-def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
-    """
-    Set requires_grad flag for all parameters in a model.
-    """
-    for p in model.parameters():
-        p.requires_grad = flag
-
-
-#################################################################################
-#                                  Training Loop                                #
-#################################################################################
 
 
 def main(args):
@@ -156,7 +98,18 @@ def main(args):
     # Create model
     img_size = dataset[0][0].shape[-1]
     dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
-    model = DiT_models[args.model](input_size=img_size, num_classes=args.num_classes).to(device).to(dtype)
+    model: DiT = (
+        DiT_models[args.model](
+            input_size=img_size,
+            num_classes=args.num_classes,
+            enable_flashattn=args.enable_flashattn,
+            enable_layernorm_kernel=args.enable_layernorm_kernel,
+            enable_modulate_kernel=args.enable_modulate_kernel,
+            sequence_parallel_size=args.sequence_parallel_size,
+        )
+        .to(device)
+        .to(dtype)
+    )
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
     if args.grad_checkpoint:
@@ -167,6 +120,7 @@ def main(args):
     # Create an EMA of the model for use after training
     ema = deepcopy(model).to(torch.float32).to(device)
     requires_grad(ema, False)
+    ema_shape_dict = record_model_param_shape(ema)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
 
@@ -178,7 +132,7 @@ def main(args):
 
     # Prepare models for training
     # Ensure EMA is initialized with synced weights
-    update_ema(ema, model, decay=0)
+    update_ema(ema, model, decay=0, sharded=False)
     # important! This enables embedding dropout for classifier-free guidance
     model.train()
     # EMA model should always be in eval mode
@@ -189,6 +143,7 @@ def main(args):
     model, optimizer, _, dataloader, lr_scheduler = booster.boost(
         model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, dataloader=dataloader
     )
+
     torch.set_default_dtype(torch.float)
     logger.info("Boost model for distributed training")
 
@@ -200,7 +155,7 @@ def main(args):
         logger.info("Loading checkpoint")
         start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
-
+    model_sharding(ema)
     num_steps_per_epoch = len(dataloader)
 
     logger.info(f"Training for {args.epochs} epochs...")
@@ -236,7 +191,7 @@ def main(args):
                 optimizer.zero_grad()
 
                 # Update EMA
-                update_ema(ema, model.module)
+                update_ema(ema, model.module, optimizer=optimizer)
 
                 # Log loss values:
                 all_reduce_mean(loss)
@@ -257,6 +212,7 @@ def main(args):
                         args.batch_size,
                         coordinator,
                         experiment_dir,
+                        ema_shape_dict,
                     )
                     logger.info(f"Saved checkpoint at epoch {epoch} step {step + 1} to {experiment_dir}")
 
@@ -292,5 +248,9 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
+    parser.add_argument("--enable_modulate_kernel", action="store_true", help="Enable triton modulate kernel")
+    parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
+    parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
+    parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
     args = parser.parse_args()
     main(args)

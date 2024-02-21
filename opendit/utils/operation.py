@@ -71,6 +71,20 @@ class _AllToAll(torch.autograd.Function):
         return (return_grad, None, None, None)
 
 
+
+def model_sharding(model: torch.nn.Module):
+    global_rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    for name, param in model.named_parameters():
+        padding_size = (world_size - param.numel() % world_size) % world_size
+        if padding_size > 0:
+            padding_param = torch.nn.functional.pad(param.data.view(-1), [0, padding_size])
+        else:
+            padding_param = param.data.view(-1)
+        splited_params = padding_param.split(padding_param.numel() // world_size)
+        splited_params = splited_params[global_rank]
+        param.data = splited_params
+
 def all_to_all_comm(input_, process_group=None, scatter_dim=2, gather_dim=1):
     return _AllToAll.apply(input_, process_group, scatter_dim, gather_dim)
 
