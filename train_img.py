@@ -286,7 +286,7 @@ def main(args):
                     writer.add_scalar("loss", loss.item(), epoch * num_steps_per_epoch + step)
 
                 if args.ckpt_every > 0 and (step + 1) % args.ckpt_every == 0:
-                    logger.info(f"Saving checkpoint")
+                    logger.info(f"Saving checkpoint...")
                     save(
                         booster,
                         model,
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
     parser.add_argument("--plugin", type=str, default="zero2")
-    parser.add_argument("--outputs", type=str, default="model outputs folder")
+    parser.add_argument("--outputs", type=str, default="./outputs", help="Path to the output directory")
     parser.add_argument("--load", type=str, default=None, help="Path to a checkpoint dir to load")
 
     parser.add_argument("--data-path", type=str, default="./datasets", help="Path to the dataset")

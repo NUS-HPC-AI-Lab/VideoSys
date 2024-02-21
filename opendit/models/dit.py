@@ -39,16 +39,17 @@ def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kerne
 def modulate(norm_func, x, shift, scale, use_kernel=False):
     # Suppose x is (N, T, D), shift is (N, D), scale is (N, D)
     dtype = x.dtype
-    x = norm_func(x.to(torch.float32))
+    x, shift, scale = x.to(torch.float32), shift.to(torch.float32), scale.to(torch.float32)
+    x = norm_func(x)
     if use_kernel:
         try:
             from opendit.kernels.fused_modulate import fused_modulate
 
-            x = fused_modulate(x, scale.to(torch.float32), shift.to(torch.float32))
+            x = fused_modulate(x, scale, shift)
         except ImportError:
             raise RuntimeError("FusedModulate kernel not available. Please install triton.")
     else:
-        x = x * (scale.to(torch.float32).unsqueeze(1) + 1) + shift.to(torch.float32).unsqueeze(1)
+        x = x * (scale.unsqueeze(1) + 1) + shift.unsqueeze(1)
     x = x.to(dtype)
 
     return x
@@ -167,6 +168,8 @@ class DistAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         self.enable_flashattn = enable_flashattn
+        # TODO: support sequence_parallel_size > 2
+        assert sequence_parallel_size in [1, 2], "sequence_parallel_size is only supported for 1 or 2"
         self.sequence_parallel_size = sequence_parallel_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -200,7 +203,7 @@ class DistAttention(nn.Module):
             #         .permute(2, 3, 0, 1, 4)
             #         .reshape(3, B * num_heads, 1, N, self.head_dim)
             #     )
-            if self.use_flash_attn:
+            if self.enable_flashattn:
                 # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
                 qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
             else:
