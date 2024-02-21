@@ -195,6 +195,7 @@ class DistAttention(nn.Module):
             v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
 
         else:
+            # Todo: chunked flash attention
             # if self.use_flash_attn:
             #     # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
             #     qkv = (
@@ -210,6 +211,7 @@ class DistAttention(nn.Module):
         if self.use_flash_attn:
             from flash_attn import flash_attn_func
 
+            # Todo: chunked flash attention
             # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
             # for i in range(0, q.shape[0], B):
             #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
@@ -239,9 +241,14 @@ class DistAttention(nn.Module):
                 dropout_p=self.attn_drop.p if self.training else 0.0,
             )
         else:
+            dtype = q.dtype
             q = q * self.scale
             attn = q @ k.transpose(-2, -1)
+            # translate attn to float32
+            attn = attn.to(torch.float32)
             attn = attn.softmax(dim=-1)
+            # cast back attn to original dtype
+            attn = attn.to(dtype)
             attn = self.attn_drop(attn)
             x = attn @ v
 

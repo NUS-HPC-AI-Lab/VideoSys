@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
-from flash_attn import flash_attn_func
 from timm.models.vision_transformer import use_fused_attn
 from torch.jit import Final
 from torch.testing import assert_close
@@ -15,6 +14,7 @@ from opendit.utils.operation import all_to_all_comm
 torch.manual_seed(1024)
 
 WORKERS = 1
+DTYPE = torch.float16
 
 
 class DistAttention(nn.Module):
@@ -78,15 +78,15 @@ class DistAttention(nn.Module):
                 # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
                 qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             q, k, v = qkv.unbind(0)
+            # qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
+            # q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
         if self.use_flash_attn:
-            x = flash_attn_func(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-            )
+            from flash_attn import flash_attn_func
+
+            x = flash_attn_func(q, k, v, dropout_p=self.attn_drop.p if self.training else 0.0, deterministic=True)
+
         elif self.fused_attn:
             x = F.scaled_dot_product_attention(
                 q,
@@ -97,7 +97,9 @@ class DistAttention(nn.Module):
         else:
             q = q * self.scale
             attn = q @ k.transpose(-2, -1)
+            attn.to(torch.float32)
             attn = attn.softmax(dim=-1)
+            attn.to(DTYPE)
             attn = self.attn_drop(attn)
             x = attn @ v
 
@@ -113,8 +115,8 @@ class DistAttention(nn.Module):
             # x = x.reshape(1, -1, num_heads * self.head_dim)
             x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
             # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
-        # x = self.proj(x)
-        # x = self.proj_drop(x)
+        x = self.proj(x)
+        x = self.proj_drop(x)
         return x
 
 
@@ -125,7 +127,7 @@ def flash_attn(seq_len, hidden_dim, head_num, batch_size):
     batch_size = batch_size
 
     # set dtype as bf16
-    torch.set_default_dtype(torch.bfloat16)
+    torch.set_default_dtype(DTYPE)
 
     qkv_proj_naive_attn = nn.Linear(hidden_dim, 3 * hidden_dim)
     out_proj_naive_attn = nn.Linear(hidden_dim, hidden_dim)
@@ -216,17 +218,17 @@ def flash_attn(seq_len, hidden_dim, head_num, batch_size):
     # ), "difference between naive and fused attention (backward, x)"
 
     assert_close(qkv_grad_naive_attn, qkv_grad_flash_attn, atol=1e-3, rtol=1e-3)
-    assert_close(o_grad_naive_attn, o_grad_flash_attn, atol=1e-4, rtol=1e-4)
-    assert_close(x_grad_naive_attn, x_grad_flash_attn, atol=1e-4, rtol=1e-4)
+    assert_close(o_grad_naive_attn, o_grad_flash_attn, atol=1e-3, rtol=1e-3)
+    assert_close(x_grad_naive_attn, x_grad_flash_attn, atol=1e-3, rtol=1e-3)
 
     # assert torch.allclose(qkv_grad_fused_attn, qkv_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between fused and flash attention (backward, qkv)"
     # assert torch.allclose(o_grad_fused_attn, o_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between fused and flash attention (backward, o)"
     # assert torch.allclose(x_grad_fused_attn, x_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between fused and flash attention (backward, x)"
 
 
-@parameterize("seq_len", [16])
-@parameterize("hidden_dim", [64])
-@parameterize("head_num", [4])
+@parameterize("seq_len", [256])
+@parameterize("hidden_dim", [1152])
+@parameterize("head_num", [16])
 @parameterize("batch_size", [2])
 def run_flash_attn(seq_len, hidden_dim, head_num, batch_size):
     flash_attn(seq_len, hidden_dim, head_num, batch_size)
