@@ -1,3 +1,5 @@
+import torch
+
 from opendit.models.clip import TextEmbedder
 
 if __name__ == "__main__":
@@ -18,8 +20,6 @@ if __name__ == "__main__":
     >>> last_hidden_state = outputs.last_hidden_state
     >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
     ```"""
-
-    import torch
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

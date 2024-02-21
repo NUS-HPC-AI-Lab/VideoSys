@@ -18,5 +18,11 @@ pytorch_lightning
 h5py
 gdown
 scikit-video
-flash_attn
 pyav
+tensorboard
+timm
+matplotlib
+accelerate
+diffusers
+transformers
+flash_attn==2.0.5

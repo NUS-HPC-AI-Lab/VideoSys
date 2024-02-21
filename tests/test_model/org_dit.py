@@ -1,58 +1,24 @@
-# Modified from Meta DiT
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # --------------------------------------------------------
 # References:
-# DiT:   https://github.com/facebookresearch/DiT/tree/main
 # GLIDE: https://github.com/openai/glide-text2im
-# MAE:   https://github.com/facebookresearch/mae/blob/main/models_mae.py
+# MAE: https://github.com/facebookresearch/mae/blob/main/models_mae.py
 # --------------------------------------------------------
 
 import math
 
 import numpy as np
 import torch
-import torch.distributed as dist
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.checkpoint
-from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
-from torch.jit import Final
-
-from opendit.models.clip import TextEmbedder
-from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
+from timm.models.vision_transformer import Attention, Mlp, PatchEmbed
 
 
-def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
-    if use_kernel:
-        try:
-            from apex.normalization import FusedLayerNorm
-
-            return FusedLayerNorm(hidden_size, elementwise_affine=affine, eps=eps)
-        except ImportError:
-            raise RuntimeError("FusedLayerNorm not available. Please install apex.")
-    else:
-        return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
-
-
-def modulate(norm_func, x, shift, scale, use_kernel=False):
-    # Suppose x is (N, T, D), shift is (N, D), scale is (N, D)
-    dtype = x.dtype
-    x, shift, scale = x.to(torch.float32), shift.to(torch.float32), scale.to(torch.float32)
-    x = norm_func(x)
-    if use_kernel:
-        try:
-            from opendit.kernels.fused_modulate import fused_modulate
-
-            x = fused_modulate(x, scale, shift)
-        except ImportError:
-            raise RuntimeError("FusedModulate kernel not available. Please install triton.")
-    else:
-        x = x * (scale.unsqueeze(1) + 1) + shift.unsqueeze(1)
-    x = x.to(dtype)
-
-    return x
+def modulate(x, shift, scale):
+    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
 #################################################################################
@@ -95,10 +61,8 @@ class TimestepEmbedder(nn.Module):
             embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
         return embedding
 
-    def forward(self, t, dtype):
+    def forward(self, t):
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
-        if t_freq.dtype != dtype:
-            t_freq = t_freq.to(dtype)
         t_emb = self.mlp(t_freq)
         return t_emb
 
@@ -139,167 +103,16 @@ class LabelEmbedder(nn.Module):
 #################################################################################
 
 
-class DistAttention(nn.Module):
-    fused_attn: Final[bool]
-
-    def __init__(
-        self,
-        dim: int,
-        num_heads: int = 8,
-        qkv_bias: bool = False,
-        qk_norm: bool = False,
-        attn_drop: float = 0.0,
-        proj_drop: float = 0.0,
-        norm_layer: nn.Module = nn.LayerNorm,
-        enable_flashattn: bool = False,
-        sequence_parallel_size: int = 1,
-    ) -> None:
-        super().__init__()
-        assert dim % num_heads == 0, "dim should be divisible by num_heads"
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
-        self.scale = self.head_dim**-0.5
-        self.fused_attn = use_fused_attn()
-
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
-        self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
-        self.enable_flashattn = enable_flashattn
-        # TODO: support sequence_parallel_size > 2
-        assert sequence_parallel_size in [1, 2], "sequence_parallel_size is only supported for 1 or 2"
-        self.sequence_parallel_size = sequence_parallel_size
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, N, C = x.shape
-        qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
-        # Todo: Change num_heads in somewhere else for a better code style
-        num_heads = (
-            self.num_heads if self.sequence_parallel_size == 1 else self.num_heads // self.sequence_parallel_size
-        )
-
-        if self.sequence_parallel_size > 1:
-            q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
-            # q = q.reshape(1, -1, self.head_dim * self.num_heads)
-            # k = k.reshape(1, -1, self.head_dim * self.num_heads)
-            # v = v.reshape(1, -1, self.head_dim * self.num_heads)
-
-            q = all_to_all_comm(q, None)
-            k = all_to_all_comm(k, None)
-            v = all_to_all_comm(v, None)
-
-            q = q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            k = k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            v = v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-
-        else:
-            # Todo: chunked flash attention
-            # if self.use_flash_attn:
-            #     # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
-            #     qkv = (
-            #         qkv.reshape(B, N, 3, num_heads, self.head_dim)
-            #         .permute(2, 3, 0, 1, 4)
-            #         .reshape(3, B * num_heads, 1, N, self.head_dim)
-            #     )
-            if self.enable_flashattn:
-                # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
-                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
-            else:
-                # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
-                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-            q, k, v = qkv.unbind(0)
-        q, k = self.q_norm(q), self.k_norm(k)
-
-        if self.enable_flashattn:
-            from flash_attn import flash_attn_func
-
-            # Todo: chunked flash attention
-            # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
-            # for i in range(0, q.shape[0], B):
-            #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
-            #     x_i = flash_attn_func(
-            #         q_i,
-            #         k_i,
-            #         v_i,
-            #         dropout_p=self.attn_drop.p if self.training else 0.0,
-            #     )
-            #     if i == 0:
-            #         x = x_i
-            #     else:
-            #         x = torch.cat([x, x_i], dim=0)
-            # x = x.reshape(B, -1, N, self.head_dim)
-            x = flash_attn_func(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-                softmax_scale=self.scale,
-            )
-        elif self.fused_attn:
-            x = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-            )
-        else:
-            dtype = q.dtype
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-            # translate attn to float32
-            attn = attn.to(torch.float32)
-            attn = attn.softmax(dim=-1)
-            # cast back attn to original dtype
-            attn = attn.to(dtype)
-            attn = self.attn_drop(attn)
-            x = attn @ v
-
-        x_output_shape = (
-            (B, N, C)
-            if self.sequence_parallel_size == 1
-            else (B, N * self.sequence_parallel_size, num_heads * self.head_dim)
-        )
-        x = x.transpose(1, 2).reshape(x_output_shape)
-        if self.sequence_parallel_size > 1:
-            # Todo: Use all_to_all_single for x
-            # x = x.reshape(1, -1, num_heads * self.head_dim)
-            x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
-            # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
-
-
 class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
 
-    def __init__(
-        self,
-        hidden_size,
-        num_heads,
-        mlp_ratio=4.0,
-        enable_flashattn=False,
-        sequence_parallel_size=False,
-        enable_layernorm_kernel=False,
-        enable_modulate_kernel=False,
-        **block_kwargs,
-    ):
+    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
-        self.enable_modulate_kernel = enable_modulate_kernel
-        self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
-        self.attn = DistAttention(
-            hidden_size,
-            num_heads=num_heads,
-            qkv_bias=True,
-            enable_flashattn=enable_flashattn,
-            sequence_parallel_size=sequence_parallel_size,
-            **block_kwargs,
-        )
-        self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
+        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
@@ -307,12 +120,8 @@ class DiTBlock(nn.Module):
 
     def forward(self, x, c):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(
-            modulate(self.norm1, x, shift_msa, scale_msa, self.enable_modulate_kernel)
-        )
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(
-            modulate(self.norm2, x, shift_mlp, scale_mlp, self.enable_modulate_kernel)
-        )
+        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
 
 
@@ -329,7 +138,7 @@ class FinalLayer(nn.Module):
 
     def forward(self, x, c):
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
-        x = modulate(self.norm_final, x, shift, scale)
+        x = modulate(self.norm_final(x), shift, scale)
         x = self.linear(x)
         return x
 
@@ -348,14 +157,9 @@ class DiT(nn.Module):
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
-        text_condition=None,
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
-        enable_flashattn=False,
-        enable_layernorm_kernel=False,
-        enable_modulate_kernel=False,
-        sequence_parallel_size=1,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -363,43 +167,17 @@ class DiT(nn.Module):
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
-        self.sequence_parallel_size = sequence_parallel_size
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-
-        self.text_condition = text_condition
-        if text_condition is not None:
-            self.y_embedder = TextEmbedder(path=text_condition, hidden_size=hidden_size)
-        else:
-            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
-
+        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
 
-        self.blocks = nn.ModuleList(
-            [
-                DiTBlock(
-                    hidden_size,
-                    num_heads,
-                    mlp_ratio=mlp_ratio,
-                    enable_flashattn=enable_flashattn,
-                    sequence_parallel_size=sequence_parallel_size,
-                    enable_modulate_kernel=enable_modulate_kernel,
-                    enable_layernorm_kernel=enable_layernorm_kernel,
-                )
-                for _ in range(depth)
-            ]
-        )
+        self.blocks = nn.ModuleList([DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)])
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
-
-        self.gradient_checkpointing = False
-        self.use_flash_attention = False
-
-    def enable_gradient_checkpointing(self):
-        self.gradient_checkpointing = True
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -421,8 +199,7 @@ class DiT(nn.Module):
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
         # Initialize label embedding table:
-        if self.text_condition is None:
-            nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
+        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
@@ -454,13 +231,6 @@ class DiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
-    @staticmethod
-    def create_custom_forward(module):
-        def custom_forward(*inputs):
-            return module(*inputs)
-
-        return custom_forward
-
     def forward(self, x, t, y):
         """
         Forward pass of DiT.
@@ -468,27 +238,12 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
-
-        # Todo: Mock video input by repeating the same frame for all timesteps
-        # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
-        t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
+        t = self.t_embedder(t)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
-
-        # Chunk x on sequence dimension to sp group
-        if self.sequence_parallel_size > 1:
-            x = x.chunk(self.sequence_parallel_size, dim=1)[dist.get_rank()]
-
         for block in self.blocks:
-            if self.gradient_checkpointing:
-                x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
-            else:
-                x = block(x, c)  # (N, T, D)
-
-        if self.sequence_parallel_size > 1:
-            x = gather_forward_split_backward(x, dim=1, process_group=None)
-
+            x = block(x, c)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
         return x
