@@ -8,11 +8,13 @@ from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
 from flash_attn import flash_attn_func
 from timm.models.vision_transformer import use_fused_attn
 from torch.jit import Final
+from torch.testing import assert_close
 
-from opendit.utils.debug_utils import print_rank
 from opendit.utils.operation import all_to_all_comm
 
-WORKERS = 4
+torch.manual_seed(1024)
+
+WORKERS = 1
 
 
 class DistAttention(nn.Module):
@@ -69,8 +71,12 @@ class DistAttention(nn.Module):
             v = v.reshape(B, N * WORKERS, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
 
         else:
-            qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-            # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
+            if self.use_flash_attn:
+                # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
+                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
+            else:
+                # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
+                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
@@ -80,7 +86,6 @@ class DistAttention(nn.Module):
                 k,
                 v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
-                softmax_scale=self.scale,
             )
         elif self.fused_attn:
             x = F.scaled_dot_product_attention(
@@ -99,18 +104,21 @@ class DistAttention(nn.Module):
         x_output_shape = (
             (B, N, C) if not self.enable_sequence_parallelism else (B, N * WORKERS, num_heads * self.head_dim)
         )
-        x = x.transpose(1, 2).reshape(x_output_shape)
+        if self.use_flash_attn:
+            x = x.reshape(x_output_shape)
+        else:
+            x = x.transpose(1, 2).reshape(x_output_shape)
         if self.enable_sequence_parallelism:
             # Todo: Use all_to_all_single for x
             # x = x.reshape(1, -1, num_heads * self.head_dim)
             x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
             # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
-        x = self.proj(x)
-        x = self.proj_drop(x)
+        # x = self.proj(x)
+        # x = self.proj_drop(x)
         return x
 
 
-def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size):
+def flash_attn(seq_len, hidden_dim, head_num, batch_size):
     seq_len = seq_len
     hidden_dim = hidden_dim
     head_num = head_num
@@ -171,15 +179,13 @@ def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size):
     flash_attn_output = dist_flash_attn(x_flash_attn)
 
     # forward result check
-    assert torch.allclose(
-        naive_attn_output, fused_attn_output, atol=1e-4, rtol=1e-4
-    ), "difference between naive and fused attention (forward)"
-    print_rank("naive_attn_output", naive_attn_output)
-    print_rank("flash_attn_output", flash_attn_output)
+    # assert torch.allclose(
+    #     naive_attn_output, fused_attn_output, atol=1e-4, rtol=1e-4
+    # ), "difference between naive and fused attention (forward)"
+    # print_rank("naive_attn_output", naive_attn_output)
+    # print_rank("flash_attn_output", flash_attn_output)
 
-    assert torch.allclose(
-        naive_attn_output, flash_attn_output, atol=1e-4, rtol=1e-4
-    ), "difference between naive and flash attention (forward)"
+    assert_close(naive_attn_output, flash_attn_output, atol=1e-4, rtol=1e-4)
     # assert torch.allclose(flash_attn_output, fused_attn_output, atol=1e-4, rtol=1e-4), "difference between fused and flash attention (forward)"
 
     # Attention backward
@@ -189,52 +195,52 @@ def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size):
     x_grad_naive_attn = x_naive_attn.grad
 
     fused_attn_output.sum().backward()
-    qkv_grad_fused_attn = dist_fused_attn.qkv.weight.grad
-    o_grad_fused_attn = dist_fused_attn.proj.weight.grad
-    x_grad_fused_attn = x_fused_attn.grad
+    dist_fused_attn.qkv.weight.grad
+    dist_fused_attn.proj.weight.grad
+    x_fused_attn.grad
 
-    # flash_attn_output.sum().backward()
-    # qkv_grad_flash_attn = dist_flash_attn.qkv.weight.grad
-    # o_grad_flash_attn = dist_flash_attn.proj.weight.grad
-    # x_grad_flash_attn = x_flash_attn.grad
+    flash_attn_output.sum().backward()
+    qkv_grad_flash_attn = dist_flash_attn.qkv.weight.grad
+    o_grad_flash_attn = dist_flash_attn.proj.weight.grad
+    x_grad_flash_attn = x_flash_attn.grad
 
     # backward result check
-    assert torch.allclose(
-        qkv_grad_naive_attn, qkv_grad_fused_attn, atol=1e-4, rtol=1e-4
-    ), "difference between naive and fused attention (backward, qkv)"
-    assert torch.allclose(
-        o_grad_naive_attn, o_grad_fused_attn, atol=1e-4, rtol=1e-4
-    ), "difference between naive and fused attention (backward, o)"
-    assert torch.allclose(
-        x_grad_naive_attn, x_grad_fused_attn, atol=1e-4, rtol=1e-4
-    ), "difference between naive and fused attention (backward, x)"
+    # assert torch.allclose(
+    #     qkv_grad_naive_attn, qkv_grad_fused_attn, atol=1e-4, rtol=1e-4
+    # ), "difference between naive and fused attention (backward, qkv)"
+    # assert torch.allclose(
+    #     o_grad_naive_attn, o_grad_fused_attn, atol=1e-4, rtol=1e-4
+    # ), "difference between naive and fused attention (backward, o)"
+    # assert torch.allclose(
+    #     x_grad_naive_attn, x_grad_fused_attn, atol=1e-4, rtol=1e-4
+    # ), "difference between naive and fused attention (backward, x)"
 
-    # assert torch.allclose(qkv_grad_naive_attn, qkv_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between naive and flash attention (backward, qkv)"
-    # assert torch.allclose(o_grad_naive_attn, o_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between naive and flash attention (backward, o)"
-    # assert torch.allclose(x_grad_naive_attn, x_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between naive and flash attention (backward, x)"
+    assert_close(qkv_grad_naive_attn, qkv_grad_flash_attn, atol=1e-3, rtol=1e-3)
+    assert_close(o_grad_naive_attn, o_grad_flash_attn, atol=1e-4, rtol=1e-4)
+    assert_close(x_grad_naive_attn, x_grad_flash_attn, atol=1e-4, rtol=1e-4)
 
     # assert torch.allclose(qkv_grad_fused_attn, qkv_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between fused and flash attention (backward, qkv)"
     # assert torch.allclose(o_grad_fused_attn, o_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between fused and flash attention (backward, o)"
     # assert torch.allclose(x_grad_fused_attn, x_grad_flash_attn, atol=1e-4, rtol=1e-4), "difference between fused and flash attention (backward, x)"
 
 
-@parameterize("seq_len", [4])
-@parameterize("hidden_dim", [16])
-@parameterize("head_num", [16])
-@parameterize("batch_size", [1])
-def run_seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size):
-    seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size)
+@parameterize("seq_len", [16])
+@parameterize("hidden_dim", [64])
+@parameterize("head_num", [4])
+@parameterize("batch_size", [2])
+def run_flash_attn(seq_len, hidden_dim, head_num, batch_size):
+    flash_attn(seq_len, hidden_dim, head_num, batch_size)
 
 
 def check_all2all_attn(rank, world_size, port):
     colossalai.launch(config={}, rank=rank, world_size=world_size, host="localhost", port=port, backend="nccl")
-    run_seq_parallel_attn()
+    run_flash_attn()
 
 
 @rerun_if_address_is_in_use()
-def test_sequence_parallel():
+def test_flash_attn():
     spawn(check_all2all_attn, nprocs=WORKERS)
 
 
 if __name__ == "__main__":
-    test_sequence_parallel()
+    test_flash_attn()

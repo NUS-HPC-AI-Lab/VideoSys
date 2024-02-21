@@ -224,8 +224,6 @@ class DistAttention(nn.Module):
             #     else:
             #         x = torch.cat([x, x_i], dim=0)
             # x = x.reshape(B, -1, N, self.head_dim)
-            # torch.save(x, '/home/zhaozhongkai/workspace/zzk/personal_utils/compare_two_tensor/x_chunked_flash_attn.pt')
-            # exit(0)
             x = flash_attn_func(
                 q,
                 k,
