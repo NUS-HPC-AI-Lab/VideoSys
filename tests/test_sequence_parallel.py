@@ -13,7 +13,7 @@ from torch.testing import assert_close
 
 from opendit.utils.operation import all_to_all_comm
 
-WORKERS = 4
+WORKERS = 2
 
 
 class DistAttention(nn.Module):

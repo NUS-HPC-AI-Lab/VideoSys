@@ -1,6 +1,8 @@
 import copy
 
 import colossalai
+import flash_attn
+import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -120,7 +122,7 @@ class DistAttention(nn.Module):
         return x
 
 
-def flash_attn(seq_len, hidden_dim, head_num, batch_size):
+def _run_flash_attn(seq_len, hidden_dim, head_num, batch_size):
     seq_len = seq_len
     hidden_dim = hidden_dim
     head_num = head_num
@@ -231,7 +233,7 @@ def flash_attn(seq_len, hidden_dim, head_num, batch_size):
 @parameterize("head_num", [16])
 @parameterize("batch_size", [2])
 def run_flash_attn(seq_len, hidden_dim, head_num, batch_size):
-    flash_attn(seq_len, hidden_dim, head_num, batch_size)
+    _run_flash_attn(seq_len, hidden_dim, head_num, batch_size)
 
 
 def check_all2all_attn(rank, world_size, port):
@@ -239,6 +241,7 @@ def check_all2all_attn(rank, world_size, port):
     run_flash_attn()
 
 
+@pytest.mark.skipif(flash_attn.__version__ < "2.4.1", reason="requires flashattn 2.4.1 or higher")
 @rerun_if_address_is_in_use()
 def test_flash_attn():
     spawn(check_all2all_attn, nprocs=WORKERS)

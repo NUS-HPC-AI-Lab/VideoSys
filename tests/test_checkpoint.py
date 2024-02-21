@@ -8,17 +8,16 @@ import torch.distributed as dist
 from colossalai.booster import Booster
 from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.nn.optimizer import HybridAdam
-from colossalai.testing import check_state_dict_equal, clear_cache_before_run, rerun_if_address_is_in_use, spawn
+from colossalai.testing import check_state_dict_equal, rerun_if_address_is_in_use, spawn
 from colossalai.zero import LowLevelZeroOptimizer
 
-from opendit.models.dit import DiT_S_2
+from opendit.models.dit import DiT
 
 
-@clear_cache_before_run()
 def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
     plugin = LowLevelZeroPlugin(precision="fp16", stage=stage, max_norm=1.0, initial_scale=32, cpu_offload=offload)
     booster = Booster(plugin=plugin)
-    model = DiT_S_2().half()
+    model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4).half()
     criterion = lambda x: x.mean()
     optimizer = HybridAdam((model.parameters()), lr=0.001)
     model, optimizer, criterion, _, _ = booster.boost(model, optimizer, criterion)
@@ -40,13 +39,12 @@ def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
 
     model_ckpt_path = f"{tempdir}/model"
     optimizer_ckpt_path = f"{tempdir}/optimizer"
-    # lr scheduler is tested in test_torch_ddp_checkpoint_io.py and low level zero does not change it, we can skip it here
     booster.save_model(model, model_ckpt_path, shard=shard)
     booster.save_optimizer(optimizer, optimizer_ckpt_path, shard=shard)
 
     dist.barrier()
 
-    new_model = DiT_S_2().half()
+    new_model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4).half()
     new_optimizer = HybridAdam((new_model.parameters()), lr=0.001)
     new_model, new_optimizer, _, _, _ = booster.boost(new_model, new_optimizer)
 
@@ -67,6 +65,7 @@ def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
 
     booster.load_optimizer(new_optimizer, optimizer_ckpt_path)
     check_state_dict_equal(optimizer.optim.state_dict(), new_optimizer.optim.state_dict(), False)
+    dist.barrier()
 
     if dist.get_rank() == 0:
         shutil.rmtree(tempdir)
@@ -76,7 +75,6 @@ def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
 def run_dist(rank, world_size, port, stage: int, shard: bool, offload: bool):
     colossalai.launch(config=(dict()), rank=rank, world_size=world_size, port=port, host="localhost")
     run_zero_checkpoint(stage=stage, shard=shard, offload=offload)
-    torch.cuda.empty_cache()
 
 
 @pytest.mark.parametrize("stage", [2])
