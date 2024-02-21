@@ -21,6 +21,7 @@ from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
 from torch.jit import Final
 
 from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
+from opendit.models.clip import TextEmbedder
 
 ULYSSES = False
 FLASH_ATTN = False
@@ -134,7 +135,7 @@ class LabelEmbedder(nn.Module):
         if (train and use_dropout) or (force_drop_ids is not None):
             labels = self.token_drop(labels, force_drop_ids)
         embeddings = self.embedding_table(labels)
-        return embeddings
+        return embeddings 
 
 
 #################################################################################
@@ -162,7 +163,8 @@ class DistAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
-        self.fused_attn = use_fused_attn()
+        # self.fused_attn = use_fused_attn()
+        self.fused_attn = False
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
@@ -308,6 +310,7 @@ class DiT(nn.Module):
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
+        text_condition=None,
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
@@ -325,7 +328,13 @@ class DiT(nn.Module):
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+
+        self.text_condition = text_condition
+        if text_condition is not None:
+            self.y_embedder = TextEmbedder(path = text_condition, hidden_size = hidden_size)
+        else:
+            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -373,7 +382,8 @@ class DiT(nn.Module):
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
         # Initialize label embedding table:
-        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
+        if self.text_condition is None:
+            nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
