@@ -20,8 +20,8 @@ import torch.utils.checkpoint
 from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
 from torch.jit import Final
 
-from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
 from opendit.models.clip import TextEmbedder
+from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
 
 ULYSSES = False
 FLASH_ATTN = False
@@ -136,7 +136,7 @@ class LabelEmbedder(nn.Module):
         if (train and use_dropout) or (force_drop_ids is not None):
             labels = self.token_drop(labels, force_drop_ids)
         embeddings = self.embedding_table(labels)
-        return embeddings 
+        return embeddings
 
 
 #################################################################################
@@ -164,8 +164,7 @@ class DistAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
-        # self.fused_attn = use_fused_attn()
-        self.fused_attn = False
+        self.fused_attn = use_fused_attn()
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
@@ -205,8 +204,12 @@ class DistAttention(nn.Module):
             #         .permute(2, 3, 0, 1, 4)
             #         .reshape(3, B * num_heads, 1, N, self.head_dim)
             #     )
-            qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-            # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
+            if self.use_flash_attn:
+                # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
+                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
+            else:
+                # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
+                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
@@ -361,7 +364,7 @@ class DiT(nn.Module):
 
         self.text_condition = text_condition
         if text_condition is not None:
-            self.y_embedder = TextEmbedder(path = text_condition, hidden_size = hidden_size)
+            self.y_embedder = TextEmbedder(path=text_condition, hidden_size=hidden_size)
         else:
             self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
 
