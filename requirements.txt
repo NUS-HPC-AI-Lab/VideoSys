@@ -20,3 +20,5 @@ gdown
 scikit-video
 flash_attn
 pyav
+tensorboard
+timm
