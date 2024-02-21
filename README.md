@@ -24,7 +24,7 @@ bash sample.sh
 ```
 # train
 bash preprocess.sh
-bash train.sh
+bash train_video.sh
 ```
 ## Install kernels to speed up
 ```
