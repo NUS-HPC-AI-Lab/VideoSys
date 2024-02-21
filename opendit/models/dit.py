@@ -1,5 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
+# Modified from Meta DiT
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -7,20 +6,57 @@
 # References:
 # DiT:   https://github.com/facebookresearch/DiT/tree/main
 # GLIDE: https://github.com/openai/glide-text2im
-# MAE: https://github.com/facebookresearch/mae/blob/main/models_mae.py
+# MAE:   https://github.com/facebookresearch/mae/blob/main/models_mae.py
 # --------------------------------------------------------
 
 import math
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.checkpoint
-from timm.models.vision_transformer import Attention, Mlp, PatchEmbed
+from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
+from torch.jit import Final
+
+from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
+from opendit.models.clip import TextEmbedder
+
+ULYSSES = False
+FLASH_ATTN = False
+SP_SIZE = 2
+LAYERNORM_KERNEL = False
+MODULATE_KERNEL = False
 
 
-def modulate(x, shift, scale):
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
+    if use_kernel:
+        try:
+            from apex.normalization import FusedLayerNorm
+
+            return FusedLayerNorm(hidden_size, elementwise_affine=affine, eps=eps)
+        except ImportError:
+            raise RuntimeError("FusedLayerNorm not available. Please install apex.")
+    else:
+        return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
+
+
+def modulate(norm_func, x, shift, scale, use_kernel=False):
+    # Suppose x is (N, T, D), shift is (N, D), scale is (N, D)
+    dtype = x.dtype
+    x = norm_func(x.to(torch.float32))
+    if use_kernel:
+        try:
+            from opendit.kernels.fused_modulate import fused_modulate
+
+            x = fused_modulate(x, scale.to(torch.float32), shift.to(torch.float32))
+        except ImportError:
+            raise RuntimeError("FusedModulate kernel not available. Please install triton.")
+    else:
+        x = x * (scale.to(torch.float32).unsqueeze(1) + 1) + shift.to(torch.float32).unsqueeze(1)
+    x = x.to(dtype)
+    return x
 
 
 #################################################################################
@@ -99,7 +135,7 @@ class LabelEmbedder(nn.Module):
         if (train and use_dropout) or (force_drop_ids is not None):
             labels = self.token_drop(labels, force_drop_ids)
         embeddings = self.embedding_table(labels)
-        return embeddings
+        return embeddings 
 
 
 #################################################################################
@@ -107,16 +143,129 @@ class LabelEmbedder(nn.Module):
 #################################################################################
 
 
+class DistAttention(nn.Module):
+    fused_attn: Final[bool]
+
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int = 8,
+        qkv_bias: bool = False,
+        qk_norm: bool = False,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+        norm_layer: nn.Module = nn.LayerNorm,
+        use_flash_attn: bool = False,
+        enable_sequence_parallelism: bool = False,
+    ) -> None:
+        super().__init__()
+        assert dim % num_heads == 0, "dim should be divisible by num_heads"
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim**-0.5
+        # self.fused_attn = use_fused_attn()
+        self.fused_attn = False
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+        self.use_flash_attn = use_flash_attn
+        self.enable_sequence_parallelism = enable_sequence_parallelism
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, N, C = x.shape
+        qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
+        # Todo: Change num_heads in somewhere else for a better code style
+        num_heads = self.num_heads if not self.enable_sequence_parallelism else self.num_heads // SP_SIZE
+
+        if self.enable_sequence_parallelism:
+            q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
+            # q = q.reshape(1, -1, self.head_dim * self.num_heads)
+            # k = k.reshape(1, -1, self.head_dim * self.num_heads)
+            # v = v.reshape(1, -1, self.head_dim * self.num_heads)
+
+            q = all_to_all_comm(q, None)
+            k = all_to_all_comm(k, None)
+            v = all_to_all_comm(v, None)
+
+            q = q.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            k = k.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+
+        else:
+            qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
+            q, k, v = qkv.unbind(0)
+        q, k = self.q_norm(q), self.k_norm(k)
+
+        if self.use_flash_attn:
+            from flash_attn import flash_attn_func
+
+            x = flash_attn_func(
+                q,
+                k,
+                v,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+            )
+        elif self.fused_attn:
+            x = F.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+            )
+        else:
+            q = q * self.scale
+            attn = q @ k.transpose(-2, -1)
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = attn @ v
+
+        x_output_shape = (
+            (B, N, C) if not self.enable_sequence_parallelism else (B, N * SP_SIZE, num_heads * self.head_dim)
+        )
+        x = x.transpose(1, 2).reshape(x_output_shape)
+        if self.enable_sequence_parallelism:
+            # Todo: Use all_to_all_single for x
+            # x = x.reshape(1, -1, num_heads * self.head_dim)
+            x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
+            # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+
 class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
 
-    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        num_heads,
+        mlp_ratio=4.0,
+        flash_attn=False,
+        sequence_parallel=False,
+        layernorm_kernel=False,
+        modulate_kernel=False,
+        **block_kwargs,
+    ):
         super().__init__()
-        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
-        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.modulate_kernel = modulate_kernel
+        self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
+        self.attn = DistAttention(
+            hidden_size,
+            num_heads=num_heads,
+            qkv_bias=True,
+            use_flash_attn=flash_attn,
+            enable_sequence_parallelism=sequence_parallel,
+            **block_kwargs,
+        )
+        self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
@@ -124,8 +273,8 @@ class DiTBlock(nn.Module):
 
     def forward(self, x, c):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
+        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1, x, shift_msa, scale_msa, self.modulate_kernel))
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2, x, shift_mlp, scale_mlp, self.modulate_kernel))
         return x
 
 
@@ -142,7 +291,7 @@ class FinalLayer(nn.Module):
 
     def forward(self, x, c):
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
-        x = modulate(self.norm_final(x), shift, scale)
+        x = modulate(self.norm_final, x, shift, scale)
         x = self.linear(x)
         return x
 
@@ -161,9 +310,14 @@ class DiT(nn.Module):
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
+        text_condition=None,
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
+        flash_attn=FLASH_ATTN,
+        sequence_parallel=ULYSSES,
+        layernorm_kernel=LAYERNORM_KERNEL,
+        modulate_kernel=MODULATE_KERNEL,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -174,18 +328,38 @@ class DiT(nn.Module):
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+
+        self.text_condition = text_condition
+        if text_condition is not None:
+            self.y_embedder = TextEmbedder(path = text_condition, hidden_size = hidden_size)
+        else:
+            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
 
-        self.blocks = nn.ModuleList([DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                DiTBlock(
+                    hidden_size,
+                    num_heads,
+                    mlp_ratio=mlp_ratio,
+                    flash_attn=flash_attn,
+                    sequence_parallel=sequence_parallel,
+                    modulate_kernel=modulate_kernel,
+                    layernorm_kernel=layernorm_kernel,
+                )
+                for _ in range(depth)
+            ]
+        )
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
 
         self.gradient_checkpointing = False
+        self.use_flash_attention = False
 
-    def gradient_checkpointing_enable(self):
+    def enable_gradient_checkpointing(self):
         self.gradient_checkpointing = True
 
     def initialize_weights(self):
@@ -208,7 +382,8 @@ class DiT(nn.Module):
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
         # Initialize label embedding table:
-        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
+        if self.text_condition is None:
+            nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
@@ -254,16 +429,28 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
+
+        # Todo: Mock video input by repeating the same frame for all timesteps
+        # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
+        # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
+
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
+
+        # Chunk x on sequence dimension to sp group
+        if ULYSSES:
+            x = x.chunk(SP_SIZE, dim=1)[dist.get_rank()]
 
         for block in self.blocks:
             if self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
             else:
                 x = block(x, c)  # (N, T, D)
+
+        if ULYSSES:
+            x = gather_forward_split_backward(x, dim=1, process_group=None)
 
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
