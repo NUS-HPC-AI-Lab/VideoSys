@@ -338,6 +338,6 @@ if __name__ == "__main__":
     parser.add_argument("--enable_modulate_kernel", action="store_true", help="Enable triton modulate kernel")
     parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
-    parser.add_argument("--sequence_parallel_size", type=int, help="Sequence parallel size, enable if > 1")
+    parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
     args = parser.parse_args()
     main(args)
