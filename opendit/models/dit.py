@@ -18,7 +18,6 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from flash_attn import flash_attn_func
 from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
 from torch.jit import Final
 
@@ -26,8 +25,11 @@ from opendit.utils.operation import all_to_all_comm, gather_forward_split_backwa
 
 torch.manual_seed(1024)
 ULYSSES = False
-FLASH_ATTN = True
+FLASH_ATTN = False
 SP_SIZE = 2
+
+if FLASH_ATTN:
+    from flash_attn import flash_attn_func
 
 
 def modulate(x, shift, scale):
@@ -131,7 +133,7 @@ class DistAttention(nn.Module):
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
         norm_layer: nn.Module = nn.LayerNorm,
-        use_flash_attn: bool = True,
+        use_flash_attn: bool = False,
         enable_sequence_parallelism: bool = False,
     ) -> None:
         super().__init__()
@@ -171,7 +173,7 @@ class DistAttention(nn.Module):
             v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
 
         else:
-            if self.use_flash_attn:
+            if self.use_flash_attn and False:
                 # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
                 qkv = (
                     qkv.reshape(B, N, 3, num_heads, self.head_dim)
@@ -185,28 +187,27 @@ class DistAttention(nn.Module):
         q, k = self.q_norm(q), self.k_norm(k)
 
         if self.use_flash_attn:
-            # Perform flash attention in attention head group (dim 0), each time use B as dim 0
-            for i in range(0, q.shape[0], B):
-                q_i, k_i, v_i = q[i : i + B], k[i : i + B], v[i : i + B]
-                x_i = flash_attn_func(
-                    q_i,
-                    k_i,
-                    v_i,
-                    dropout_p=self.attn_drop.p if self.training else 0.0,
-                )
-                if i == 0:
-                    x = x_i
-                else:
-                    x = torch.cat([x, x_i], dim=0)
+            # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
+            # for i in range(0, q.shape[0], B):
+            #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
+            #     x_i = flash_attn_func(
+            #         q_i,
+            #         k_i,
+            #         v_i,
+            #         dropout_p=self.attn_drop.p if self.training else 0.0,
+            #     )
+            #     if i == 0:
+            #         x = x_i
 
-            # x = flash_attn_func(
-            #     q,
-            #     k,
-            #     v,
-            #     dropout_p=self.attn_drop.p if self.training else 0.0,
-            # )
-            # print_rank('x', x.shape)
-            # exit(0)
+            #     else:
+            #         x = torch.cat([x, x_i], dim=0)
+            # x = x.reshape(B, -1, N, self.head_dim)
+            x = flash_attn_func(
+                q,
+                k,
+                v,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+            )
         elif self.fused_attn:
             x = F.scaled_dot_product_attention(
                 q,
