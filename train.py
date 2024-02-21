@@ -152,7 +152,7 @@ def main(args):
         num_workers=args.num_workers,
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
-    
+
     # Create model
     img_size = dataset[0][0].shape[-1]
     dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
@@ -160,7 +160,7 @@ def main(args):
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
     if args.grad_checkpoint:
-        model.gradient_checkpointing_enable()
+        model.enable_gradient_checkpointing()
 
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor

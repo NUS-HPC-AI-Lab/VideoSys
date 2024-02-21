@@ -154,6 +154,8 @@ class DistAttention(nn.Module):
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
         norm_layer: nn.Module = nn.LayerNorm,
+        use_flash_attn: bool = False,
+        enable_sequence_parallelism: bool = False,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -168,18 +170,20 @@ class DistAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
+        self.use_flash_attn = use_flash_attn
+        self.enable_sequence_parallelism = enable_sequence_parallelism
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
         # Todo: Change num_heads in somewhere else for a better code style
-        num_heads = self.num_heads if not ULYSSES else self.num_heads // SP_SIZE
+        num_heads = self.num_heads if not self.enable_sequence_parallelism else self.num_heads // SP_SIZE
 
-        if ULYSSES:
+        if self.enable_sequence_parallelism:
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
-            q = q.reshape(1, -1, self.head_dim * self.num_heads)
-            k = k.reshape(1, -1, self.head_dim * self.num_heads)
-            v = v.reshape(1, -1, self.head_dim * self.num_heads)
+            # q = q.reshape(1, -1, self.head_dim * self.num_heads)
+            # k = k.reshape(1, -1, self.head_dim * self.num_heads)
+            # v = v.reshape(1, -1, self.head_dim * self.num_heads)
 
             q = all_to_all_comm(q, None)
             k = all_to_all_comm(k, None)
@@ -191,10 +195,11 @@ class DistAttention(nn.Module):
 
         else:
             qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
-        if FLASH_ATTN:
+        if self.use_flash_attn:
             from flash_attn import flash_attn_func
 
             x = flash_attn_func(
@@ -217,9 +222,11 @@ class DistAttention(nn.Module):
             attn = self.attn_drop(attn)
             x = attn @ v
 
-        x_output_shape = (B, N, C) if not ULYSSES else (B, N * SP_SIZE, num_heads * self.head_dim)
+        x_output_shape = (
+            (B, N, C) if not self.enable_sequence_parallelism else (B, N * SP_SIZE, num_heads * self.head_dim)
+        )
         x = x.transpose(1, 2).reshape(x_output_shape)
-        if ULYSSES:
+        if self.enable_sequence_parallelism:
             # Todo: Use all_to_all_single for x
             # x = x.reshape(1, -1, num_heads * self.head_dim)
             x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
@@ -235,12 +242,27 @@ class DiTBlock(nn.Module):
     """
 
     def __init__(
-        self, hidden_size, num_heads, mlp_ratio=4.0, layernorm_kernel=False, modulate_kernel=False, **block_kwargs
+        self,
+        hidden_size,
+        num_heads,
+        mlp_ratio=4.0,
+        flash_attn=False,
+        sequence_parallel=False,
+        layernorm_kernel=False,
+        modulate_kernel=False,
+        **block_kwargs,
     ):
         super().__init__()
         self.modulate_kernel = modulate_kernel
         self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
-        self.attn = DistAttention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        self.attn = DistAttention(
+            hidden_size,
+            num_heads=num_heads,
+            qkv_bias=True,
+            use_flash_attn=flash_attn,
+            enable_sequence_parallelism=sequence_parallel,
+            **block_kwargs,
+        )
         self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
@@ -289,6 +311,8 @@ class DiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
+        flash_attn=FLASH_ATTN,
+        sequence_parallel=ULYSSES,
         layernorm_kernel=LAYERNORM_KERNEL,
         modulate_kernel=MODULATE_KERNEL,
     ):
@@ -312,6 +336,8 @@ class DiT(nn.Module):
                     hidden_size,
                     num_heads,
                     mlp_ratio=mlp_ratio,
+                    flash_attn=flash_attn,
+                    sequence_parallel=sequence_parallel,
                     modulate_kernel=modulate_kernel,
                     layernorm_kernel=layernorm_kernel,
                 )
@@ -322,8 +348,9 @@ class DiT(nn.Module):
         self.initialize_weights()
 
         self.gradient_checkpointing = False
+        self.use_flash_attention = False
 
-    def gradient_checkpointing_enable(self):
+    def enable_gradient_checkpointing(self):
         self.gradient_checkpointing = True
 
     def initialize_weights(self):
@@ -396,6 +423,7 @@ class DiT(nn.Module):
         # Todo: Mock video input by repeating the same frame for all timesteps
         # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
         # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
+
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
