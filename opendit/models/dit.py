@@ -22,12 +22,6 @@ from torch.jit import Final
 
 from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
 
-ULYSSES = False
-FLASH_ATTN = False
-SP_SIZE = 2
-LAYERNORM_KERNEL = False
-MODULATE_KERNEL = False
-
 
 def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
     if use_kernel:
@@ -154,8 +148,8 @@ class DistAttention(nn.Module):
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
         norm_layer: nn.Module = nn.LayerNorm,
-        use_flash_attn: bool = False,
-        enable_sequence_parallelism: bool = False,
+        enable_flashattn: bool = False,
+        sequence_parallel_size: int = 1,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -170,16 +164,18 @@ class DistAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        self.use_flash_attn = use_flash_attn
-        self.enable_sequence_parallelism = enable_sequence_parallelism
+        self.enable_flashattn = enable_flashattn
+        self.sequence_parallel_size = sequence_parallel_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
         # Todo: Change num_heads in somewhere else for a better code style
-        num_heads = self.num_heads if not self.enable_sequence_parallelism else self.num_heads // SP_SIZE
+        num_heads = (
+            self.num_heads if self.sequence_parallel_size == 1 else self.num_heads // self.sequence_parallel_size
+        )
 
-        if self.enable_sequence_parallelism:
+        if self.sequence_parallel_size > 1:
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
             # q = q.reshape(1, -1, self.head_dim * self.num_heads)
             # k = k.reshape(1, -1, self.head_dim * self.num_heads)
@@ -189,9 +185,9 @@ class DistAttention(nn.Module):
             k = all_to_all_comm(k, None)
             v = all_to_all_comm(v, None)
 
-            q = q.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            k = k.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            q = q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            k = k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            v = v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
 
         else:
             qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
@@ -199,7 +195,7 @@ class DistAttention(nn.Module):
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
-        if self.use_flash_attn:
+        if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
             x = flash_attn_func(
@@ -223,10 +219,12 @@ class DistAttention(nn.Module):
             x = attn @ v
 
         x_output_shape = (
-            (B, N, C) if not self.enable_sequence_parallelism else (B, N * SP_SIZE, num_heads * self.head_dim)
+            (B, N, C)
+            if self.sequence_parallel_size == 1
+            else (B, N * self.sequence_parallel_size, num_heads * self.head_dim)
         )
         x = x.transpose(1, 2).reshape(x_output_shape)
-        if self.enable_sequence_parallelism:
+        if self.sequence_parallel_size > 1:
             # Todo: Use all_to_all_single for x
             # x = x.reshape(1, -1, num_heads * self.head_dim)
             x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
@@ -246,24 +244,24 @@ class DiTBlock(nn.Module):
         hidden_size,
         num_heads,
         mlp_ratio=4.0,
-        flash_attn=False,
-        sequence_parallel=False,
-        layernorm_kernel=False,
-        modulate_kernel=False,
+        enable_flashattn=False,
+        sequence_parallel_size=False,
+        enable_layernorm_kernel=False,
+        enable_modulate_kernel=False,
         **block_kwargs,
     ):
         super().__init__()
-        self.modulate_kernel = modulate_kernel
-        self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
+        self.enable_modulate_kernel = enable_modulate_kernel
+        self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
         self.attn = DistAttention(
             hidden_size,
             num_heads=num_heads,
             qkv_bias=True,
-            use_flash_attn=flash_attn,
-            enable_sequence_parallelism=sequence_parallel,
+            enable_flashattn=enable_flashattn,
+            sequence_parallel_size=sequence_parallel_size,
             **block_kwargs,
         )
-        self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
+        self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
@@ -271,8 +269,12 @@ class DiTBlock(nn.Module):
 
     def forward(self, x, c):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
-        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1, x, shift_msa, scale_msa, self.modulate_kernel))
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2, x, shift_mlp, scale_mlp, self.modulate_kernel))
+        x = x + gate_msa.unsqueeze(1) * self.attn(
+            modulate(self.norm1, x, shift_msa, scale_msa, self.enable_modulate_kernel)
+        )
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(
+            modulate(self.norm2, x, shift_mlp, scale_mlp, self.enable_modulate_kernel)
+        )
         return x
 
 
@@ -311,10 +313,10 @@ class DiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
-        flash_attn=FLASH_ATTN,
-        sequence_parallel=ULYSSES,
-        layernorm_kernel=LAYERNORM_KERNEL,
-        modulate_kernel=MODULATE_KERNEL,
+        enable_flashattn=False,
+        enable_layernorm_kernel=False,
+        enable_modulate_kernel=False,
+        sequence_parallel_size=False,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -322,6 +324,7 @@ class DiT(nn.Module):
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
+        self.sequence_parallel_size = sequence_parallel_size
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
@@ -336,10 +339,10 @@ class DiT(nn.Module):
                     hidden_size,
                     num_heads,
                     mlp_ratio=mlp_ratio,
-                    flash_attn=flash_attn,
-                    sequence_parallel=sequence_parallel,
-                    modulate_kernel=modulate_kernel,
-                    layernorm_kernel=layernorm_kernel,
+                    enable_flashattn=enable_flashattn,
+                    sequence_parallel_size=sequence_parallel_size,
+                    enable_modulate_kernel=enable_modulate_kernel,
+                    enable_layernorm_kernel=enable_layernorm_kernel,
                 )
                 for _ in range(depth)
             ]
@@ -430,8 +433,8 @@ class DiT(nn.Module):
         c = t + y  # (N, D)
 
         # Chunk x on sequence dimension to sp group
-        if ULYSSES:
-            x = x.chunk(SP_SIZE, dim=1)[dist.get_rank()]
+        if self.sequence_parallel_size > 1:
+            x = x.chunk(self.sequence_parallel_size, dim=1)[dist.get_rank()]
 
         for block in self.blocks:
             if self.gradient_checkpointing:
@@ -439,7 +442,7 @@ class DiT(nn.Module):
             else:
                 x = block(x, c)  # (N, T, D)
 
-        if ULYSSES:
+        if self.sequence_parallel_size > 1:
             x = gather_forward_split_backward(x, dim=1, process_group=None)
 
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
