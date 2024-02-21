@@ -15,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
-from opendit.models.dit import DiT_models
+from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import VideoDataset, prepare_dataloader
 from opendit.utils.operation import model_sharding
@@ -98,7 +98,18 @@ def main(args):
     # Create model
     img_size = dataset[0][0].shape[-1]
     dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
-    model = DiT_models[args.model](input_size=img_size, num_classes=args.num_classes).to(device).to(dtype)
+    model: DiT = (
+        DiT_models[args.model](
+            input_size=img_size,
+            num_classes=args.num_classes,
+            enable_flashattn=args.enable_flashattn,
+            enable_layernorm_kernel=args.enable_layernorm_kernel,
+            enable_modulate_kernel=args.enable_modulate_kernel,
+            sequence_parallel_size=args.sequence_parallel_size,
+        )
+        .to(device)
+        .to(dtype)
+    )
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
     if args.grad_checkpoint:
@@ -237,5 +248,9 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
+    parser.add_argument("--enable_modulate_kernel", action="store_true", help="Enable triton modulate kernel")
+    parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
+    parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
+    parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
     args = parser.parse_args()
     main(args)
