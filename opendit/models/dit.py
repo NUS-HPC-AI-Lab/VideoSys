@@ -194,15 +194,7 @@ class DistAttention(nn.Module):
             v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
 
         else:
-            if self.use_flash_attn and False:
-                # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
-                qkv = (
-                    qkv.reshape(B, N, 3, num_heads, self.head_dim)
-                    .permute(2, 3, 0, 1, 4)
-                    .reshape(3, B * num_heads, 1, N, self.head_dim)
-                )
-            else:
-                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
@@ -250,12 +242,27 @@ class DiTBlock(nn.Module):
     """
 
     def __init__(
-        self, hidden_size, num_heads, mlp_ratio=4.0, layernorm_kernel=False, modulate_kernel=False, **block_kwargs
+        self,
+        hidden_size,
+        num_heads,
+        mlp_ratio=4.0,
+        flash_attn=False,
+        sequence_parallel=False,
+        layernorm_kernel=False,
+        modulate_kernel=False,
+        **block_kwargs,
     ):
         super().__init__()
         self.modulate_kernel = modulate_kernel
         self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
-        self.attn = DistAttention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        self.attn = DistAttention(
+            hidden_size,
+            num_heads=num_heads,
+            qkv_bias=True,
+            use_flash_attn=flash_attn,
+            enable_sequence_parallelism=sequence_parallel,
+            **block_kwargs,
+        )
         self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=layernorm_kernel)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
@@ -326,9 +333,9 @@ class DiT(nn.Module):
                 DiTBlock(
                     hidden_size,
                     num_heads,
-                    mlp_ratio=mlp_ratio
-                    use_flash_attn=FLASH_ATTN,
-                    enable_sequence_parallelism=ULYSSES,
+                    mlp_ratio=mlp_ratio,
+                    flash_attn=FLASH_ATTN,
+                    sequence_parallel=ULYSSES,
                     modulate_kernel=modulate_kernel,
                     layernorm_kernel=layernorm_kernel,
                 )
