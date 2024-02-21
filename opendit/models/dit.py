@@ -56,6 +56,7 @@ def modulate(norm_func, x, shift, scale, use_kernel=False):
     else:
         x = x * (scale.to(torch.float32).unsqueeze(1) + 1) + shift.to(torch.float32).unsqueeze(1)
     x = x.to(dtype)
+
     return x
 
 
@@ -196,6 +197,14 @@ class DistAttention(nn.Module):
             v = v.reshape(B, N * SP_SIZE, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
 
         else:
+            # Todo: chunked flash attention
+            # if self.use_flash_attn:
+            #     # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
+            #     qkv = (
+            #         qkv.reshape(B, N, 3, num_heads, self.head_dim)
+            #         .permute(2, 3, 0, 1, 4)
+            #         .reshape(3, B * num_heads, 1, N, self.head_dim)
+            #     )
             qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
             q, k, v = qkv.unbind(0)
@@ -204,11 +213,27 @@ class DistAttention(nn.Module):
         if self.use_flash_attn:
             from flash_attn import flash_attn_func
 
+            # Todo: chunked flash attention
+            # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
+            # for i in range(0, q.shape[0], B):
+            #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
+            #     x_i = flash_attn_func(
+            #         q_i,
+            #         k_i,
+            #         v_i,
+            #         dropout_p=self.attn_drop.p if self.training else 0.0,
+            #     )
+            #     if i == 0:
+            #         x = x_i
+            #     else:
+            #         x = torch.cat([x, x_i], dim=0)
+            # x = x.reshape(B, -1, N, self.head_dim)
             x = flash_attn_func(
                 q,
                 k,
                 v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
+                softmax_scale=self.scale,
             )
         elif self.fused_attn:
             x = F.scaled_dot_product_attention(
@@ -218,9 +243,14 @@ class DistAttention(nn.Module):
                 dropout_p=self.attn_drop.p if self.training else 0.0,
             )
         else:
+            dtype = q.dtype
             q = q * self.scale
             attn = q @ k.transpose(-2, -1)
+            # translate attn to float32
+            attn = attn.to(torch.float32)
             attn = attn.softmax(dim=-1)
+            # cast back attn to original dtype
+            attn = attn.to(dtype)
             attn = self.attn_drop(attn)
             x = attn @ v
 
@@ -432,8 +462,6 @@ class DiT(nn.Module):
 
         # Todo: Mock video input by repeating the same frame for all timesteps
         # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
-        # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
-
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
