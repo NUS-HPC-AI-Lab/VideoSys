@@ -187,21 +187,6 @@ class DistAttention(nn.Module):
         q, k = self.q_norm(q), self.k_norm(k)
 
         if self.use_flash_attn:
-            # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
-            # for i in range(0, q.shape[0], B):
-            #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
-            #     x_i = flash_attn_func(
-            #         q_i,
-            #         k_i,
-            #         v_i,
-            #         dropout_p=self.attn_drop.p if self.training else 0.0,
-            #     )
-            #     if i == 0:
-            #         x = x_i
-
-            #     else:
-            #         x = torch.cat([x, x_i], dim=0)
-            # x = x.reshape(B, -1, N, self.head_dim)
             x = flash_attn_func(
                 q,
                 k,
@@ -308,7 +293,18 @@ class DiT(nn.Module):
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
 
-        self.blocks = nn.ModuleList([DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                DiTBlock(
+                    hidden_size,
+                    num_heads,
+                    mlp_ratio=mlp_ratio,
+                    use_flash_attn=FLASH_ATTN,
+                    enable_sequence_parallelism=ULYSSES,
+                )
+                for _ in range(depth)
+            ]
+        )
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
 
