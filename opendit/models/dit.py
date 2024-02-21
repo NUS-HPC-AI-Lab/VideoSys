@@ -311,6 +311,8 @@ class DiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
+        flash_attn=FLASH_ATTN,
+        sequence_parallel=ULYSSES,
         layernorm_kernel=LAYERNORM_KERNEL,
         modulate_kernel=MODULATE_KERNEL,
     ):
@@ -334,8 +336,8 @@ class DiT(nn.Module):
                     hidden_size,
                     num_heads,
                     mlp_ratio=mlp_ratio,
-                    flash_attn=FLASH_ATTN,
-                    sequence_parallel=ULYSSES,
+                    flash_attn=flash_attn,
+                    sequence_parallel=sequence_parallel,
                     modulate_kernel=modulate_kernel,
                     layernorm_kernel=layernorm_kernel,
                 )
