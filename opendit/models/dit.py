@@ -20,6 +20,7 @@ import torch.utils.checkpoint
 from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
 from torch.jit import Final
 
+from opendit.models.clip import TextEmbedder
 from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
 
 
@@ -49,6 +50,7 @@ def modulate(norm_func, x, shift, scale, use_kernel=False):
     else:
         x = x * (scale.to(torch.float32).unsqueeze(1) + 1) + shift.to(torch.float32).unsqueeze(1)
     x = x.to(dtype)
+
     return x
 
 
@@ -190,19 +192,47 @@ class DistAttention(nn.Module):
             v = v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
 
         else:
-            qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-            # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim]
+            # Todo: chunked flash attention
+            # if self.use_flash_attn:
+            #     # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
+            #     qkv = (
+            #         qkv.reshape(B, N, 3, num_heads, self.head_dim)
+            #         .permute(2, 3, 0, 1, 4)
+            #         .reshape(3, B * num_heads, 1, N, self.head_dim)
+            #     )
+            if self.use_flash_attn:
+                # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
+                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
+            else:
+                # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
+                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
+            # Todo: chunked flash attention
+            # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
+            # for i in range(0, q.shape[0], B):
+            #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
+            #     x_i = flash_attn_func(
+            #         q_i,
+            #         k_i,
+            #         v_i,
+            #         dropout_p=self.attn_drop.p if self.training else 0.0,
+            #     )
+            #     if i == 0:
+            #         x = x_i
+            #     else:
+            #         x = torch.cat([x, x_i], dim=0)
+            # x = x.reshape(B, -1, N, self.head_dim)
             x = flash_attn_func(
                 q,
                 k,
                 v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
+                softmax_scale=self.scale,
             )
         elif self.fused_attn:
             x = F.scaled_dot_product_attention(
@@ -212,9 +242,14 @@ class DistAttention(nn.Module):
                 dropout_p=self.attn_drop.p if self.training else 0.0,
             )
         else:
+            dtype = q.dtype
             q = q * self.scale
             attn = q @ k.transpose(-2, -1)
-            attn = attn.to(torch.float32).softmax(dim=-1).to(q.dtype)
+            # translate attn to float32
+            attn = attn.to(torch.float32)
+            attn = attn.softmax(dim=-1)
+            # cast back attn to original dtype
+            attn = attn.to(dtype)
             attn = self.attn_drop(attn)
             x = attn @ v
 
@@ -310,6 +345,7 @@ class DiT(nn.Module):
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
+        text_condition=None,
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
@@ -328,7 +364,13 @@ class DiT(nn.Module):
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+
+        self.text_condition = text_condition
+        if text_condition is not None:
+            self.y_embedder = TextEmbedder(path=text_condition, hidden_size=hidden_size)
+        else:
+            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -376,7 +418,8 @@ class DiT(nn.Module):
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
         # Initialize label embedding table:
-        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
+        if self.text_condition is None:
+            nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
@@ -425,8 +468,6 @@ class DiT(nn.Module):
 
         # Todo: Mock video input by repeating the same frame for all timesteps
         # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
-        # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
-
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
