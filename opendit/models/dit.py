@@ -28,9 +28,6 @@ ULYSSES = False
 FLASH_ATTN = False
 SP_SIZE = 2
 
-if FLASH_ATTN:
-    from flash_attn import flash_attn_func
-
 
 def modulate(x, shift, scale):
     # Suppose x is (N, T, D), shift is (N, D), scale is (N, D)
@@ -187,6 +184,8 @@ class DistAttention(nn.Module):
         q, k = self.q_norm(q), self.k_norm(k)
 
         if self.use_flash_attn:
+            from flash_attn import flash_attn_func
+
             x = flash_attn_func(
                 q,
                 k,
@@ -386,9 +385,6 @@ class DiT(nn.Module):
         # x = x.unsqueeze(1).repeat(1, 2, 1, 1, 1).reshape(-1, x.shape[1], x.shape[2], x.shape[3])
 
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
-        repeat_times = 1
-        x = x.repeat(1, repeat_times, 1)
-        print(f"x.shape: {x.shape}")
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
@@ -407,10 +403,6 @@ class DiT(nn.Module):
             x = gather_forward_split_backward(x, dim=1, process_group=None)
 
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-
-        x = x.view(x.shape[0], repeat_times, -1, x.shape[-1])
-        x = torch.mean(x, dim=1)  # (N, patch_size ** 2 * out_channels)
-
         x = self.unpatchify(x)  # (N, out_channels, H, W)
         return x
 
