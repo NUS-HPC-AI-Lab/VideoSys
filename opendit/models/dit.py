@@ -53,7 +53,7 @@ def modulate(norm_func, x, shift, scale, use_kernel=False):
         except ImportError:
             raise RuntimeError("FusedModulate kernel not available. Please install triton.")
     else:
-        x = x * (scale.to(torch.float32) + 1) + shift.to(torch.float32)
+        x = x * (scale.to(torch.float32).unsqueeze(1) + 1) + shift.to(torch.float32).unsqueeze(1)
     x = x.to(dtype)
     return x
 
