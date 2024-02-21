@@ -12,7 +12,7 @@ import json
 import os
 import sys
 
-sys.path.append("../..")
+sys.path.append("..")
 from collections import OrderedDict
 from copy import deepcopy
 from glob import glob
