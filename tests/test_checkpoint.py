@@ -39,7 +39,6 @@ def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
 
     model_ckpt_path = f"{tempdir}/model"
     optimizer_ckpt_path = f"{tempdir}/optimizer"
-    # lr scheduler is tested in test_torch_ddp_checkpoint_io.py and low level zero does not change it, we can skip it here
     booster.save_model(model, model_ckpt_path, shard=shard)
     booster.save_optimizer(optimizer, optimizer_ckpt_path, shard=shard)
 
