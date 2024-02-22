@@ -39,8 +39,7 @@ def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kerne
 def modulate(norm_func, x, shift, scale, use_kernel=False):
     # Suppose x is (N, T, D), shift is (N, D), scale is (N, D)
     dtype = x.dtype
-    x, shift, scale = x.to(torch.float32), shift.to(torch.float32), scale.to(torch.float32)
-    x = norm_func(x)
+    x = norm_func(x.to(torch.float32)).to(dtype)
     if use_kernel:
         try:
             from opendit.kernels.fused_modulate import fused_modulate
