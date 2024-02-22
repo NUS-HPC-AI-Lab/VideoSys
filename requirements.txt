@@ -25,4 +25,4 @@ matplotlib
 accelerate
 diffusers
 transformers
-flash_attn==2.0.5
+flash_attn
