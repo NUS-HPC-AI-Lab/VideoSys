@@ -226,11 +226,15 @@ def main(args):
 
                 # Log loss values:
                 all_reduce_mean(loss)
-                if coordinator.is_master() and (step + 1) % args.log_every == 0:
-                    pbar.set_postfix({"loss": loss.item()})
-                    writer.add_scalar("loss", loss.item(), epoch * num_steps_per_epoch + step)
+                global_step = epoch * num_steps_per_epoch + step
+                pbar.set_postfix({"loss": loss.item(), "step": step, "global_step": global_step})
 
-                if args.ckpt_every > 0 and (step + 1) % args.ckpt_every == 0:
+                # Log to tensorboard
+                if coordinator.is_master() and (global_step + 1) % args.log_every == 0:
+                    writer.add_scalar("loss", loss.item(), global_step)
+
+                # Save checkpoint
+                if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
                     logger.info(f"Saving checkpoint...")
                     save(
                         booster,
