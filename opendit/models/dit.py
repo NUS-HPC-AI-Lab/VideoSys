@@ -168,31 +168,43 @@ class DistAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         self.enable_flashattn = enable_flashattn
-        # TODO: support sequence_parallel_size > 2
-        assert sequence_parallel_size in [1, 2], "sequence_parallel_size is only supported for 1 or 2"
         self.sequence_parallel_size = sequence_parallel_size
         self.sequence_parallel_group = sequence_parallel_group
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
-        # Todo: Change num_heads in somewhere else for a better code style
         num_heads = (
             self.num_heads if self.sequence_parallel_size == 1 else self.num_heads // self.sequence_parallel_size
         )
 
         if self.sequence_parallel_size > 1:
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
-            # q = q.reshape(1, -1, self.head_dim * self.num_heads)
-            # k = k.reshape(1, -1, self.head_dim * self.num_heads)
-            # v = v.reshape(1, -1, self.head_dim * self.num_heads)
+
             q = all_to_all_comm(q, self.sequence_parallel_group)
             k = all_to_all_comm(k, self.sequence_parallel_group)
             v = all_to_all_comm(v, self.sequence_parallel_group)
 
-            q = q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            k = k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            v = v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            if self.enable_flashattn:
+                q = q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).contiguous()
+                k = k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).contiguous()
+                v = v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).contiguous()
+            else:
+                q = (
+                    q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim)
+                    .permute(0, 2, 1, 3)
+                    .contiguous()
+                )
+                k = (
+                    k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim)
+                    .permute(0, 2, 1, 3)
+                    .contiguous()
+                )
+                v = (
+                    v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim)
+                    .permute(0, 2, 1, 3)
+                    .contiguous()
+                )
 
         else:
             # Todo: chunked flash attention
@@ -258,12 +270,12 @@ class DistAttention(nn.Module):
             x = x.reshape(x_output_shape)
         else:
             x = x.transpose(1, 2).reshape(x_output_shape)
-
         if self.sequence_parallel_size > 1:
             # Todo: Use all_to_all_single for x
             # x = x.reshape(1, -1, num_heads * self.head_dim)
             x = all_to_all_comm(x, self.sequence_parallel_group, scatter_dim=1, gather_dim=2)
             # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
+
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
