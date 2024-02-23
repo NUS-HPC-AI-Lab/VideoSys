@@ -1,5 +1,137 @@
+from typing import Any, Optional, Tuple
+
 import torch
 import torch.distributed as dist
+from torch import Tensor
+from torch.distributed import ProcessGroup
+
+
+class AllToAll(torch.autograd.Function):
+    """Dispatches input tensor [e, c, h] to all experts by all_to_all_single
+    operation in torch.distributed.
+    """
+
+    @staticmethod
+    def forward(
+        ctx: Any,
+        inputs: Tensor,
+        group: ProcessGroup,
+        overlap: bool = False,
+    ) -> Tuple[Tensor, Any]:
+        """
+        Returns:
+            outputs: Tensor
+            handle: Optional[Work], if overlap is True
+        """
+        assert ctx is not None or not overlap
+
+        if ctx is not None:
+            ctx.comm_grp = group
+        if not inputs.is_contiguous():
+            inputs = inputs.contiguous()
+        if dist.get_world_size(group) == 1:
+            return inputs, None
+        output = torch.empty_like(inputs)
+        if not overlap:
+            dist.all_to_all_single(output, inputs, group=group)
+            return output, None
+        else:
+            handle = dist.all_to_all_single(output, inputs, group=group, async_op=True)
+            return output, handle
+
+    @staticmethod
+    def backward(ctx: Any, *grad_outputs) -> Tuple[Tensor, None, None]:
+        return (
+            AllToAll.forward(None, grad_outputs[0], ctx.comm_grp, False)[0],
+            None,
+            None,
+        )
+
+
+class AllGather(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx: Any,
+        inputs: Tensor,
+        group: Optional[ProcessGroup] = None,
+        overlap: bool = False,
+    ) -> Tuple[Tensor, Any]:
+        """
+        Returns:
+            outputs: Tensor
+            handle: Optional[Work], if overlap is True
+        """
+        assert ctx is not None or not overlap
+
+        if ctx is not None:
+            ctx.comm_grp = group
+
+        comm_size = dist.get_world_size(group)
+        if comm_size == 1:
+            return inputs.unsqueeze(0), None
+
+        buffer_shape = (comm_size,) + inputs.shape
+        outputs = torch.empty(buffer_shape, dtype=inputs.dtype, device=inputs.device)
+        buffer_list = list(torch.chunk(outputs, comm_size, dim=0))
+        if not overlap:
+            dist.all_gather(buffer_list, inputs, group=group)
+            return outputs, None
+        else:
+            handle = dist.all_gather(buffer_list, inputs, group=group, async_op=True)
+            return outputs, handle
+
+    @staticmethod
+    def backward(ctx: Any, *grad_outputs) -> Tuple[Tensor, None, None]:
+        return (
+            ReduceScatter.forward(None, grad_outputs[0], ctx.comm_grp, False)[0],
+            None,
+            None,
+        )
+
+
+class ReduceScatter(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx: Any,
+        inputs: Tensor,
+        group: ProcessGroup,
+        overlap: bool = False,
+    ) -> Tuple[Tensor, Any]:
+        """
+        Returns:
+            outputs: Tensor
+            handle: Optional[Work], if overlap is True
+        """
+        assert ctx is not None or not overlap
+
+        if ctx is not None:
+            ctx.comm_grp = group
+
+        comm_size = dist.get_world_size(group)
+        if comm_size == 1:
+            return inputs.squeeze(0), None
+
+        if not inputs.is_contiguous():
+            inputs = inputs.contiguous()
+
+        output_shape = inputs.shape[1:]
+        outputs = torch.empty(output_shape, dtype=inputs.dtype, device=inputs.device)
+        buffer_list = list(torch.chunk(inputs, comm_size, dim=0))
+        if not overlap:
+            dist.reduce_scatter(outputs, buffer_list, group=group)
+            return outputs, None
+        else:
+            handle = dist.reduce_scatter(outputs, buffer_list, group=group, async_op=True)
+            return outputs, handle
+
+    @staticmethod
+    def backward(ctx: Any, *grad_outputs) -> Tuple[Tensor, None, None]:
+        # TODO: support async backward
+        return (
+            AllGather.forward(None, grad_outputs[0], ctx.comm_grp, False)[0],
+            None,
+            None,
+        )
 
 
 # using all_to_all_single api to perform all to all communication
@@ -71,7 +203,6 @@ class _AllToAll(torch.autograd.Function):
         return (return_grad, None, None, None)
 
 
-
 def model_sharding(model: torch.nn.Module):
     global_rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -84,6 +215,7 @@ def model_sharding(model: torch.nn.Module):
         splited_params = padding_param.split(padding_param.numel() // world_size)
         splited_params = splited_params[global_rank]
         param.data = splited_params
+
 
 def all_to_all_comm(input_, process_group=None, scatter_dim=2, gather_dim=1):
     return _AllToAll.apply(input_, process_group, scatter_dim, gather_dim)

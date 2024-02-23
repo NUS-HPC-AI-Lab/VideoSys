@@ -19,10 +19,11 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from timm.models.vision_transformer import Mlp, PatchEmbed
 from torch.distributed import ProcessGroup
+from einops import rearrange
 from torch.jit import Final
 
 from opendit.models.clip import TextEmbedder
-from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
+from opendit.utils.operation import AllGather, all_to_all_comm, gather_forward_split_backward
 
 
 def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
@@ -154,14 +155,20 @@ class DistAttention(nn.Module):
         enable_flashattn: bool = False,
         sequence_parallel_size: int = 1,
         sequence_parallel_group: Optional[ProcessGroup] = None,
+        sequence_parallel_type="ulysses",
+        # sequence_parallel_type = "longseq",
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
-
+        self.sequence_parallel_type = sequence_parallel_type
+        assert sequence_parallel_type in ["longseq", "ulysses"], "sequence_parallel_type should be longseq or ulysses"
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        if self.sequence_parallel_type == "longseq":
+            # TODO: fix it
+            self.qkv = nn.Linear(dim, dim * 3 // self.sequence_parallel_size, bias=qkv_bias)
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.attn_drop = nn.Dropout(attn_drop)
@@ -172,13 +179,19 @@ class DistAttention(nn.Module):
         self.sequence_parallel_group = sequence_parallel_group
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.enable_sequence_parallel and self.sequence_parallel_type == "longseq":
+            # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
+            x = AllGather.apply(x)[0]
+            # (SP_SIZE, B, N / SP_SIZE, C) => (B, N, C)
+            x = rearrange(x, "sp b n c -> b (sp n) c")
+
         B, N, C = x.shape
         qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
         num_heads = (
             self.num_heads if self.sequence_parallel_size == 1 else self.num_heads // self.sequence_parallel_size
         )
 
-        if self.sequence_parallel_size > 1:
+        if self.enable_sequence_parallel and self.sequence_parallel_type == "ulysses":
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
             # Todo: Use all_to_all_single for q, k, v
             q = all_to_all_comm(q, self.sequence_parallel_group)
@@ -240,11 +253,13 @@ class DistAttention(nn.Module):
             attn = self.attn_drop(attn)
             x = attn @ v
 
-        x_output_shape = (
-            (B, N, C)
-            if self.sequence_parallel_size == 1
-            else (B, N * self.sequence_parallel_size, num_heads * self.head_dim)
-        )
+        if not self.enable_sequence_parallel:
+            x_output_shape = (B, N, C)
+        else:
+            if self.sequence_parallel_type == "longseq":
+                x_output_shape = (B, N, C // self.sequence_parallel_size)
+            else:
+                x_output_shape = (B, N * self.sequence_parallel_size, num_heads * self.head_dim)
         if self.enable_flashattn:
             x = x.reshape(x_output_shape)
         else:
@@ -252,6 +267,7 @@ class DistAttention(nn.Module):
         if self.sequence_parallel_size > 1:
             # Todo: Use all_to_all_single for x
             x = all_to_all_comm(x, self.sequence_parallel_group, scatter_dim=1, gather_dim=2)
+        
 
         x = self.proj(x)
         x = self.proj_drop(x)
