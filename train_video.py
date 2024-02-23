@@ -6,6 +6,7 @@ from glob import glob
 
 import colossalai
 import torch
+import torch.distributed as dist
 from colossalai.booster import Booster
 from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
@@ -19,6 +20,7 @@ from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import VideoDataset, prepare_dataloader
 from opendit.utils.operation import model_sharding
+from opendit.utils.pg_utils import DP_AXIS, SP_AXIS, ProcessGroupManager
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
@@ -80,6 +82,18 @@ def main(args):
         raise ValueError(f"Unknown plugin {args.plugin}")
     booster = Booster(plugin=plugin)
 
+    # ==============================
+    # Initialize Process Group
+    # ==============================
+    sp_size = args.sequence_parallel_size
+    assert (
+        dist.get_world_size() % sp_size == 0
+    ), f"World size {dist.get_world_size()} is not divisible by sequence parallel size {sp_size}"
+    dp_size = dist.get_world_size() // sp_size
+    pg_manager = ProcessGroupManager(dp_size, sp_size)
+    pg_manager.get_group_along_axis(DP_AXIS)
+    sp_group = pg_manager.get_group_along_axis(SP_AXIS)
+
     # ======================================================
     # Initialize Model, Objective, Optimizer
     # ======================================================
@@ -92,6 +106,7 @@ def main(args):
         drop_last=True,
         pin_memory=True,
         num_workers=args.num_workers,
+        pg_manager=pg_manager,
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
 
@@ -124,6 +139,13 @@ def main(args):
     ema_shape_dict = record_model_param_shape(ema)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
+
+    # Register sequence parallel group after copy
+    if sp_size > 1:
+        setattr(model, "sequence_parallel_group", sp_group)
+        for block in model.blocks:
+            setattr(block, "sequence_parallel_group", sp_group)
+            setattr(block.attn, "sequence_parallel_group", sp_group)
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
