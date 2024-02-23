@@ -474,7 +474,6 @@ class DiT(nn.Module):
         # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
 
         # origin inputs should be float32, cast to specified dtype
-        assert x.dtype == torch.float32
         x = x.to(self.dtype)
 
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
