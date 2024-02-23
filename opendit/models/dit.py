@@ -15,9 +15,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.checkpoint
-from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
+from timm.models.vision_transformer import Mlp, PatchEmbed
 from torch.jit import Final
 
 from opendit.models.clip import TextEmbedder
@@ -158,7 +157,6 @@ class DistAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
-        self.fused_attn = use_fused_attn()
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
@@ -235,13 +233,6 @@ class DistAttention(nn.Module):
                 v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
                 softmax_scale=self.scale,
-            )
-        elif self.fused_attn:
-            x = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
             )
         else:
             dtype = q.dtype
@@ -359,6 +350,7 @@ class DiT(nn.Module):
         enable_layernorm_kernel=False,
         enable_modulate_kernel=False,
         sequence_parallel_size=1,
+        dtype=torch.float16,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -367,6 +359,7 @@ class DiT(nn.Module):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.sequence_parallel_size = sequence_parallel_size
+        self.dtype = dtype
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
@@ -474,6 +467,11 @@ class DiT(nn.Module):
 
         # Todo: Mock video input by repeating the same frame for all timesteps
         # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
+
+        # origin inputs should be float32, cast to specified dtype
+        assert x.dtype == torch.float32
+        x = x.to(self.dtype)
+
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
@@ -494,6 +492,9 @@ class DiT(nn.Module):
 
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
+
+        # cast to float32 for better accuracy
+        x = x.to(torch.float32)
         return x
 
     def forward_with_cfg(self, x, t, y, cfg_scale):

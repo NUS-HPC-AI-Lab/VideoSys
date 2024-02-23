@@ -14,6 +14,7 @@ from glob import glob
 
 import colossalai
 import torch
+import torch.distributed as dist
 from colossalai.booster import Booster
 from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
@@ -60,6 +61,7 @@ def main(args):
     model_string_name = args.model.replace("/", "-")
     # Create an experiment folder
     experiment_dir = f"{args.outputs}/{experiment_index:03d}-{model_string_name}"
+    dist.barrier()
     if coordinator.is_master():
         os.makedirs(experiment_dir, exist_ok=True)
         with open(f"{experiment_dir}/config.txt", "w") as f:
@@ -113,6 +115,7 @@ def main(args):
             enable_layernorm_kernel=args.enable_layernorm_kernel,
             enable_modulate_kernel=args.enable_modulate_kernel,
             sequence_parallel_size=args.sequence_parallel_size,
+            dtype=dtype,
         )
         .to(device)
         .to(dtype)
@@ -208,7 +211,6 @@ def main(args):
                 with torch.no_grad():
                     # Map input images to latent space + normalize latents:
                     x = vae.encode(x).latent_dist.sample().mul_(0.18215)
-                    x = x.to(dtype)
 
                 # Diffusion
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
