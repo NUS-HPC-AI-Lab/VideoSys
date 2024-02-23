@@ -260,7 +260,11 @@ class DistAttention(nn.Module):
             if self.sequence_parallel_size == 1
             else (B, N * self.sequence_parallel_size, num_heads * self.head_dim)
         )
-        x = x.transpose(1, 2).reshape(x_output_shape)
+        if self.enable_flashattn:
+            x = x.reshape(x_output_shape)
+        else:
+            x = x.transpose(1, 2).reshape(x_output_shape)
+
         if self.sequence_parallel_size > 1:
             # Todo: Use all_to_all_single for x
             # x = x.reshape(1, -1, num_heads * self.head_dim)
