@@ -350,7 +350,7 @@ class DiT(nn.Module):
         enable_layernorm_kernel=False,
         enable_modulate_kernel=False,
         sequence_parallel_size=1,
-        dtype=torch.float16,
+        dtype=torch.float32,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -360,6 +360,11 @@ class DiT(nn.Module):
         self.num_heads = num_heads
         self.sequence_parallel_size = sequence_parallel_size
         self.dtype = dtype
+        if enable_flashattn:
+            assert dtype in [
+                torch.float16,
+                torch.bfloat16,
+            ], f"Flash attention only supports float16 and bfloat16, but got {self.dtype}"
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
