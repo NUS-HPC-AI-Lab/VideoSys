@@ -244,12 +244,15 @@ def main(args):
                         lr_scheduler,
                         epoch,
                         step + 1,
+                        global_step + 1,
                         args.batch_size,
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
                     )
-                    logger.info(f"Saved checkpoint at epoch {epoch} step {step + 1} to {experiment_dir}")
+                    logger.info(
+                        f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {experiment_dir}"
+                    )
 
         # the continue epochs are not resumed, so we need to reset the sampler start index and start step
         dataloader.sampler.set_start_index(0)

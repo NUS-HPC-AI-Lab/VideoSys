@@ -57,12 +57,13 @@ def save(
     lr_scheduler: _LRScheduler,
     epoch: int,
     step: int,
+    global_step: int,
     batch_size: int,
     coordinator: DistCoordinator,
     save_dir: str,
     shape_dict: dict,
 ):
-    save_dir = os.path.join(save_dir, f"epoch{epoch}-step{step}")
+    save_dir = os.path.join(save_dir, f"epoch{epoch}-global_step{global_step}")
     os.makedirs(os.path.join(save_dir, "model"), exist_ok=True)
 
     booster.save_model(model, os.path.join(save_dir, "model"), shard=True)
@@ -79,6 +80,7 @@ def save(
     running_states = {
         "epoch": epoch,
         "step": step,
+        "global_step": global_step,
         "sample_start_index": step * batch_size,
     }
     if coordinator.is_master():
