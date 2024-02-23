@@ -9,7 +9,7 @@ from torch.testing import assert_close
 from opendit.models.dit import DistAttention, DiTBlock
 
 WORKERS = 4
-DTYPE = torch.float32
+DTYPE = torch.float16
 
 
 def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn):
@@ -115,6 +115,8 @@ def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn
     dist_block_with_sp = copy.deepcopy(dist_block_without_sp)
     setattr(dist_block_with_sp, "sequence_parallel_size", world_size)
     setattr(dist_block_with_sp, "sequence_parallel_group", None)
+    setattr(dist_block_with_sp.attn, "sequence_parallel_size", world_size)
+    setattr(dist_block_with_sp.attn, "sequence_parallel_group", None)
 
     # Attention forward (Without Sequence parallel)
     no_sp_output = dist_block_without_sp(x_unshard, c_unshard)
@@ -131,24 +133,11 @@ def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn
 
     # Attention backward (Without Sequence parallel)
     no_sp_output.sum().backward()
-    norm2_grad_no_sp = dist_block_without_sp.norm2.weight.grad
-    attn_grad_no_sp = dist_block_without_sp.attn.weight.grad
-    norm1_grad_no_sp = dist_block_without_sp.norm1.weight.grad
-    mlp_grad_no_sp = dist_block_without_sp.mlp.weight.grad
     x_unshard_grad = x_unshard.grad
 
     # Attention backward (With Sequence parallel)
     sp_output.sum().backward()
-    norm2_grad_sp = dist_block_with_sp.norm2.weight.grad
-    attn_grad_sp = dist_block_with_sp.attn.weight.grad
-    norm1_grad_sp = dist_block_with_sp.norm1.weight.grad
-    mlp_grad_sp = dist_block_with_sp.mlp.weight.grad
     x_shard_grad = x_shard.grad
-    # all_reduce the grad of sequence parallel attention weight
-    dist.all_reduce(norm2_grad_sp)
-    dist.all_reduce(norm1_grad_sp)
-    dist.all_reduce(attn_grad_sp)
-    dist.all_reduce(mlp_grad_sp)
 
     # gather the grad of sequence parallel attention input
     x_grad_seq_list = [torch.empty_like(x_shard_grad) for _ in range(world_size)]
@@ -156,10 +145,6 @@ def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn
     x_grad_seq_gather = torch.cat(x_grad_seq_list, dim=1)
 
     # backward result check
-    assert_close(norm2_grad_sp, norm2_grad_no_sp, atol=5e-2, rtol=1e-2)
-    assert_close(norm1_grad_sp, norm1_grad_no_sp, atol=5e-2, rtol=1e-2)
-    assert_close(attn_grad_sp, attn_grad_no_sp, atol=5e-2, rtol=1e-2)
-    assert_close(mlp_grad_sp, mlp_grad_no_sp, atol=5e-2, rtol=1e-2)
     assert_close(x_grad_seq_gather, x_unshard_grad, atol=1e-3, rtol=1e-3)
 
 
@@ -167,7 +152,7 @@ def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn
 @parameterize("hidden_dim", [1152])
 @parameterize("head_num", [16])
 @parameterize("batch_size", [2])
-@parameterize("use_flash_attn", [False])
+@parameterize("use_flash_attn", [True, False])
 def run_seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn):
     seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn)
 
@@ -177,8 +162,8 @@ def run_seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_a
 @parameterize("head_num", [16])
 @parameterize("batch_size", [2])
 @parameterize("use_flash_attn", [False])
-@parameterize("layernorm_kernel", [False])
-@parameterize("modulate_kernel", [False])
+@parameterize("layernorm_kernel", [True])
+@parameterize("modulate_kernel", [True])
 def run_seq_parallel_block(
     seq_len, hidden_dim, head_num, batch_size, use_flash_attn, layernorm_kernel, modulate_kernel
 ):

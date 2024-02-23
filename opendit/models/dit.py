@@ -500,7 +500,10 @@ class DiT(nn.Module):
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
+        from opendit.utils.debug_utils import print_rank
 
+        print_rank("c", f"{c.shape}, {c.dtype}")
+        exit(0)
         # Chunk x on sequence dimension to sp group
         if self.sequence_parallel_size > 1:
             x = x.chunk(self.sequence_parallel_size, dim=1)[dist.get_rank(self.sequence_parallel_group)]
