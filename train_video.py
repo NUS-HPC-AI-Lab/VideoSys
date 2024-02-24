@@ -113,6 +113,7 @@ def main(args):
             enable_layernorm_kernel=args.enable_layernorm_kernel,
             enable_modulate_kernel=args.enable_modulate_kernel,
             sequence_parallel_size=args.sequence_parallel_size,
+            dtype=dtype,
         )
         .to(device)
         .to(dtype)

@@ -34,7 +34,18 @@ def main(args):
 
     # Load model:
     latent_size = args.image_size // 8
-    model = DiT_models[args.model](input_size=latent_size, num_classes=args.num_classes).to(device)
+    dtype = torch.float32
+    model = (
+        DiT_models[args.model](
+            input_size=latent_size,
+            num_classes=args.num_classes,
+            enable_flashattn=False,
+            enable_layernorm_kernel=False,
+            dtype=dtype,
+        )
+        .to(device)
+        .to(dtype)
+    )
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
     ckpt_path = args.ckpt or f"DiT-XL-2-{args.image_size}x{args.image_size}.pt"
     state_dict = find_model(ckpt_path)
