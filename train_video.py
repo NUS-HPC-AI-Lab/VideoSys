@@ -106,7 +106,12 @@ def main(args):
 
     # Create model
     img_size = dataset[0][0].shape[-1]
-    dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
+    if args.mixed_precision == "bf16":
+        dtype = torch.bfloat16
+    elif args.mixed_precision == "fp16":
+        dtype = torch.float16
+    else:
+        raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
     model_config = {
         "input_size": img_size,
         "num_classes": args.num_classes,
@@ -116,6 +121,7 @@ def main(args):
         "sequence_parallel_size": args.sequence_parallel_size,
         "dtype": dtype,
     }
+
     model: DiT = (
         DiT_models[args.model](sequence_parallel_group=pg_manager.sp_group, **model_config).to(device).to(dtype)
     )
