@@ -180,7 +180,7 @@ class DistAttention(nn.Module):
 
         if self.sequence_parallel_size > 1:
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
-
+            # Todo: Use all_to_all_single for q, k, v
             q = all_to_all_comm(q, self.sequence_parallel_group)
             k = all_to_all_comm(k, self.sequence_parallel_group)
             v = all_to_all_comm(v, self.sequence_parallel_group)
@@ -207,14 +207,7 @@ class DistAttention(nn.Module):
                 )
 
         else:
-            # Todo: chunked flash attention
-            # if self.use_flash_attn:
-            #     # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
-            #     qkv = (
-            #         qkv.reshape(B, N, 3, num_heads, self.head_dim)
-            #         .permute(2, 3, 0, 1, 4)
-            #         .reshape(3, B * num_heads, 1, N, self.head_dim)
-            #     )
+            # Todo: implement chunked flash attention
             if self.enable_flashattn:
                 # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
                 qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
@@ -227,21 +220,7 @@ class DistAttention(nn.Module):
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
-            # Todo: chunked flash attention
-            # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
-            # for i in range(0, q.shape[0], B):
-            #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
-            #     x_i = flash_attn_func(
-            #         q_i,
-            #         k_i,
-            #         v_i,
-            #         dropout_p=self.attn_drop.p if self.training else 0.0,
-            #     )
-            #     if i == 0:
-            #         x = x_i
-            #     else:
-            #         x = torch.cat([x, x_i], dim=0)
-            # x = x.reshape(B, -1, N, self.head_dim)
+            # Todo: implement chunked flash attention
             x = flash_attn_func(
                 q,
                 k,
@@ -272,9 +251,7 @@ class DistAttention(nn.Module):
             x = x.transpose(1, 2).reshape(x_output_shape)
         if self.sequence_parallel_size > 1:
             # Todo: Use all_to_all_single for x
-            # x = x.reshape(1, -1, num_heads * self.head_dim)
             x = all_to_all_comm(x, self.sequence_parallel_group, scatter_dim=1, gather_dim=2)
-            # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
 
         x = self.proj(x)
         x = self.proj_drop(x)

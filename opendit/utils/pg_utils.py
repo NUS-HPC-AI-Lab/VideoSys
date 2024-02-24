@@ -2,21 +2,22 @@ from colossalai.cluster.process_group_mesh import ProcessGroupMesh
 from torch import nn
 from torch.distributed import ProcessGroup
 
-DP_AXIS = 0
-SP_AXIS = 1
-
 
 class ProcessGroupManager(ProcessGroupMesh):
-    def __init__(self, *size: int):
+    def __init__(self, *size: int, dp_axis, sp_axis):
         super().__init__(*size)
+        self.dp_axis = dp_axis
+        self.sp_axis = sp_axis
+        self._dp_group = self.get_group_along_axis(self.dp_axis)
+        self._sp_group = self.get_group_along_axis(self.sp_axis)
 
+    @property
+    def dp_group(self):
+        return self._dp_group
 
-# Initialize a process group manager
-def initialize_process_group_maneger(world_size: int, sp_size: int) -> ProcessGroupManager:
-    assert world_size % sp_size == 0, f"World size {world_size} is not divisible by sequence parallel size {sp_size}"
-    dp_size = world_size // sp_size
-    pg_manager = ProcessGroupManager(dp_size, sp_size)
-    return pg_manager
+    @property
+    def get_sp_group(self):
+        return self._sp_group
 
 
 # Register sequence parallel group after copy

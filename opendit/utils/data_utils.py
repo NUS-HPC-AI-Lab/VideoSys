@@ -8,7 +8,7 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from opendit.utils.pg_utils import DP_AXIS, ProcessGroupManager
+from opendit.utils.pg_utils import ProcessGroupManager
 
 
 class StatefulDistributedSampler(DistributedSampler):
@@ -71,7 +71,10 @@ def prepare_dataloader(
     """
     _kwargs = kwargs.copy()
     sampler = StatefulDistributedSampler(
-        dataset, num_replicas=pg_manager.size(DP_AXIS), rank=pg_manager.coordinate(DP_AXIS), shuffle=shuffle
+        dataset,
+        num_replicas=pg_manager.size(pg_manager.dp_axis),
+        rank=pg_manager.coordinate(pg_manager.dp_axis),
+        shuffle=shuffle,
     )
 
     # Deterministic dataloader

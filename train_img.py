@@ -31,7 +31,7 @@ from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
 from opendit.utils.operation import model_sharding
-from opendit.utils.pg_utils import SP_AXIS, initialize_process_group_maneger, register_sequence_parallel_group
+from opendit.utils.pg_utils import ProcessGroupManager
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
@@ -97,7 +97,9 @@ def main(args):
     # ==============================
     # Initialize Process Group
     # ==============================
-    pg_manager = initialize_process_group_maneger(dist.get_world_size(), args.sequence_parallel_size)
+    sp_size = args.sequence_parallel_size
+    dp_size = dist.get_world_size() // sp_size
+    pg_manager = ProcessGroupManager(dp_size, sp_size, dp_axis=0, sp_axis=1)
 
     # ======================================================
     # Initialize Model, Objective, Optimizer
@@ -142,7 +144,7 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
 
     # Register sequence parallel group after deepcopy
-    model = register_sequence_parallel_group(model, pg_manager.get_group_along_axis(SP_AXIS))
+    # model = register_sequence_parallel_group(model, pg_manager.get_group_along_axis(SP_AXIS))
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
