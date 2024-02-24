@@ -75,7 +75,7 @@ class _AllToAll(torch.autograd.Function):
 def model_sharding(model: torch.nn.Module):
     global_rank = dist.get_rank()
     world_size = dist.get_world_size()
-    for name, param in model.named_parameters():
+    for _, param in model.named_parameters():
         padding_size = (world_size - param.numel() % world_size) % world_size
         if padding_size > 0:
             padding_param = torch.nn.functional.pad(param.data.view(-1), [0, padding_size])
