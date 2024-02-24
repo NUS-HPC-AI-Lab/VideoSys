@@ -115,15 +115,20 @@ def main(args):
     model_config = {
         "input_size": img_size,
         "num_classes": args.num_classes,
-        "enable_flashattn": args.enable_flashattn,
         "enable_layernorm_kernel": args.enable_layernorm_kernel,
         "enable_modulate_kernel": args.enable_modulate_kernel,
         "sequence_parallel_size": args.sequence_parallel_size,
-        "dtype": dtype,
     }
 
     model: DiT = (
-        DiT_models[args.model](sequence_parallel_group=pg_manager.sp_group, **model_config).to(device).to(dtype)
+        DiT_models[args.model](
+            enable_flashattn=args.enable_flashattn,
+            sequence_parallel_group=pg_manager.sp_group,
+            dtype=dtype,
+            **model_config,
+        )
+        .to(device)
+        .to(dtype)
     )
 
     model_numel = get_model_numel(model)
