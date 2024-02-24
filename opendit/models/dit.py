@@ -10,6 +10,7 @@
 # --------------------------------------------------------
 
 import math
+from typing import Optional
 
 import numpy as np
 import torch
@@ -17,6 +18,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.utils.checkpoint
 from timm.models.vision_transformer import Mlp, PatchEmbed
+from torch.distributed import ProcessGroup
 from torch.jit import Final
 
 from opendit.models.clip import TextEmbedder
@@ -151,6 +153,7 @@ class DistAttention(nn.Module):
         norm_layer: nn.Module = nn.LayerNorm,
         enable_flashattn: bool = False,
         sequence_parallel_size: int = 1,
+        sequence_parallel_group: Optional[ProcessGroup] = None,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -165,41 +168,46 @@ class DistAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         self.enable_flashattn = enable_flashattn
-        # TODO: support sequence_parallel_size > 2
-        assert sequence_parallel_size in [1, 2], "sequence_parallel_size is only supported for 1 or 2"
         self.sequence_parallel_size = sequence_parallel_size
+        self.sequence_parallel_group = sequence_parallel_group
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
-        # Todo: Change num_heads in somewhere else for a better code style
         num_heads = (
             self.num_heads if self.sequence_parallel_size == 1 else self.num_heads // self.sequence_parallel_size
         )
 
         if self.sequence_parallel_size > 1:
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
-            # q = q.reshape(1, -1, self.head_dim * self.num_heads)
-            # k = k.reshape(1, -1, self.head_dim * self.num_heads)
-            # v = v.reshape(1, -1, self.head_dim * self.num_heads)
+            # Todo: Use all_to_all_single for q, k, v
+            q = all_to_all_comm(q, self.sequence_parallel_group)
+            k = all_to_all_comm(k, self.sequence_parallel_group)
+            v = all_to_all_comm(v, self.sequence_parallel_group)
 
-            q = all_to_all_comm(q, None)
-            k = all_to_all_comm(k, None)
-            v = all_to_all_comm(v, None)
-
-            q = q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            k = k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-            v = v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+            if self.enable_flashattn:
+                q = q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).contiguous()
+                k = k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).contiguous()
+                v = v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim).contiguous()
+            else:
+                q = (
+                    q.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim)
+                    .permute(0, 2, 1, 3)
+                    .contiguous()
+                )
+                k = (
+                    k.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim)
+                    .permute(0, 2, 1, 3)
+                    .contiguous()
+                )
+                v = (
+                    v.reshape(B, N * self.sequence_parallel_size, num_heads, self.head_dim)
+                    .permute(0, 2, 1, 3)
+                    .contiguous()
+                )
 
         else:
-            # Todo: chunked flash attention
-            # if self.use_flash_attn:
-            #     # [B, N, 3, num_heads, head_dim] => [3, B * num_heads, 1, N, head_dim]
-            #     qkv = (
-            #         qkv.reshape(B, N, 3, num_heads, self.head_dim)
-            #         .permute(2, 3, 0, 1, 4)
-            #         .reshape(3, B * num_heads, 1, N, self.head_dim)
-            #     )
+            # Todo: implement chunked flash attention
             if self.enable_flashattn:
                 # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
                 qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
@@ -212,21 +220,7 @@ class DistAttention(nn.Module):
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
-            # Todo: chunked flash attention
-            # # Perform flash attention in attention head group (dim 0), each time use B as dim 0
-            # for i in range(0, q.shape[0], B):
-            #     q_i, k_i, v_i = q[i: i + B], k[i: i + B], v[i: i + B]
-            #     x_i = flash_attn_func(
-            #         q_i,
-            #         k_i,
-            #         v_i,
-            #         dropout_p=self.attn_drop.p if self.training else 0.0,
-            #     )
-            #     if i == 0:
-            #         x = x_i
-            #     else:
-            #         x = torch.cat([x, x_i], dim=0)
-            # x = x.reshape(B, -1, N, self.head_dim)
+            # Todo: implement chunked flash attention
             x = flash_attn_func(
                 q,
                 k,
@@ -255,12 +249,10 @@ class DistAttention(nn.Module):
             x = x.reshape(x_output_shape)
         else:
             x = x.transpose(1, 2).reshape(x_output_shape)
-
         if self.sequence_parallel_size > 1:
             # Todo: Use all_to_all_single for x
-            # x = x.reshape(1, -1, num_heads * self.head_dim)
-            x = all_to_all_comm(x, None, scatter_dim=1, gather_dim=2)
-            # x = x.reshape(B, -1, num_heads * self.head_dim * SP_SIZE)
+            x = all_to_all_comm(x, self.sequence_parallel_group, scatter_dim=1, gather_dim=2)
+
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -277,7 +269,8 @@ class DiTBlock(nn.Module):
         num_heads,
         mlp_ratio=4.0,
         enable_flashattn=False,
-        sequence_parallel_size=False,
+        sequence_parallel_size: int = 1,
+        sequence_parallel_group: Optional[ProcessGroup] = None,
         enable_layernorm_kernel=False,
         enable_modulate_kernel=False,
         **block_kwargs,
@@ -291,6 +284,7 @@ class DiTBlock(nn.Module):
             qkv_bias=True,
             enable_flashattn=enable_flashattn,
             sequence_parallel_size=sequence_parallel_size,
+            sequence_parallel_group=sequence_parallel_group,
             **block_kwargs,
         )
         self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
@@ -345,11 +339,12 @@ class DiT(nn.Module):
         text_condition=None,
         class_dropout_prob=0.1,
         num_classes=1000,
-        learn_sigma=True,
-        enable_flashattn=False,
-        enable_layernorm_kernel=False,
-        enable_modulate_kernel=False,
-        sequence_parallel_size=1,
+        learn_sigma: bool = True,
+        enable_flashattn: bool = False,
+        enable_layernorm_kernel: bool = False,
+        enable_modulate_kernel: bool = False,
+        sequence_parallel_size: int = 1,
+        sequence_parallel_group: Optional[ProcessGroup] = None,
         dtype=torch.float32,
     ):
         super().__init__()
@@ -359,6 +354,7 @@ class DiT(nn.Module):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.sequence_parallel_size = sequence_parallel_size
+        self.sequence_parallel_group = sequence_parallel_group
         self.dtype = dtype
         if enable_flashattn:
             assert dtype in [
@@ -389,6 +385,7 @@ class DiT(nn.Module):
                     sequence_parallel_size=sequence_parallel_size,
                     enable_modulate_kernel=enable_modulate_kernel,
                     enable_layernorm_kernel=enable_layernorm_kernel,
+                    sequence_parallel_group=self.sequence_parallel_group,
                 )
                 for _ in range(depth)
             ]
@@ -483,7 +480,7 @@ class DiT(nn.Module):
 
         # Chunk x on sequence dimension to sp group
         if self.sequence_parallel_size > 1:
-            x = x.chunk(self.sequence_parallel_size, dim=1)[dist.get_rank()]
+            x = x.chunk(self.sequence_parallel_size, dim=1)[dist.get_rank(self.sequence_parallel_group)]
 
         for block in self.blocks:
             if self.gradient_checkpointing:
@@ -492,7 +489,7 @@ class DiT(nn.Module):
                 x = block(x, c)  # (N, T, D)
 
         if self.sequence_parallel_size > 1:
-            x = gather_forward_split_backward(x, dim=1, process_group=None)
+            x = gather_forward_split_backward(x, dim=1, process_group=self.sequence_parallel_group)
 
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)

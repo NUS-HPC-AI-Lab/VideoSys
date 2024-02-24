@@ -1,11 +1,11 @@
 import argparse
 import json
 import os
-from copy import deepcopy
 from glob import glob
 
 import colossalai
 import torch
+import torch.distributed as dist
 from colossalai.booster import Booster
 from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
@@ -19,6 +19,7 @@ from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import VideoDataset, prepare_dataloader
 from opendit.utils.operation import model_sharding
+from opendit.utils.pg_utils import ProcessGroupManager
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
@@ -49,6 +50,7 @@ def main(args):
     model_string_name = args.model.replace("/", "-")
     # Create an experiment folder
     experiment_dir = f"{args.outputs}/{experiment_index:03d}-{model_string_name}"
+    dist.barrier()
     if coordinator.is_master():
         os.makedirs(experiment_dir, exist_ok=True)
         with open(f"{experiment_dir}/config.txt", "w") as f:
@@ -80,6 +82,13 @@ def main(args):
         raise ValueError(f"Unknown plugin {args.plugin}")
     booster = Booster(plugin=plugin)
 
+    # ==============================
+    # Initialize Process Group
+    # ==============================
+    sp_size = args.sequence_parallel_size
+    dp_size = dist.get_world_size() // sp_size
+    pg_manager = ProcessGroupManager(dp_size, sp_size, dp_axis=0, sp_axis=1)
+
     # ======================================================
     # Initialize Model, Objective, Optimizer
     # ======================================================
@@ -92,25 +101,39 @@ def main(args):
         drop_last=True,
         pin_memory=True,
         num_workers=args.num_workers,
+        pg_manager=pg_manager,
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
 
     # Create model
     img_size = dataset[0][0].shape[-1]
-    dtype = torch.float16 if args.mixed_precision == "fp16" else torch.bfloat16
+    if args.mixed_precision == "bf16":
+        dtype = torch.bfloat16
+    elif args.mixed_precision == "fp16":
+        dtype = torch.float16
+    else:
+        raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
+
+    # Shared model config for two models
+    model_config = {
+        "input_size": img_size,
+        "num_classes": args.num_classes,
+        "enable_layernorm_kernel": args.enable_layernorm_kernel,
+        "enable_modulate_kernel": args.enable_modulate_kernel,
+        "sequence_parallel_size": args.sequence_parallel_size,
+    }
+
     model: DiT = (
         DiT_models[args.model](
-            input_size=img_size,
-            num_classes=args.num_classes,
             enable_flashattn=args.enable_flashattn,
-            enable_layernorm_kernel=args.enable_layernorm_kernel,
-            enable_modulate_kernel=args.enable_modulate_kernel,
-            sequence_parallel_size=args.sequence_parallel_size,
+            sequence_parallel_group=pg_manager.sp_group,
             dtype=dtype,
+            **model_config,
         )
         .to(device)
         .to(dtype)
     )
+
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
     if args.grad_checkpoint:
@@ -119,7 +142,8 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema = deepcopy(model).to(torch.float32).to(device)
+    ema: DiT = DiT_models[args.model](**model_config).to(device).to(torch.float32)
+    ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
     # default: 1000 steps, linear noise schedule
@@ -127,7 +151,9 @@ def main(args):
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
-    optimizer = HybridAdam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=0, adamw_mode=True)
+    optimizer = HybridAdam(
+        filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=0, adamw_mode=True
+    )
     # You can use a lr scheduler if you want
     lr_scheduler = None
 
@@ -196,11 +222,15 @@ def main(args):
 
                 # Log loss values:
                 all_reduce_mean(loss)
-                if coordinator.is_master() and (step + 1) % args.log_every == 0:
-                    pbar.set_postfix({"loss": loss.item()})
-                    writer.add_scalar("loss", loss.item(), epoch * num_steps_per_epoch + step)
+                global_step = epoch * num_steps_per_epoch + step
+                pbar.set_postfix({"loss": loss.item(), "step": step, "global_step": global_step})
 
-                if args.ckpt_every > 0 and (step + 1) % args.ckpt_every == 0:
+                # Log to tensorboard
+                if coordinator.is_master() and (global_step + 1) % args.log_every == 0:
+                    writer.add_scalar("loss", loss.item(), global_step)
+
+                # Save checkpoint
+                if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
                     logger.info(f"Saving checkpoint")
                     save(
                         booster,
@@ -210,12 +240,15 @@ def main(args):
                         lr_scheduler,
                         epoch,
                         step + 1,
+                        global_step + 1,
                         args.batch_size,
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
                     )
-                    logger.info(f"Saved checkpoint at epoch {epoch} step {step + 1} to {experiment_dir}")
+                    logger.info(
+                        f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {experiment_dir}"
+                    )
 
         # the continue epochs are not resumed, so we need to reset the sampler start index and start step
         dataloader.sampler.set_start_index(0)
@@ -242,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--global-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=50)
+    parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--ckpt-every", type=int, default=1000)
     parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
