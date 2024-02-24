@@ -50,6 +50,7 @@ def main(args):
     model_string_name = args.model.replace("/", "-")
     # Create an experiment folder
     experiment_dir = f"{args.outputs}/{experiment_index:03d}-{model_string_name}"
+    dist.barrier()
     if coordinator.is_master():
         os.makedirs(experiment_dir, exist_ok=True)
         with open(f"{experiment_dir}/config.txt", "w") as f:
@@ -112,6 +113,7 @@ def main(args):
         dtype = torch.float16
     else:
         raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
+
     model_config = {
         "input_size": img_size,
         "num_classes": args.num_classes,
@@ -119,7 +121,7 @@ def main(args):
         "enable_modulate_kernel": args.enable_modulate_kernel,
         "sequence_parallel_size": args.sequence_parallel_size,
     }
-
+    
     model: DiT = (
         DiT_models[args.model](
             enable_flashattn=args.enable_flashattn,
@@ -148,7 +150,7 @@ def main(args):
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
-    optimizer = HybridAdam(model.parameters(), lr=args.lr, weight_decay=0, adamw_mode=True)
+    optimizer = HybridAdam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=0, adamw_mode=True)
     # You can use a lr scheduler if you want
     lr_scheduler = None
 
@@ -217,11 +219,15 @@ def main(args):
 
                 # Log loss values:
                 all_reduce_mean(loss)
-                if coordinator.is_master() and (step + 1) % args.log_every == 0:
-                    pbar.set_postfix({"loss": loss.item()})
-                    writer.add_scalar("loss", loss.item(), epoch * num_steps_per_epoch + step)
+                global_step = epoch * num_steps_per_epoch + step
+                pbar.set_postfix({"loss": loss.item(), "step": step, "global_step": global_step})
 
-                if args.ckpt_every > 0 and (step + 1) % args.ckpt_every == 0:
+                # Log to tensorboard
+                if coordinator.is_master() and (global_step + 1) % args.log_every == 0:
+                    writer.add_scalar("loss", loss.item(), global_step)
+
+                # Save checkpoint
+                if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
                     logger.info(f"Saving checkpoint")
                     save(
                         booster,
@@ -231,12 +237,15 @@ def main(args):
                         lr_scheduler,
                         epoch,
                         step + 1,
+                        global_step + 1,
                         args.batch_size,
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
                     )
-                    logger.info(f"Saved checkpoint at epoch {epoch} step {step + 1} to {experiment_dir}")
+                    logger.info(
+                        f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {experiment_dir}"
+                    )
 
         # the continue epochs are not resumed, so we need to reset the sampler start index and start step
         dataloader.sampler.set_start_index(0)
@@ -263,7 +272,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--global-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=50)
+    parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--ckpt-every", type=int, default=1000)
     parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")

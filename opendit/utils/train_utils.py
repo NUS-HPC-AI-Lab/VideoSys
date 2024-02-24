@@ -41,6 +41,8 @@ def update_ema(
     for name, param in model_params.items():
         if name == "pos_embed":
             continue
+        if param.requires_grad == False:
+            continue
         if not sharded:
             param_data = param.data
             ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
