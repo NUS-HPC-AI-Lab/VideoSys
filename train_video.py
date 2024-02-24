@@ -134,7 +134,7 @@ def main(args):
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
-    optimizer = HybridAdam(model.parameters(), lr=args.lr, weight_decay=0, adamw_mode=True)
+    optimizer = HybridAdam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=0, adamw_mode=True)
     # You can use a lr scheduler if you want
     lr_scheduler = None
 
