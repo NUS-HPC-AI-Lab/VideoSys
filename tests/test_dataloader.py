@@ -1,7 +1,7 @@
 import colossalai
 import torch
 import torch.distributed as dist
-from colossalai.testing import parameterize
+from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
 from colossalai.utils import get_current_device
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
@@ -9,12 +9,13 @@ from torchvision.datasets import CIFAR10
 from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
 from opendit.utils.pg_utils import ProcessGroupManager
 
+WORKERS = 4
+
 
 @parameterize("batch_size", [2])
-@parameterize("num_workers", [4])
 @parameterize("sequence_parallel_size", [2, 4])
 @parameterize("image_size", [256])
-def run_dataloader_test(batch_size, num_workers, sequence_parallel_size, image_size, data_path="../datasets"):
+def run_dataloader_test(batch_size, sequence_parallel_size, image_size, num_workers=0, data_path="../datasets"):
     sp_size = sequence_parallel_size
     dp_size = dist.get_world_size() // sp_size
     pg_manager = ProcessGroupManager(dp_size, sp_size, dp_axis=0, sp_axis=1)
@@ -71,14 +72,16 @@ def run_dataloader_test(batch_size, num_workers, sequence_parallel_size, image_s
                 y_list[rank], y_list[dist.get_rank()]
             ), f"y in rank {rank} and {dist.get_rank()} are equal in the same data parallel group."
 
-    if dist.get_rank() == 0:
-        print(f"DataLoader test (world size {dist.get_world_size()}, sequence parallel size {sp_size}) passed!")
 
-
-def check_dataloader():
-    colossalai.launch_from_torch({})
+def check_dataloader(rank, world_size, port):
+    colossalai.launch(config={}, rank=rank, world_size=world_size, host="localhost", port=port, backend="nccl")
     run_dataloader_test()
 
 
+@rerun_if_address_is_in_use()
+def test_sequence_parallel_dataloader():
+    spawn(check_dataloader, WORKERS)
+
+
 if __name__ == "__main__":
-    check_dataloader()
+    test_sequence_parallel_dataloader()
