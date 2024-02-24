@@ -17,7 +17,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.utils.checkpoint
-from timm.models.vision_transformer import Mlp, PatchEmbed, use_fused_attn
+from timm.models.vision_transformer import Mlp, PatchEmbed
 from torch.distributed import ProcessGroup
 from torch.jit import Final
 
@@ -354,13 +354,13 @@ class DiT(nn.Module):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.sequence_parallel_size = sequence_parallel_size
+        self.sequence_parallel_group = sequence_parallel_group
         self.dtype = dtype
         if enable_flashattn:
             assert dtype in [
                 torch.float16,
                 torch.bfloat16,
             ], f"Flash attention only supports float16 and bfloat16, but got {self.dtype}"
-        self.sequence_parallel_group = sequence_parallel_group
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
