@@ -114,20 +114,21 @@ def main(args):
         dtype = torch.float32
     else:
         raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
+
+    model_config = {
+        "input_size": latent_size,
+        "num_classes": args.num_classes,
+        "enable_flashattn": args.enable_flashattn,
+        "enable_layernorm_kernel": args.enable_layernorm_kernel,
+        "enable_modulate_kernel": args.enable_modulate_kernel,
+        "sequence_parallel_size": args.sequence_parallel_size,
+        "dtype": dtype,
+    }
+
     model: DiT = (
-        DiT_models[args.model](
-            input_size=latent_size,
-            num_classes=args.num_classes,
-            enable_flashattn=args.enable_flashattn,
-            enable_layernorm_kernel=args.enable_layernorm_kernel,
-            enable_modulate_kernel=args.enable_modulate_kernel,
-            sequence_parallel_size=args.sequence_parallel_size,
-            sequence_parallel_group=pg_manager.sp_group,
-            dtype=dtype,
-        )
-        .to(device)
-        .to(dtype)
+        DiT_models[args.model](sequence_parallel_group=pg_manager.sp_group, **model_config).to(device).to(dtype)
     )
+
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
     if args.grad_checkpoint:
@@ -136,20 +137,7 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema: DiT = (
-        DiT_models[args.model](
-            input_size=latent_size,
-            num_classes=args.num_classes,
-            enable_flashattn=args.enable_flashattn,
-            enable_layernorm_kernel=args.enable_layernorm_kernel,
-            enable_modulate_kernel=args.enable_modulate_kernel,
-            sequence_parallel_size=args.sequence_parallel_size,
-            sequence_parallel_group=None,
-            dtype=dtype,
-        )
-        .to(device)
-        .to(dtype)
-    )
+    ema: DiT = DiT_models[args.model](**model_config).to(device).to(torch.float32)
     ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
