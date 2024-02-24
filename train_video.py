@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-from copy import deepcopy
 from glob import glob
 
 import colossalai
@@ -129,14 +128,25 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema = deepcopy(model).to(torch.float32).to(device)
+    ema: DiT = (
+        DiT_models[args.model](
+            input_size=img_size,
+            num_classes=args.num_classes,
+            enable_flashattn=args.enable_flashattn,
+            enable_layernorm_kernel=args.enable_layernorm_kernel,
+            enable_modulate_kernel=args.enable_modulate_kernel,
+            sequence_parallel_size=args.sequence_parallel_size,
+            sequence_parallel_group=None,
+            dtype=dtype,
+        )
+        .to(device)
+        .to(dtype)
+    )
+    ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
-
-    # Register sequence parallel group after copy
-    # model = register_sequence_parallel_group(model, pg_manager.get_group_along_axis(SP_AXIS))
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
