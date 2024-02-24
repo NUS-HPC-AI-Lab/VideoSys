@@ -5,10 +5,10 @@ from typing import Iterator, Optional
 import numpy as np
 import torch
 from PIL import Image
-from torch.distributed import ProcessGroup
-from torch.distributed.distributed_c10d import _get_default_group
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from torch.utils.data.distributed import DistributedSampler
+
+from opendit.utils.pg_utils import ProcessGroupManager
 
 
 class StatefulDistributedSampler(DistributedSampler):
@@ -45,7 +45,7 @@ def prepare_dataloader(
     drop_last=False,
     pin_memory=False,
     num_workers=0,
-    process_group: Optional[ProcessGroup] = None,
+    pg_manager: Optional[ProcessGroupManager] = None,
     **kwargs,
 ):
     r"""
@@ -70,9 +70,11 @@ def prepare_dataloader(
         :class:`torch.utils.data.DataLoader`: A DataLoader used for training or testing.
     """
     _kwargs = kwargs.copy()
-    process_group = process_group or _get_default_group()
     sampler = StatefulDistributedSampler(
-        dataset, num_replicas=process_group.size(), rank=process_group.rank(), shuffle=shuffle
+        dataset,
+        num_replicas=pg_manager.size(pg_manager.dp_axis),
+        rank=pg_manager.coordinate(pg_manager.dp_axis),
+        shuffle=shuffle,
     )
 
     # Deterministic dataloader
