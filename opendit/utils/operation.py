@@ -4,6 +4,7 @@ import torch
 import torch.distributed as dist
 from torch import Tensor
 from torch.distributed import ProcessGroup
+from torch.distributed._functional_collectives import all_gather_tensor, reduce_scatter_tensor
 
 
 class AllToAll(torch.autograd.Function):
@@ -46,6 +47,29 @@ class AllToAll(torch.autograd.Function):
             None,
             None,
         )
+
+
+class GanAllGather(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx: Any,
+        inputs: Tensor,
+        group: Optional[ProcessGroup] = None,
+    ) -> Tuple[Tensor, Any]:
+        """
+        Returns:
+            outputs: Tensor
+            handle: Optional[Work], if overlap is True
+        """
+        ctx.group = group
+        tensor = all_gather_tensor(inputs, 0, group)
+        return tensor
+
+    @staticmethod
+    def backward(ctx: Any, *grad_outputs) -> Tuple[Tensor, None, None]:
+        group = ctx.group
+        tensor = reduce_scatter_tensor(grad_outputs[0], "sum", 0, group)
+        return tensor, None
 
 
 class AllGather(torch.autograd.Function):

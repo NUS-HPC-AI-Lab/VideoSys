@@ -120,6 +120,7 @@ def main(args):
         "enable_layernorm_kernel": args.enable_layernorm_kernel,
         "enable_modulate_kernel": args.enable_modulate_kernel,
         "sequence_parallel_size": args.sequence_parallel_size,
+        "sequence_parallel_type": args.sequence_parallel_type,
     }
 
     model: DiT = (
@@ -309,5 +310,6 @@ if __name__ == "__main__":
     parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
     parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
+    parser.add_argument("--sequence_parallel_type", type=str, default=None, help="Sequence parallel type")
     args = parser.parse_args()
     main(args)
