@@ -3,6 +3,7 @@ from typing import Any, Optional, Tuple
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+from einops import rearrange
 from torch import Tensor
 from torch.distributed import ProcessGroup
 from torch.distributed._functional_collectives import all_gather_tensor, reduce_scatter_tensor
@@ -50,11 +51,15 @@ class AllToAll(torch.autograd.Function):
         )
 
 
-class GanAllGather(torch.autograd.Function):
+class AsyncAllGatherForTwo(torch.autograd.Function):
     @staticmethod
     def forward(
         ctx: Any,
         inputs: Tensor,
+        weight: Tensor,
+        bias: Tensor,
+        sp_rank: int,
+        sp_size: int,
         group: Optional[ProcessGroup] = None,
     ) -> Tuple[Tensor, Any]:
         """
@@ -63,14 +68,65 @@ class GanAllGather(torch.autograd.Function):
             handle: Optional[Work], if overlap is True
         """
         ctx.group = group
-        tensor = all_gather_tensor(inputs, 0, group)
-        return tensor
+        ctx.sp_rank = sp_rank
+        ctx.sp_size = sp_size
+
+        # compute local qkv
+        local_qkv = F.linear(inputs, weight, bias).unsqueeze(0)
+
+        # overlap all_gather and local linear
+        all_inputs = all_gather_tensor(inputs.unsqueeze(0), 0, group)
+        remote_inputs = all_inputs[1 - sp_rank].view(list(local_qkv.shape[:-1]) + [-1])
+        # compute remote qkv
+        remote_qkv = F.linear(remote_inputs, weight, bias)
+
+        # concat local and remote qkv
+        if sp_rank == 0:
+            qkv = torch.cat([local_qkv, remote_qkv], dim=0)
+        else:
+            qkv = torch.cat([remote_qkv, local_qkv], dim=0)
+        qkv = rearrange(qkv, "sp b n c -> b (sp n) c")
+
+        ctx.save_for_backward(inputs, weight, remote_inputs)
+        return qkv
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs) -> Tuple[Tensor, None, None]:
         group = ctx.group
-        tensor = reduce_scatter_tensor(grad_outputs[0], "sum", 0, group)
-        return tensor, None
+        sp_rank = ctx.sp_rank
+        sp_size = ctx.sp_size
+        inputs, weight, remote_inputs = ctx.saved_tensors
+
+        # split qkv_grad
+        qkv_grad = grad_outputs[0]
+        qkv_grad = rearrange(qkv_grad, "b (sp n) c -> sp b n c", sp=sp_size)
+        qkv_grad = torch.chunk(qkv_grad, 2, dim=0)
+        if sp_rank == 0:
+            local_qkv_grad, remote_qkv_grad = qkv_grad
+        else:
+            remote_qkv_grad, local_qkv_grad = qkv_grad
+
+        # compute remote grad
+        remote_inputs_grad = torch.matmul(remote_qkv_grad, weight).squeeze(0)
+        weight_grad = torch.matmul(remote_qkv_grad.transpose(-1, -2), remote_inputs).squeeze(0).sum(0)
+        bias_grad = remote_qkv_grad.squeeze(0).sum(0).sum(0)
+
+        # launch async reduce scatter
+        remote_inputs_grad_zero = torch.zeros_like(remote_inputs_grad)
+        if sp_rank == 0:
+            remote_inputs_grad = torch.cat([remote_inputs_grad_zero, remote_inputs_grad], dim=0)
+        else:
+            remote_inputs_grad = torch.cat([remote_inputs_grad, remote_inputs_grad_zero], dim=0)
+        remote_inputs_grad = reduce_scatter_tensor(remote_inputs_grad, "sum", 0, group)
+
+        # compute local grad and wait for reduce scatter
+        local_input_grad = torch.matmul(local_qkv_grad, weight).squeeze(0)
+        weight_grad += torch.matmul(local_qkv_grad.transpose(-1, -2), inputs).squeeze(0).sum(0)
+        bias_grad += local_qkv_grad.squeeze(0).sum(0).sum(0)
+
+        # sum remote and local grad
+        inputs_grad = remote_inputs_grad + local_input_grad
+        return inputs_grad, weight_grad, bias_grad, None, None, None
 
 
 class AllGather(torch.autograd.Function):
@@ -305,50 +361,3 @@ class _GatherForwardSplitBackward(torch.autograd.Function):
 
 def gather_forward_split_backward(input_, dim, process_group):
     return _GatherForwardSplitBackward.apply(input_, dim, process_group)
-
-
-class _PartialLinear(torch.autograd.Function):
-    r"""
-    Partial linear function used for model parallel.
-
-    Args:
-        input_: input tensor.
-        weight: weight tensor.
-        bias: bias tensor.
-        process_group: process group.
-    """
-
-    @staticmethod
-    def forward(ctx, input, weight, bias, dim, process_group):
-        ctx.dim = dim
-        ctx.process_group = process_group
-        ctx.weight = weight
-        ctx.input = input
-        shard_weight = weight.chunk(dist.get_world_size(process_group), dim=dim)[dist.get_rank(process_group)]
-        shard_bias = bias.chunk(dist.get_world_size(process_group), dim=dim)[dist.get_rank(process_group)]
-
-        return F.linear(input, shard_weight, shard_bias)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input = ctx.input
-        weight = ctx.weight
-        dim = ctx.dim
-        process_group = ctx.process_group
-
-        # gradient of input
-        grad_input = torch.mm(grad_output, weight)
-        # gradient of weight
-        chunked_size = weight.shape[dim] // dist.get_world_size(process_group)
-        grad_weight = torch.zeros_like(weight)
-        rank = dist.get_rank(process_group)
-        grad_weight[:, chunked_size * rank : chunked_size * (rank + 1)] = torch.mm(grad_output.t(), input).t()
-
-        # gradient of bias
-        grad_bias = grad_output.sum(0)
-
-        return grad_input, grad_weight, grad_bias, None, None
-
-
-def partial_linear(input_, weight, bias=None, process_group=None):
-    _PartialLinear.apply(input_, weight, bias, process_group)

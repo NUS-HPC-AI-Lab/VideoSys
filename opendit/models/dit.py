@@ -24,7 +24,7 @@ from torch.distributed import ProcessGroup
 from torch.jit import Final
 
 from opendit.models.clip import TextEmbedder
-from opendit.utils.operation import AllGather, GanAllGather, all_to_all_comm, gather_forward_split_backward
+from opendit.utils.operation import AllGather, AsyncAllGatherForTwo, all_to_all_comm, gather_forward_split_backward
 
 
 def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
@@ -158,6 +158,7 @@ class DistAttention(nn.Module):
         sequence_parallel_group: Optional[ProcessGroup] = None,
         sequence_parallel_type: str = None,
         sequence_parallel_overlap: bool = False,
+        sequence_parallel_overlap_size: int = 2,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -165,14 +166,9 @@ class DistAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
-        self.qkv_bias = qkv_bias
-        if sequence_parallel_type == "longseq" and sequence_parallel_overlap:
-            # TODO: fix it
-            self.qkv = nn.Linear(dim, dim * 3 // sequence_parallel_size, bias=qkv_bias)
-        else:
-            self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-            # if sequence_parallel_type == "longseq":
-            #     self.rearrange_fused_qkv_weight()
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        # if sequence_parallel_type == "longseq":
+        #     self.rearrange_fused_qkv_weight()
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.attn_drop = nn.Dropout(attn_drop)
@@ -192,6 +188,12 @@ class DistAttention(nn.Module):
             ], "sequence_parallel_type should be longseq or ulysses"
         self.sequence_parallel_group = sequence_parallel_group
         self.sequence_parallel_overlap = sequence_parallel_overlap
+        self.sequence_parallel_overlap_size = sequence_parallel_overlap_size
+        self.sequence_parallel_rank = dist.get_rank(sequence_parallel_group)
+        self.sequence_parallel_param_slice = slice(
+            self.qkv.out_features // sequence_parallel_size * self.sequence_parallel_rank,
+            self.qkv.out_features // sequence_parallel_size * (self.sequence_parallel_rank + 1),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
@@ -201,25 +203,29 @@ class DistAttention(nn.Module):
             self.qkv.weight.data = self.rearrange_fused_weight(self.qkv.weight.data)
             self.qkv.bias.data = self.rearrange_fused_weight(self.qkv.bias.data)
             if self.sequence_parallel_overlap:
-                # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
-                x1 = GanAllGather.apply(x, dist.group.WORLD)
-                x0 = self.qkv(x)
-                x1 = x1[1:].unsqueeze(0)
-                # (SP_SIZE, B, N / SP_SIZE, C) => (B, N, C)
-                x1 = rearrange(x1, "sp b n c -> b (sp n) c")
-                x1 = self.qkv(x1)
-                qkv = torch.cat([x0, x1], dim=0)
+                if self.sequence_parallel_size == 2:
+                    # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
+                    qkv = AsyncAllGatherForTwo.apply(
+                        x,
+                        self.qkv.weight[self.sequence_parallel_param_slice],
+                        self.qkv.bias[self.sequence_parallel_param_slice],
+                        self.sequence_parallel_rank,
+                        self.sequence_parallel_size,
+                        dist.group.WORLD,
+                    )  # (B, N, C / SP_SIZE)
+                else:
+                    raise NotImplementedError(
+                        "sequence_parallel_overlap is only supported for sequence_parallel_size=2"
+                    )
             else:
                 # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
                 x = AllGather.apply(x)[0]
                 # (SP_SIZE, B, N / SP_SIZE, C) => (B, N, C)
                 x = rearrange(x, "sp b n c -> b (sp n) c")
-                rank = dist.get_rank()
-                chunked_size = 3 * self.dim // dist.get_world_size(self.sequence_parallel_group)
                 qkv = F.linear(
                     x,
-                    self.qkv.weight[rank * chunked_size : (rank + 1) * chunked_size, :],
-                    self.qkv.bias[rank * chunked_size : (rank + 1) * chunked_size] if self.qkv_bias else None,
+                    self.qkv.weight[self.sequence_parallel_param_slice],
+                    self.qkv.bias[self.sequence_parallel_param_slice],
                 )
         else:
             qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE

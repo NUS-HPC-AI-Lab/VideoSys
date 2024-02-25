@@ -42,11 +42,17 @@ def seq_parallel_attn(
     ).cuda()
 
     # DistAttention with sequence parallel
-    dist_attn_with_sp = copy.deepcopy(dist_attn_without_sp)
-    setattr(dist_attn_with_sp, "sequence_parallel_size", world_size)
-    setattr(dist_attn_with_sp, "sequence_parallel_group", None)
-    setattr(dist_attn_with_sp, "sequence_parallel_type", sequence_parallel_type)
-    setattr(dist_attn_with_sp, "sequence_parallel_overlap", sequence_parallel_overlap)
+    dist_attn_with_sp = DistAttention(
+        dim=hidden_dim,
+        num_heads=head_num,
+        qkv_bias=True,
+        enable_flashattn=use_flash_attn,
+        sequence_parallel_size=world_size,
+        sequence_parallel_group=None,
+        sequence_parallel_type=sequence_parallel_type,
+        sequence_parallel_overlap=sequence_parallel_overlap,
+    ).cuda()
+    dist_attn_with_sp.load_state_dict(copy.deepcopy(dist_attn_without_sp.state_dict()))
 
     # Attention forward (Without Sequence parallel)
     no_sp_output = dist_attn_without_sp(x_unshard.contiguous())
