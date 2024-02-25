@@ -2,6 +2,7 @@ from typing import Any, Optional, Tuple
 
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from torch import Tensor
 from torch.distributed import ProcessGroup
 from torch.distributed._functional_collectives import all_gather_tensor, reduce_scatter_tensor
@@ -304,3 +305,50 @@ class _GatherForwardSplitBackward(torch.autograd.Function):
 
 def gather_forward_split_backward(input_, dim, process_group):
     return _GatherForwardSplitBackward.apply(input_, dim, process_group)
+
+
+class _PartialLinear(torch.autograd.Function):
+    r"""
+    Partial linear function used for model parallel.
+
+    Args:
+        input_: input tensor.
+        weight: weight tensor.
+        bias: bias tensor.
+        process_group: process group.
+    """
+
+    @staticmethod
+    def forward(ctx, input, weight, bias, dim, process_group):
+        ctx.dim = dim
+        ctx.process_group = process_group
+        ctx.weight = weight
+        ctx.input = input
+        shard_weight = weight.chunk(dist.get_world_size(process_group), dim=dim)[dist.get_rank(process_group)]
+        shard_bias = bias.chunk(dist.get_world_size(process_group), dim=dim)[dist.get_rank(process_group)]
+
+        return F.linear(input, shard_weight, shard_bias)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        input = ctx.input
+        weight = ctx.weight
+        dim = ctx.dim
+        process_group = ctx.process_group
+
+        # gradient of input
+        grad_input = torch.mm(grad_output, weight)
+        # gradient of weight
+        chunked_size = weight.shape[dim] // dist.get_world_size(process_group)
+        grad_weight = torch.zeros_like(weight)
+        rank = dist.get_rank(process_group)
+        grad_weight[:, chunked_size * rank : chunked_size * (rank + 1)] = torch.mm(grad_output.t(), input).t()
+
+        # gradient of bias
+        grad_bias = grad_output.sum(0)
+
+        return grad_input, grad_weight, grad_bias, None, None
+
+
+def partial_linear(input_, weight, bias=None, process_group=None):
+    _PartialLinear.apply(input_, weight, bias, process_group)
