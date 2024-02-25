@@ -200,8 +200,7 @@ class DistAttention(nn.Module):
         total_N = N * self.sequence_parallel_size
 
         if self.sequence_parallel_type == "longseq":
-            self.qkv.weight.data = self.rearrange_fused_weight(self.qkv.weight.data)
-            self.qkv.bias.data = self.rearrange_fused_weight(self.qkv.bias.data)
+            self.qkv.weight.data, self.qkv.bias.data = self.rearrange_fused_weight(self.qkv)
             if self.sequence_parallel_overlap:
                 if self.sequence_parallel_size == 2:
                     # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
@@ -230,7 +229,6 @@ class DistAttention(nn.Module):
         else:
             qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
 
-        # Todo: Change num_heads in somewhere else for a better code style
         num_heads = (
             self.num_heads if self.sequence_parallel_type is None else self.num_heads // self.sequence_parallel_size
         )
@@ -276,15 +274,7 @@ class DistAttention(nn.Module):
                     qkv_permute_shape = (2, 0, 1, 3, 4)
                 else:
                     qkv_permute_shape = (2, 0, 3, 1, 4)
-            qkv = qkv.reshape(qkv_shape).permute(qkv_permute_shape)
-
-            # # Todo: implement chunked flash attention
-            # if self.enable_flashattn:
-            #     # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
-            #     qkv = qkv.reshape(B, total_N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
-            # else:
-            #     # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
-            #     qkv = qkv.reshape(B, total_N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            qkv = qkv.view(qkv_shape).permute(qkv_permute_shape)
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
         if self.enable_flashattn:
@@ -326,27 +316,26 @@ class DistAttention(nn.Module):
 
         return x
 
-    def rearrange_fused_weight(self, weight, flag="load"):
+    def rearrange_fused_weight(self, layer: nn.Linear, flag="load"):
+        # check whether layer is an torch.nn.Linear layer
+        if not isinstance(layer, nn.Linear):
+            raise ValueError("Invalid layer type for fused qkv weight rearrange!")
+
         with torch.no_grad():
             if flag == "load":
-                if len(weight.shape) == 2:
-                    weight_res = rearrange(weight, "(x NH H) D -> (NH x H) D", x=3, H=self.head_dim)
-                elif len(weight.shape) == 1:
-                    weight_res = rearrange(weight, "(x NH H) -> (NH x H)", x=3, H=self.head_dim)
-                else:
-                    raise ValueError("Invalid shape for fused qkv weight rearrange!")
-                assert weight_res.is_contiguous()
+                weight = rearrange(layer.weight.data, "(x NH H) D -> (NH x H) D", x=3, H=self.head_dim)
+                bias = rearrange(layer.bias.data, "(x NH H) -> (NH x H)", x=3, H=self.head_dim)
+                assert weight.is_contiguous()
+                assert bias.is_contiguous()
+
             elif flag == "save":
-                if len(weight.shape) == 2:
-                    weight_res = rearrange(weight, "(NH x H) D -> (x NH H) D", x=3, H=self.head_dim)
-                elif len(weight.shape) == 1:
-                    weight_res = rearrange(weight, "(NH x H) -> (x NH H)", x=3, H=self.head_dim)
-                else:
-                    raise ValueError("Invalid shape for fused qkv weight rearrange!")
-                assert weight_res.is_contiguous()
+                weight = rearrange(layer.weight.data, "(NH x H) D -> (x NH H) D", x=3, H=self.head_dim)
+                bias = rearrange(layer.bias.data, "(NH x H) -> (x NH H)", x=3, H=self.head_dim)
+                assert weight.is_contiguous()
+                assert bias.is_contiguous()
             else:
                 raise ValueError("Invalid flag for fused qkv weight rearrange!")
-            return weight_res
+            return weight, bias
 
 
 class DiTBlock(nn.Module):
