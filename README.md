@@ -1,10 +1,11 @@
 # OpenDiT
 
+## Introduction
 OpenDiT is an open-source project that focuses on exploring Diffusion Models with Transformers (DiT). Its goal is to offer the open-source community a machine learning framework that enables efficient training and inference of DiT models, facilitating research related to DiT.
 
 In this repository, we have developed an efficient DiT training and inference framework utilizing PyTorch and ColossalAI, achieving a substantial enhancement compared to the existing open-source alternatives. We have implemented both the image DiT and video DiT paradigms to accommodate diverse application needs.
 
-Concerning DiT, particularly the long sequence and localized features of video DiT, we have made some enhancements to sequence parallelism, aiming to reduce memory consumption and boost throughput during the training and inference of video DiT.
+Concerning DiT, we have made some enhancements to sequence parallelism, aiming to reduce communication consumption and boost throughput during the training and inference of DiTs. Compared with the native pytorch solution, we achieved a 3x end-to-end speed improvement; compared with the current SOTA solution Ulysses, our communication volume was reduced by up to 50%.
 
 ## Set Up
 ### Install ColossalAI
@@ -50,6 +51,19 @@ bash preprocess.sh
 bash train_video.sh
 ```
 
-## Features
-###
+## Core Design
+### Efficient Sequence Parallelism -- （AllGanther）
+
+### Overlapped QKV
+
+### Distributed Attention
+
+### Communication Complexity Analysis
+
+## Experimental Result
+
+## Acknowledgement
+
+## License
+
 
