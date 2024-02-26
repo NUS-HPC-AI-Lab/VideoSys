@@ -1,7 +1,7 @@
 <p align="center">
-<img width="200px" alt="OpenMoE" src="./figure/logo.png?raw=true">
+<img width="200px" alt="OpenDiT" src="./figure/logo.png?raw=true">
 </p>
-<p align="center"><a href="https://github.com/oahzxl/OpenDiT">[Homepage]</a></p>
+<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a></p>
 </p>
 
 # About
