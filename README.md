@@ -1,6 +1,8 @@
 <p align="center">
 <img width="200px" alt="OpenDiT" src="./figure/logo.png?raw=true">
 </p>
+<p align="center"><b><big>An Easy, Fast and Memory-Efficent System for DiT Training and Inference</big></b></p>
+</p>
 <p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a></p>
 </p>
 
@@ -159,6 +161,6 @@ If you encounter problems using OpenDiT, feel free to create an issue! We also w
   year = {2024},
   publisher = {GitHub},
   journal = {GitHub repository},
-  howpublished = {\url{https://github.com/oahzxl/OpenDiT}},
+  howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/OpenDiT}},
 }
 ```
