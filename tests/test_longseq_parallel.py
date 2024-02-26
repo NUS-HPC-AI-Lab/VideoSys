@@ -53,6 +53,7 @@ def seq_parallel_attn(
         sequence_parallel_overlap=sequence_parallel_overlap,
     ).cuda()
     dist_attn_with_sp.load_state_dict(copy.deepcopy(dist_attn_without_sp.state_dict()))
+    dist_attn_with_sp.rearrange_fused_weight(dist_attn_with_sp.qkv)
 
     # Attention forward (Without Sequence parallel)
     no_sp_output = dist_attn_without_sp(x_unshard.contiguous())
@@ -69,10 +70,6 @@ def seq_parallel_attn(
     if use_flash_attn:
         assert_close(seq_out, no_sp_output, atol=1e-4, rtol=1e-4)
     else:
-        # if dist.get_rank() == 0:
-        # print('seq_out', seq_out)
-        # print('no_sp_output', no_sp_output)
-
         assert_close(seq_out, no_sp_output, atol=5e-5, rtol=5e-5)
 
     # Attention backward (Without Sequence parallel)

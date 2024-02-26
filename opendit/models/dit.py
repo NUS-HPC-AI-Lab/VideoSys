@@ -200,7 +200,6 @@ class DistAttention(nn.Module):
         total_N = N * self.sequence_parallel_size
 
         if self.sequence_parallel_type == "longseq":
-            self.qkv.weight.data, self.qkv.bias.data = self.rearrange_fused_weight(self.qkv)
             if self.sequence_parallel_overlap:
                 if self.sequence_parallel_size == 2:
                     # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
@@ -323,19 +322,18 @@ class DistAttention(nn.Module):
 
         with torch.no_grad():
             if flag == "load":
-                weight = rearrange(layer.weight.data, "(x NH H) D -> (NH x H) D", x=3, H=self.head_dim)
-                bias = rearrange(layer.bias.data, "(x NH H) -> (NH x H)", x=3, H=self.head_dim)
-                assert weight.is_contiguous()
-                assert bias.is_contiguous()
+                layer.weight.data = rearrange(layer.weight.data, "(x NH H) D -> (NH x H) D", x=3, H=self.head_dim)
+                layer.bias.data = rearrange(layer.bias.data, "(x NH H) -> (NH x H)", x=3, H=self.head_dim)
+                assert layer.weight.data.is_contiguous()
+                assert layer.bias.data.is_contiguous()
 
             elif flag == "save":
-                weight = rearrange(layer.weight.data, "(NH x H) D -> (x NH H) D", x=3, H=self.head_dim)
-                bias = rearrange(layer.bias.data, "(NH x H) -> (x NH H)", x=3, H=self.head_dim)
-                assert weight.is_contiguous()
-                assert bias.is_contiguous()
+                layer.weight.data = rearrange(layer.weight.data, "(NH x H) D -> (x NH H) D", x=3, H=self.head_dim)
+                layer.bias.data = rearrange(layer.bias.data, "(NH x H) -> (x NH H)", x=3, H=self.head_dim)
+                assert layer.weight.data.is_contiguous()
+                assert layer.bias.data.is_contiguous()
             else:
                 raise ValueError("Invalid flag for fused qkv weight rearrange!")
-            return weight, bias
 
 
 class DiTBlock(nn.Module):
@@ -601,6 +599,10 @@ class DiT(nn.Module):
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
         return torch.cat([eps, rest], dim=1)
+
+    def rearrange_attention_weights(self, flag="load"):
+        for block in self.blocks:
+            block.attn.rearrange_fused_weight(block.attn.qkv, flag)
 
 
 #################################################################################

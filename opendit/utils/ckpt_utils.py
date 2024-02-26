@@ -62,19 +62,24 @@ def save(
     coordinator: DistCoordinator,
     save_dir: str,
     shape_dict: dict,
+    sequence_parallel_type: str,
 ):
+    global_rank = dist.get_rank()
     save_dir = os.path.join(save_dir, f"epoch{epoch}-global_step{global_step}")
     os.makedirs(os.path.join(save_dir, "model"), exist_ok=True)
-
+    if int(global_rank) == 0 and sequence_parallel_type == "longseq":
+        model.module.module.rearrange_attention_weights(flag="save")
     booster.save_model(model, os.path.join(save_dir, "model"), shard=True)
     # ema is not boosted, so we don't need to use booster.save_model
     model_gathering(ema, shape_dict)
-    global_rank = dist.get_rank()
+    if int(global_rank) == 0 and sequence_parallel_type == "longseq":
+        ema.rearrange_attention_weights(flag="save")
+
     if int(global_rank) == 0:
         torch.save(ema.state_dict(), os.path.join(save_dir, "ema.pt"))
         model_sharding(ema)
-
-    booster.save_optimizer(optimizer, os.path.join(save_dir, "optimizer"), shard=True, size_per_shard=4096)
+    if optimizer is not None:
+        booster.save_optimizer(optimizer, os.path.join(save_dir, "optimizer"), shard=True, size_per_shard=4096)
     if lr_scheduler is not None:
         booster.save_lr_scheduler(lr_scheduler, os.path.join(save_dir, "lr_scheduler"))
     running_states = {
@@ -89,15 +94,25 @@ def save(
 
 
 def load(
-    booster: Booster, model: nn.Module, ema: nn.Module, optimizer: Optimizer, lr_scheduler: _LRScheduler, load_dir: str
+    booster: Booster,
+    model: nn.Module,
+    ema: nn.Module,
+    optimizer: Optimizer,
+    lr_scheduler: _LRScheduler,
+    load_dir: str,
+    sequence_parallel_type: str,
 ) -> Tuple[int, int, int]:
     booster.load_model(model, os.path.join(load_dir, "model"))
     # ema is not boosted, so we don't use booster.load_model
-    ema.load_state_dict(torch.load(os.path.join(load_dir, "ema.pt"), map_location=torch.device('cpu')))
-    booster.load_optimizer(optimizer, os.path.join(load_dir, "optimizer"))
+    ema.load_state_dict(torch.load(os.path.join(load_dir, "ema.pt"), map_location=torch.device("cpu")))
+    if optimizer is not None:
+        booster.load_optimizer(optimizer, os.path.join(load_dir, "optimizer"))
     if lr_scheduler is not None:
         booster.load_lr_scheduler(lr_scheduler, os.path.join(load_dir, "lr_scheduler"))
     running_states = load_json(os.path.join(load_dir, "running_states.json"))
+    if sequence_parallel_type == "longseq":
+        model.module.module.rearrange_attention_weights()
+        ema.rearrange_attention_weights()
     dist.barrier()
     return running_states["epoch"], running_states["step"], running_states["sample_start_index"]
 

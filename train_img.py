@@ -204,7 +204,9 @@ def main(args):
     sampler_start_idx = 0
     if args.load is not None:
         logger.info("Loading checkpoint")
-        start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
+        start_epoch, start_step, sampler_start_idx = load(
+            booster, model, ema, optimizer, lr_scheduler, args.load, args.sequence_parallel_type
+        )
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
     model_sharding(ema)
     num_steps_per_epoch = len(dataloader)
