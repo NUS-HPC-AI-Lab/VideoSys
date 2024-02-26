@@ -112,6 +112,8 @@ def main(args):
         dtype = torch.bfloat16
     elif args.mixed_precision == "fp16":
         dtype = torch.float16
+    elif args.mixed_precision == "fp32" and args.plugin == "ddp":
+        dtype = torch.float32
     else:
         raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
 
@@ -160,6 +162,7 @@ def main(args):
     )
     # You can use a lr scheduler if you want
     lr_scheduler = None
+    shard_ema = False if args.plugin == "ddp" else True
 
     # Prepare models for training
     # Ensure EMA is initialized with synced weights
@@ -208,7 +211,10 @@ def main(args):
             booster, model, ema, optimizer, lr_scheduler, args.load, args.sequence_parallel_type
         )
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
-    model_sharding(ema)
+
+    if args.plugin != "ddp":
+        model_sharding(ema)
+
     num_steps_per_epoch = len(dataloader)
 
     logger.info(f"Training for {args.epochs} epochs...")
@@ -245,7 +251,7 @@ def main(args):
                 optimizer.zero_grad()
 
                 # Update EMA
-                update_ema(ema, model.module, optimizer=optimizer)
+                update_ema(ema, model.module, optimizer=optimizer, sharded=shard_ema)
 
                 # Log loss values:
                 all_reduce_mean(loss)
@@ -272,6 +278,7 @@ def main(args):
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
+                        args.sequence_parallel_type,
                     )
                     logger.info(
                         f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {experiment_dir}"

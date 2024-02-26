@@ -13,7 +13,6 @@ from torch.testing import assert_close
 
 from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import load, record_model_param_shape, save
-from opendit.utils.operation import model_sharding
 from opendit.utils.train_utils import requires_grad
 
 WORKERS = 4
@@ -110,7 +109,6 @@ def sequence_parallel_ckpt_load():
     # (1) save origin model
     if dist.get_rank() == 0:
         print("Origin model begin to save")
-    model_sharding(ema_origin)
 
     save(
         booster_origin,
@@ -242,7 +240,7 @@ def sequence_parallel_ckpt_save():
     # (4) save sp model
     if dist.get_rank() == 0:
         print("Sp model begin to save")
-    model_sharding(ema_sp)
+
     save(
         booster_sp,
         model_sp,

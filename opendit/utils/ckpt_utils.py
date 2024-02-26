@@ -9,6 +9,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from colossalai.booster import Booster
+from colossalai.booster.plugin import TorchDDPPlugin
 from colossalai.cluster import DistCoordinator
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
@@ -76,13 +77,15 @@ def save(
             model.module.module.rearrange_attention_weights(flag="save")
     booster.save_model(model, os.path.join(save_dir, "model"), shard=True)
     # ema is not boosted, so we don't need to use booster.save_model
-    model_gathering(ema, shape_dict)
+    if not isinstance(booster.plugin, TorchDDPPlugin):
+        model_gathering(ema, shape_dict)
     if global_rank == 0 and sequence_parallel_type == "longseq":
         ema.rearrange_attention_weights(flag="save")
 
     if global_rank == 0:
         torch.save(ema.state_dict(), os.path.join(save_dir, "ema.pt"))
-        model_sharding(ema)
+        if not isinstance(booster.plugin, TorchDDPPlugin):
+            model_sharding(ema)
     if optimizer is not None:
         booster.save_optimizer(optimizer, os.path.join(save_dir, "optimizer"), shard=True, size_per_shard=4096)
     if lr_scheduler is not None:
