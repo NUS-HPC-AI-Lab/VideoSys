@@ -24,9 +24,11 @@ OpenDiT boasts the following characteristics:
     * User can easily use and adapt our pipeline to their own research without modifying the parallel part.
     * Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
 
-![end2end](./figure/end2end.png)
+<p align="center">
+<img width="600px" alt="end2end" src="./figure/end2end.png">
+</p>
 
-Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/).
+Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/)
 
 ## Installation
 
