@@ -1,13 +1,26 @@
 # OpenDiT
 
-## Introduction
-OpenDiT is an open-source project that focuses on exploring Diffusion Models with Transformers (DiT). Its goal is to offer the open-source community a machine learning framework that enables efficient training and inference of DiT models, facilitating research related to DiT.
+OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by Colossal-AI. Specifically designed to enhance the efficiency of training and inference for DiT applications involving text-to-video and text-to-image generation.
 
-In this repository, we have developed an efficient DiT training and inference framework utilizing PyTorch and ColossalAI, achieving a substantial enhancement compared to the existing open-source alternatives. We have implemented both the image DiT and video DiT paradigms to accommodate diverse application needs.
+OpenDiT boasts the following characteristics:
 
-Concerning DiT, we have made some enhancements to sequence parallelism, aiming to reduce communication consumption and boost throughput during the training and inference of DiTs. Compared with the native pytorch solution, we achieved a 3x end-to-end speed improvement; compared with the current SOTA solution Ulysses, our communication volume was reduced by up to 50%.
+1. Up to 2x-3x speedup and 50% memory reduction on GPU
+      * Kernel optimization including FlashAttention, Fused AdaLN, and Fused layernorm kernel.
+      * Hybrid parallelism methods including ZeRO, Gemini, and DDP. And shard ema model to further reduce memory cost.
+2. FastSeq: A novel sequence parallelism method
+    * Sepcially designed for DiT-like workload where activation is large but parameter is small.
+    * Up to 48% communication save for intra-node sequence parallel.
+    * Break the memory limit of single GPU and reduce the overall training and inference time.
+3. Ease of use
+    * Huge performance gains with a few lines changes
+    * You don't need to care about how the parallel part is implemented
+4. Complete pipeline of text-to-image and text-to-video generation
+    * User can easily use and adapt our pipeline to their own research without modifying the parallel part.
+    * Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
 
-## Set Up
+Core contributors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html).
+
+## Installation
 ### Install ColossalAI
 ```
 git clone https://github.com/hpcaitech/ColossalAI.git
@@ -21,15 +34,15 @@ pip install -e .
 cd OpenDiT
 pip install -e .
 ```
-### Install kernels to speed up
+### (Optional) Install kernels to speed up
 ```
-# triton for modulate kernel
+# triton for fused adaln kernel
 pip install triton
 
 # flash attention
 pip install flash-attn
 
-# apex layernorm
+# apex for fused layernorm kernel
 git clone https://github.com/NVIDIA/apex.git
 cd apex
 git checkout 741bdf50825a97664db08574981962d66436d16a
@@ -60,10 +73,8 @@ bash train_video.sh
 
 ### Communication Complexity Analysis
 
-## Experimental Result
+## DiT Reproduction Result
 
 ## Acknowledgement
 
-## License
-
-
+## Citation
