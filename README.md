@@ -10,7 +10,7 @@ OpenDiT is an open-source project that provides a high-performance implementatio
 
 OpenDiT boasts the following characteristics:
 
-1. Up to 2x-3x speedup and 50% memory reduction on GPU
+1. Up 80% speedup and 50% memory reduction on GPU
       * Kernel optimization including FlashAttention, Fused AdaLN, and Fused layernorm kernel.
       * Hybrid parallelism methods including ZeRO, Gemini, and DDP. And shard ema model to further reduce memory cost.
 2. FastSeq: A novel sequence parallelism method
@@ -23,6 +23,8 @@ OpenDiT boasts the following characteristics:
 4. Complete pipeline of text-to-image and text-to-video generation
     * User can easily use and adapt our pipeline to their own research without modifying the parallel part.
     * Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
+
+![end2end](./figure/end2end.png)
 
 Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/).
 
