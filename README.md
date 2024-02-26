@@ -77,18 +77,31 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 
 ## Usage
-### Image Pipeline
-```
-# train
+
+You can train the DiT model by executing the following command:
+
+```shell
+# Train the DiT model
 bash train_img.sh
-# inference
+```
+
+Here are details of some key arguments for training:
+- `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported.
+- `--mixed_precision`: The data type for mixed precision training. The default value is `bf16`.
+- `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`.
+- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`.
+- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`.
+- `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`.
+- `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The defualt value is 1.
+- `--sequence_parallel_type`: The sequence parallelism type you choose. The defualt value is `None`.
+
+For more details of the configuration of the training process, please visit our code.
+
+You can perform inference using DiT model by executing the following command:
+
+```shell
+# Inference using the trained DiT model
 bash sample.sh
-```
-### Video Pipeline
-```
-# train
-bash preprocess.sh
-bash train_video.sh
 ```
 
 ## Core Design
