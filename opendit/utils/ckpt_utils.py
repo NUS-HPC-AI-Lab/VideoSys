@@ -13,6 +13,7 @@ from colossalai.cluster import DistCoordinator
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
+from opendit.models.dit import DiT
 from opendit.utils.operation import model_sharding
 
 
@@ -36,7 +37,7 @@ def model_gathering(model: torch.nn.Module, model_shape_dict: dict):
     for name, param in model.named_parameters():
         all_params = [torch.empty_like(param.data) for _ in range(global_size)]
         dist.all_gather(all_params, param.data, group=dist.group.WORLD)
-        if int(global_rank) == 0:
+        if global_rank == 0:
             all_params = torch.cat(all_params)
             param.data = remove_padding(all_params, model_shape_dict[name]).view(model_shape_dict[name])
     dist.barrier()
@@ -64,18 +65,22 @@ def save(
     shape_dict: dict,
     sequence_parallel_type: str,
 ):
+    torch.cuda.empty_cache()
     global_rank = dist.get_rank()
     save_dir = os.path.join(save_dir, f"epoch{epoch}-global_step{global_step}")
     os.makedirs(os.path.join(save_dir, "model"), exist_ok=True)
-    if int(global_rank) == 0 and sequence_parallel_type == "longseq":
-        model.module.module.rearrange_attention_weights(flag="save")
+    if global_rank == 0 and sequence_parallel_type == "longseq":
+        if isinstance(model.module, DiT):
+            model.module.rearrange_attention_weights(flag="save")
+        else:
+            model.module.module.rearrange_attention_weights(flag="save")
     booster.save_model(model, os.path.join(save_dir, "model"), shard=True)
     # ema is not boosted, so we don't need to use booster.save_model
     model_gathering(ema, shape_dict)
-    if int(global_rank) == 0 and sequence_parallel_type == "longseq":
+    if global_rank == 0 and sequence_parallel_type == "longseq":
         ema.rearrange_attention_weights(flag="save")
 
-    if int(global_rank) == 0:
+    if global_rank == 0:
         torch.save(ema.state_dict(), os.path.join(save_dir, "ema.pt"))
         model_sharding(ema)
     if optimizer is not None:
@@ -111,9 +116,13 @@ def load(
         booster.load_lr_scheduler(lr_scheduler, os.path.join(load_dir, "lr_scheduler"))
     running_states = load_json(os.path.join(load_dir, "running_states.json"))
     if sequence_parallel_type == "longseq":
-        model.module.module.rearrange_attention_weights()
+        if isinstance(model.module, DiT):
+            model.module.rearrange_attention_weights()
+        else:
+            model.module.module.rearrange_attention_weights()
         ema.rearrange_attention_weights()
     dist.barrier()
+    torch.cuda.empty_cache()
     return running_states["epoch"], running_states["step"], running_states["sample_start_index"]
 
 

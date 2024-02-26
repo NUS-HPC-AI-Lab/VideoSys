@@ -167,8 +167,6 @@ class DistAttention(nn.Module):
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        # if sequence_parallel_type == "longseq":
-        #     self.rearrange_fused_qkv_weight()
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.attn_drop = nn.Dropout(attn_drop)
@@ -603,6 +601,7 @@ class DiT(nn.Module):
     def rearrange_attention_weights(self, flag="load"):
         for block in self.blocks:
             block.attn.rearrange_fused_weight(block.attn.qkv, flag)
+        torch.cuda.empty_cache()
 
 
 #################################################################################

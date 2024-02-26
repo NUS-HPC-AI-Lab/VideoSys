@@ -3,6 +3,8 @@ from collections import OrderedDict
 import torch
 import torch.distributed as dist
 
+from opendit.models.dit import DiT
+
 
 def get_model_numel(model: torch.nn.Module) -> int:
     return sum(p.numel() for p in model.parameters())
@@ -35,6 +37,7 @@ def update_ema(
     """
     Step the EMA model towards the current model.
     """
+    model = model if isinstance(model, DiT) else model.module
     ema_params = OrderedDict(ema_model.named_parameters())
     model_params = OrderedDict(model.named_parameters())
 
