@@ -117,12 +117,18 @@ bash train_video.sh
 
 ![fastseq_overview](./figure/fastseq_overview.png)
 
-For visual generation models such as DiT, sequence parallelism is necessary for long sequence training or low-latency inference.
-The feature of such tasks are: 1) Model parameter is small but sequence is very long, making communication a bottleneck. 2) As the models are gerenally small, the only need sequence parallel within a node.
+In the realm of visual generation models, such as DiT, sequence parallelism is indispensable for effective long-sequence training and low-latency inference. The distinctive nature of these tasks can be summarized by two key features:
+* Model parameter is small but sequence can be very long, making communication a bottleneck.
+* As the model size is gerenally small, they only need sequence parallel within a node.
 
-However, current methods like DeepSpeed Ulysses, Megatron-LM sequence parallel can not adapt to such tasks because they introduce too much sequence communication or not efficent enough for small-scale sequence parallel.
+However, existing methods like DeepSpeed Ulysses and Megatron-LM Sequence Parallelism face limitations when applied to such tasks. They either introduce excessive sequence communication or lack efficiency in handling small-scale sequence parallelism.
 
-To this end, we propose FastSeq, a novel sequence parallelism designed for large sequence. To minimize sequence communication, we propose to use only two communication operators for every transformer layer, and further use async ring to overlap AllGather communication with qkv computation.
+To this end, we present FastSeq, a novel sequence parallelism for large sequences and small-scale parallelism. Our methodology focuses on minimizing sequence communication by employing only two communication operators for every transformer layer. We leverage AllGather instead of a group of AlltoAll for layer inputs to enhance communication efficiency, and we strategically employ an async ring to overlap AllGather communication with qkv computation, further optimizing performance.
+
+Here are our experiments results, more results will be coming soon:
+
+![fastseq_exp](./figure/fastseq_exp.png)
+
 
 ## DiT Reproduction Result
 
