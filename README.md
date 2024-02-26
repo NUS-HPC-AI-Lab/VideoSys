@@ -6,7 +6,7 @@
 
 # About
 
-OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by Colossal-AI. Specifically designed to enhance the efficiency of training and inference for DiT applications involving text-to-video and text-to-image generation.
+OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by [Colossal-AI](https://github.com/hpcaitech/ColossalAI). Specifically designed to enhance the efficiency of training and inference for DiT applications involving text-to-video and text-to-image generation.
 
 OpenDiT boasts the following characteristics:
 
@@ -41,11 +41,11 @@ conda create -n opendit python=3.10 -y
 conda activate opendit
 ```
 
-Install [ColossalAI](https://github.com/hpcaitech/ColossalAI):
+Install ColossalAI:
 
 ```shell
 git clone https://github.com/hpcaitech/ColossalAI.git
-cd PATH/TO/ColossalAI
+cd ColossalAI
 git checkout adae123df3badfb15d044bd416f0cf29f250bc86
 pip install -e .
 ```
@@ -54,7 +54,7 @@ Install OpenDiT:
 
 ```shell
 git clone https://github.com/oahzxl/OpenDiT
-cd PATH/TO/OpenDiT
+cd OpenDiT
 pip install -e .
 ```
 
