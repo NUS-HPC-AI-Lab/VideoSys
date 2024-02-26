@@ -78,6 +78,8 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ## Usage
 
+### Image
+
 You can train the DiT model by executing the following command:
 
 ```shell
@@ -97,21 +99,30 @@ Here are details of some key arguments for training:
 
 For more details of the configuration of the training process, please visit our code.
 
-You can perform inference using DiT model by executing the following command:
+You can perform inference using DiT model by executing the following command. You need to replace the ckpt path to your trained or downloaded ema model ckpt.
 
 ```shell
 # Inference using the trained DiT model
 bash sample.sh
 ```
 
-## Core Design
-### Efficient Sequence Parallelism -- （AllGanther）
+### Video
+```
+# train
+bash preprocess.sh
+bash train_video.sh
+```
 
-### Overlapped QKV
+## FastSeq
 
-### Distributed Attention
+![fastseq_overview](./figure/fastseq_overview.png)
 
-### Communication Complexity Analysis
+For visual generation models such as DiT, sequence parallelism is necessary for long sequence training or low-latency inference.
+The feature of such tasks are: 1) Model parameter is small but sequence is very long, making communication a bottleneck. 2) As the models are gerenally small, the only need sequence parallel within a node.
+
+However, current methods like DeepSpeed Ulysses, Megatron-LM sequence parallel can not adapt to such tasks because they introduce too much sequence communication or not efficent enough for small-scale sequence parallel.
+
+To this end, we propose FastSeq, a novel sequence parallelism designed for large sequence. To minimize sequence communication, we propose to use only two communication operators for every transformer layer, and further use async ring to overlap AllGather communication with qkv computation.
 
 ## DiT Reproduction Result
 
