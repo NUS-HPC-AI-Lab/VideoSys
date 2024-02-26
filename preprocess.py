@@ -44,7 +44,7 @@ def visualize(path: str) -> None:
     # save reconstruction video
     videos = video_recon[0].permute(1, 2, 3, 0)
     videos = ((videos + 0.5) * 255).cpu().to(torch.uint8)
-    write_video("output.mp4", videos, 20)
+    write_video("output.mp4", videos, 20, video_codec="h264")
 
     # compare real and reconstruction video
     videos = torch.cat((video, video_recon), dim=-1)

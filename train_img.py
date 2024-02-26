@@ -15,7 +15,7 @@ import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.booster import Booster
-from colossalai.booster.plugin import LowLevelZeroPlugin
+from colossalai.booster.plugin import LowLevelZeroPlugin, TorchDDPPlugin
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
@@ -89,6 +89,8 @@ def main(args):
             initial_scale=2**16,
             max_norm=args.grad_clip,
         )
+    elif args.plugin == "ddp":
+        plugin = TorchDDPPlugin()
     else:
         raise ValueError(f"Unknown plugin {args.plugin}")
     booster = Booster(plugin=plugin)
@@ -110,6 +112,8 @@ def main(args):
         dtype = torch.bfloat16
     elif args.mixed_precision == "fp16":
         dtype = torch.float16
+    elif args.mixed_precision == "fp32" and args.plugin == "ddp":
+        dtype = torch.float32
     else:
         raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
 
@@ -120,6 +124,7 @@ def main(args):
         "enable_layernorm_kernel": args.enable_layernorm_kernel,
         "enable_modulate_kernel": args.enable_modulate_kernel,
         "sequence_parallel_size": args.sequence_parallel_size,
+        "sequence_parallel_type": args.sequence_parallel_type,
     }
 
     model: DiT = (
@@ -141,7 +146,8 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema: DiT = DiT_models[args.model](**model_config).to(device).to(torch.float32)
+    ema: DiT = DiT_models[args.model](**model_config).to(device)
+    ema = ema.to(torch.float32) if args.plugin == "zero2" else ema.to(dtype)
     ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
@@ -156,6 +162,7 @@ def main(args):
     )
     # You can use a lr scheduler if you want
     lr_scheduler = None
+    shard_ema = False if args.plugin == "ddp" else True
 
     # Prepare models for training
     # Ensure EMA is initialized with synced weights
@@ -200,9 +207,14 @@ def main(args):
     sampler_start_idx = 0
     if args.load is not None:
         logger.info("Loading checkpoint")
-        start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
+        start_epoch, start_step, sampler_start_idx = load(
+            booster, model, ema, optimizer, lr_scheduler, args.load, args.sequence_parallel_type
+        )
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
-    model_sharding(ema)
+
+    if args.plugin != "ddp":
+        model_sharding(ema)
+
     num_steps_per_epoch = len(dataloader)
 
     logger.info(f"Training for {args.epochs} epochs...")
@@ -239,7 +251,7 @@ def main(args):
                 optimizer.zero_grad()
 
                 # Update EMA
-                update_ema(ema, model.module, optimizer=optimizer)
+                update_ema(ema, model.module, optimizer=optimizer, sharded=shard_ema)
 
                 # Log loss values:
                 all_reduce_mean(loss)
@@ -266,6 +278,7 @@ def main(args):
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
+                        args.sequence_parallel_type,
                     )
                     logger.info(
                         f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {experiment_dir}"
@@ -300,7 +313,7 @@ if __name__ == "__main__":
     parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--ckpt-every", type=int, default=1000)
 
-    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
+    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16", "fp32"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
@@ -309,5 +322,7 @@ if __name__ == "__main__":
     parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
     parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
+    parser.add_argument("--sequence_parallel_type", type=str)
+
     args = parser.parse_args()
     main(args)

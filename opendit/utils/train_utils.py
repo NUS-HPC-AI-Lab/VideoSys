@@ -2,6 +2,9 @@ from collections import OrderedDict
 
 import torch
 import torch.distributed as dist
+from colossalai.zero.low_level.low_level_optim import LowLevelZeroOptimizer
+
+from opendit.models.dit import DiT
 
 
 def get_model_numel(model: torch.nn.Module) -> int:
@@ -35,6 +38,7 @@ def update_ema(
     """
     Step the EMA model towards the current model.
     """
+    model = model if isinstance(model, DiT) else model.module
     ema_params = OrderedDict(ema_model.named_parameters())
     model_params = OrderedDict(model.named_parameters())
 
@@ -47,7 +51,7 @@ def update_ema(
             param_data = param.data
             ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
         else:
-            if param.data.dtype != torch.float32:
+            if param.data.dtype != torch.float32 and isinstance(optimizer, LowLevelZeroOptimizer):
                 param_id = id(param)
                 master_param = optimizer._param_store.working_to_master_param[param_id]
                 param_data = master_param.data

@@ -16,13 +16,15 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.checkpoint
+from einops import rearrange
 from timm.models.vision_transformer import Mlp, PatchEmbed
 from torch.distributed import ProcessGroup
 from torch.jit import Final
 
 from opendit.models.clip import TextEmbedder
-from opendit.utils.operation import all_to_all_comm, gather_forward_split_backward
+from opendit.utils.operation import AllGather, AsyncAllGatherForTwo, all_to_all_comm, gather_forward_split_backward
 
 
 def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
@@ -154,13 +156,16 @@ class DistAttention(nn.Module):
         enable_flashattn: bool = False,
         sequence_parallel_size: int = 1,
         sequence_parallel_group: Optional[ProcessGroup] = None,
+        sequence_parallel_type: str = None,
+        sequence_parallel_overlap: bool = False,
+        sequence_parallel_overlap_size: int = 2,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
+        self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
-
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
@@ -168,17 +173,64 @@ class DistAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         self.enable_flashattn = enable_flashattn
+
+        # sequence parallel
+        self.sequence_parallel_type = sequence_parallel_type
         self.sequence_parallel_size = sequence_parallel_size
+        if sequence_parallel_size == 1:
+            sequence_parallel_type = None
+        else:
+            assert sequence_parallel_type in [
+                "longseq",
+                "ulysses",
+            ], "sequence_parallel_type should be longseq or ulysses"
         self.sequence_parallel_group = sequence_parallel_group
+        self.sequence_parallel_overlap = sequence_parallel_overlap
+        self.sequence_parallel_overlap_size = sequence_parallel_overlap_size
+        self.sequence_parallel_rank = dist.get_rank(sequence_parallel_group)
+        self.sequence_parallel_param_slice = slice(
+            self.qkv.out_features // sequence_parallel_size * self.sequence_parallel_rank,
+            self.qkv.out_features // sequence_parallel_size * (self.sequence_parallel_rank + 1),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
-        qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
+        total_N = N * self.sequence_parallel_size
+
+        if self.sequence_parallel_type == "longseq":
+            if self.sequence_parallel_overlap:
+                if self.sequence_parallel_size == 2:
+                    # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
+                    qkv = AsyncAllGatherForTwo.apply(
+                        x,
+                        self.qkv.weight[self.sequence_parallel_param_slice],
+                        self.qkv.bias[self.sequence_parallel_param_slice],
+                        self.sequence_parallel_rank,
+                        self.sequence_parallel_size,
+                        dist.group.WORLD,
+                    )  # (B, N, C / SP_SIZE)
+                else:
+                    raise NotImplementedError(
+                        "sequence_parallel_overlap is only supported for sequence_parallel_size=2"
+                    )
+            else:
+                # (B, N / SP_SIZE, C) => (SP_SIZE * B, N / SP_SIZE, C)
+                x = AllGather.apply(x)[0]
+                # (SP_SIZE, B, N / SP_SIZE, C) => (B, N, C)
+                x = rearrange(x, "sp b n c -> b (sp n) c")
+                qkv = F.linear(
+                    x,
+                    self.qkv.weight[self.sequence_parallel_param_slice],
+                    self.qkv.bias[self.sequence_parallel_param_slice],
+                )
+        else:
+            qkv = self.qkv(x)  # (B, N, C), N here is N_total // SP_SIZE
+
         num_heads = (
-            self.num_heads if self.sequence_parallel_size == 1 else self.num_heads // self.sequence_parallel_size
+            self.num_heads if self.sequence_parallel_type is None else self.num_heads // self.sequence_parallel_size
         )
 
-        if self.sequence_parallel_size > 1:
+        if self.sequence_parallel_type == "ulysses":
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
             # Todo: Use all_to_all_single for q, k, v
             q = all_to_all_comm(q, self.sequence_parallel_group)
@@ -207,16 +259,21 @@ class DistAttention(nn.Module):
                 )
 
         else:
-            # Todo: implement chunked flash attention
-            if self.enable_flashattn:
-                # [3, B, num_heads, N, head_dim] => [B, N, num_heads, head_dim] * 3
-                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
+            if self.sequence_parallel_type == "longseq":
+                qkv_shape = (B, total_N, num_heads, 3, self.head_dim)
+                if self.enable_flashattn:
+                    qkv_permute_shape = (3, 0, 1, 2, 4)
+                else:
+                    qkv_permute_shape = (3, 0, 2, 1, 4)
             else:
-                # [3, B, num_heads, N, head_dim] => [B, num_heads, N, head_dim] * 3
-                qkv = qkv.reshape(B, N, 3, num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+                qkv_shape = (B, total_N, 3, num_heads, self.head_dim)
+                if self.enable_flashattn:
+                    qkv_permute_shape = (2, 0, 1, 3, 4)
+                else:
+                    qkv_permute_shape = (2, 0, 3, 1, 4)
+            qkv = qkv.view(qkv_shape).permute(qkv_permute_shape)
             q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
-
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
@@ -240,11 +297,10 @@ class DistAttention(nn.Module):
             attn = self.attn_drop(attn)
             x = attn @ v
 
-        x_output_shape = (
-            (B, N, C)
-            if self.sequence_parallel_size == 1
-            else (B, N * self.sequence_parallel_size, num_heads * self.head_dim)
-        )
+        if self.sequence_parallel_type is None:
+            x_output_shape = (B, N, C)
+        else:
+            x_output_shape = (B, total_N, num_heads * self.head_dim)
         if self.enable_flashattn:
             x = x.reshape(x_output_shape)
         else:
@@ -252,10 +308,30 @@ class DistAttention(nn.Module):
         if self.sequence_parallel_size > 1:
             # Todo: Use all_to_all_single for x
             x = all_to_all_comm(x, self.sequence_parallel_group, scatter_dim=1, gather_dim=2)
-
         x = self.proj(x)
         x = self.proj_drop(x)
+
         return x
+
+    def rearrange_fused_weight(self, layer: nn.Linear, flag="load"):
+        # check whether layer is an torch.nn.Linear layer
+        if not isinstance(layer, nn.Linear):
+            raise ValueError("Invalid layer type for fused qkv weight rearrange!")
+
+        with torch.no_grad():
+            if flag == "load":
+                layer.weight.data = rearrange(layer.weight.data, "(x NH H) D -> (NH x H) D", x=3, H=self.head_dim)
+                layer.bias.data = rearrange(layer.bias.data, "(x NH H) -> (NH x H)", x=3, H=self.head_dim)
+                assert layer.weight.data.is_contiguous()
+                assert layer.bias.data.is_contiguous()
+
+            elif flag == "save":
+                layer.weight.data = rearrange(layer.weight.data, "(NH x H) D -> (x NH H) D", x=3, H=self.head_dim)
+                layer.bias.data = rearrange(layer.bias.data, "(NH x H) -> (x NH H)", x=3, H=self.head_dim)
+                assert layer.weight.data.is_contiguous()
+                assert layer.bias.data.is_contiguous()
+            else:
+                raise ValueError("Invalid flag for fused qkv weight rearrange!")
 
 
 class DiTBlock(nn.Module):
@@ -271,6 +347,7 @@ class DiTBlock(nn.Module):
         enable_flashattn=False,
         sequence_parallel_size: int = 1,
         sequence_parallel_group: Optional[ProcessGroup] = None,
+        sequence_parallel_type: str = None,
         enable_layernorm_kernel=False,
         enable_modulate_kernel=False,
         **block_kwargs,
@@ -285,6 +362,7 @@ class DiTBlock(nn.Module):
             enable_flashattn=enable_flashattn,
             sequence_parallel_size=sequence_parallel_size,
             sequence_parallel_group=sequence_parallel_group,
+            sequence_parallel_type=sequence_parallel_type,
             **block_kwargs,
         )
         self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
@@ -345,6 +423,7 @@ class DiT(nn.Module):
         enable_modulate_kernel: bool = False,
         sequence_parallel_size: int = 1,
         sequence_parallel_group: Optional[ProcessGroup] = None,
+        sequence_parallel_type: str = None,
         dtype=torch.float32,
     ):
         super().__init__()
@@ -355,6 +434,8 @@ class DiT(nn.Module):
         self.num_heads = num_heads
         self.sequence_parallel_size = sequence_parallel_size
         self.sequence_parallel_group = sequence_parallel_group
+        self.sequence_parallel_type = sequence_parallel_type
+
         self.dtype = dtype
         if enable_flashattn:
             assert dtype in [
@@ -382,10 +463,11 @@ class DiT(nn.Module):
                     num_heads,
                     mlp_ratio=mlp_ratio,
                     enable_flashattn=enable_flashattn,
-                    sequence_parallel_size=sequence_parallel_size,
                     enable_modulate_kernel=enable_modulate_kernel,
                     enable_layernorm_kernel=enable_layernorm_kernel,
+                    sequence_parallel_size=self.sequence_parallel_size,
                     sequence_parallel_group=self.sequence_parallel_group,
+                    sequence_parallel_type=self.sequence_parallel_type,
                 )
                 for _ in range(depth)
             ]
@@ -515,6 +597,11 @@ class DiT(nn.Module):
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
         return torch.cat([eps, rest], dim=1)
+
+    def rearrange_attention_weights(self, flag="load"):
+        for block in self.blocks:
+            block.attn.rearrange_fused_weight(block.attn.qkv, flag)
+        torch.cuda.empty_cache()
 
 
 #################################################################################
