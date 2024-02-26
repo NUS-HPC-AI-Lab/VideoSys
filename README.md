@@ -1,4 +1,10 @@
-# OpenDiT
+<p align="center">
+<img width="200px" alt="OpenMoE" src="./figure/logo.png?raw=true">
+</p>
+<p align="center">| <a href="https://github.com/oahzxl/OpenDiT">[Homepage]</a> |</p>
+</p>
+
+# About
 
 OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by Colossal-AI. Specifically designed to enhance the efficiency of training and inference for DiT applications involving text-to-video and text-to-image generation.
 
@@ -100,6 +106,8 @@ bash train_video.sh
 ### Communication Complexity Analysis
 
 ## DiT Reproduction Result
+
+![Image text](./figure/loss.png)
 
 ## Acknowledgement
 
