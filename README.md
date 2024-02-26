@@ -10,7 +10,7 @@ OpenDiT is an open-source project that provides a high-performance implementatio
 
 OpenDiT boasts the following characteristics:
 
-1. Up to 2x-3x speedup and 50% memory reduction on GPU
+1. Up 80% speedup and 50% memory reduction on GPU
       * Kernel optimization including FlashAttention, Fused AdaLN, and Fused layernorm kernel.
       * Hybrid parallelism methods including ZeRO, Gemini, and DDP. And shard ema model to further reduce memory cost.
 2. FastSeq: A novel sequence parallelism method
@@ -23,6 +23,8 @@ OpenDiT boasts the following characteristics:
 4. Complete pipeline of text-to-image and text-to-video generation
     * User can easily use and adapt our pipeline to their own research without modifying the parallel part.
     * Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
+
+![end2end](./figure/end2end.png)
 
 Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/).
 
@@ -78,6 +80,8 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ## Usage
 
+### Image
+
 You can train the DiT model by executing the following command:
 
 ```shell
@@ -97,21 +101,36 @@ Here are details of some key arguments for training:
 
 For more details of the configuration of the training process, please visit our code.
 
-You can perform inference using DiT model by executing the following command:
+You can perform inference using DiT model by executing the following command. You need to replace the ckpt path to your trained or downloaded ema model ckpt.
 
 ```shell
 # Inference using the trained DiT model
 bash sample.sh
 ```
 
-## Core Design
-### Efficient Sequence Parallelism -- （AllGanther）
+### Video
+```
+# train
+bash preprocess.sh
+bash train_video.sh
+```
 
-### Overlapped QKV
+## FastSeq
 
-### Distributed Attention
+![fastseq_overview](./figure/fastseq_overview.png)
 
-### Communication Complexity Analysis
+In the realm of visual generation models, such as DiT, sequence parallelism is indispensable for effective long-sequence training and low-latency inference. The distinctive nature of these tasks can be summarized by two key features:
+* Model parameter is small but sequence can be very long, making communication a bottleneck.
+* As the model size is gerenally small, they only need sequence parallel within a node.
+
+However, existing methods like DeepSpeed Ulysses and Megatron-LM Sequence Parallelism face limitations when applied to such tasks. They either introduce excessive sequence communication or lack efficiency in handling small-scale sequence parallelism.
+
+To this end, we present FastSeq, a novel sequence parallelism for large sequences and small-scale parallelism. Our methodology focuses on minimizing sequence communication by employing only two communication operators for every transformer layer. We leverage AllGather instead of a group of AlltoAll for layer inputs to enhance communication efficiency, and we strategically employ an async ring to overlap AllGather communication with qkv computation, further optimizing performance.
+
+Here are our experiments results, more results will be coming soon:
+
+![fastseq_exp](./figure/fastseq_exp.png)
+
 
 ## DiT Reproduction Result
 
