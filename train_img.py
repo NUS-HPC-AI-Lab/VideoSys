@@ -15,7 +15,7 @@ import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.booster import Booster
-from colossalai.booster.plugin import LowLevelZeroPlugin
+from colossalai.booster.plugin import LowLevelZeroPlugin, TorchDDPPlugin
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
@@ -89,6 +89,8 @@ def main(args):
             initial_scale=2**16,
             max_norm=args.grad_clip,
         )
+    elif args.plugin == "ddp":
+        plugin = TorchDDPPlugin()
     else:
         raise ValueError(f"Unknown plugin {args.plugin}")
     booster = Booster(plugin=plugin)
@@ -142,7 +144,8 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema: DiT = DiT_models[args.model](**model_config).to(device).to(torch.float32)
+    ema: DiT = DiT_models[args.model](**model_config).to(device)
+    ema = ema.to(torch.float32) if args.plugin == "zero2" else ema.to(dtype)
     ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
@@ -301,7 +304,7 @@ if __name__ == "__main__":
     parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--ckpt-every", type=int, default=1000)
 
-    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
+    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16", "fp32"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
@@ -310,6 +313,7 @@ if __name__ == "__main__":
     parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
     parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
-    parser.add_argument("--sequence_parallel_type", type=str, default=None, help="Sequence parallel type")
+    parser.add_argument("--sequence_parallel_type", type=str)
+
     args = parser.parse_args()
     main(args)

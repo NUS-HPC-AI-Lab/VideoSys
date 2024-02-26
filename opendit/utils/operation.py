@@ -71,11 +71,12 @@ class AsyncAllGatherForTwo(torch.autograd.Function):
         ctx.sp_rank = sp_rank
         ctx.sp_size = sp_size
 
+        # all gather inputs
+        all_inputs = all_gather_tensor(inputs.unsqueeze(0), 0, group)
         # compute local qkv
         local_qkv = F.linear(inputs, weight, bias).unsqueeze(0)
 
-        # overlap all_gather and local linear
-        all_inputs = all_gather_tensor(inputs.unsqueeze(0), 0, group)
+        # remote compute
         remote_inputs = all_inputs[1 - sp_rank].view(list(local_qkv.shape[:-1]) + [-1])
         # compute remote qkv
         remote_qkv = F.linear(remote_inputs, weight, bias)
