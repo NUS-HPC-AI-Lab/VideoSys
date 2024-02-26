@@ -18,7 +18,7 @@ OpenDiT boasts the following characteristics:
     * User can easily use and adapt our pipeline to their own research without modifying the parallel part.
     * Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
 
-Core contributors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html).
+Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/).
 
 ## Installation
 ### Install ColossalAI
@@ -77,4 +77,18 @@ bash train_video.sh
 
 ## Acknowledgement
 
+## Contributing
+
+If you encounter problems using OpenDiT, feel free to create an issue! We also welcome pull requests from the community.
+
 ## Citation
+```
+@misc{zhao2024opendit,
+  author = {Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
+  title = {OpenDiT},
+  year = {2024},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/oahzxl/OpenDiT}},
+}
+```
