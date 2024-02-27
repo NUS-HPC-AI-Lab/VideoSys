@@ -310,6 +310,7 @@ class DistAttention(nn.Module):
 
         return x
 
+    # Rearrange the qkv projection (qkv ... qkv <-> q ... q k ... k v ... v)
     def rearrange_fused_weight(self, layer: nn.Linear, flag="load"):
         # check whether layer is an torch.nn.Linear layer
         if not isinstance(layer, nn.Linear):
