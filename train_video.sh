@@ -1,8 +1,8 @@
 torchrun --standalone --nproc_per_node=2 train_video.py \
-    --model DiT-XL/2 \
-    --data_path ./processed \
-    --batch_size 2 \
-    # --enable_modulate_kernel \
-    # --enable_layernorm_kernel \
-    # --enable_flashattn \
-    # --sequence_parallel_size 2
+    --model vDiT-XL/222 \
+    --use_video \
+    --data_path ./videos/demo.csv \
+    --batch_size 1 \
+    --num_frames 16 \
+    --image_size 256 \
+    --frame_interval 3

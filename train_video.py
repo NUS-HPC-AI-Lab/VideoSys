@@ -21,17 +21,18 @@ from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
 from diffusers.models import AutoencoderKL
 from torch.utils.tensorboard import SummaryWriter
-from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
 from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
-from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
+from opendit.utils.data_utils import prepare_dataloader
 from opendit.utils.operation import model_sharding
 from opendit.utils.pg_utils import ProcessGroupManager
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
+from opendit.utils.video_utils import DatasetFromCSV, get_transforms_image, get_transforms_video
+from opendit.vqvae.wrapper import AutoencoderKLWrapper
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -105,9 +106,23 @@ def main(args):
     # ======================================================
     # Initialize Model, Objective, Optimizer
     # ======================================================
-    # Create model
+    # Create VAE encoder
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+
+    # Configure input size
     assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
-    latent_size = args.image_size // 8
+    if args.use_video:
+        # Wrap the VAE in a wrapper that handles video data
+        # Use 3d patch size that is divisible by the input size
+        vae = AutoencoderKLWrapper(vae)
+        input_size = (args.num_frames, args.image_size, args.image_size)
+        for i in range(3):
+            assert input_size[i] % vae.patch_size[i] == 0, "Input size must be divisible by patch size"
+        input_size = [input_size[i] // vae.patch_size[i] for i in range(3)]
+    else:
+        input_size = args.image_size // 8
+
+    # Set mixed precision
     if args.mixed_precision == "bf16":
         dtype = torch.bfloat16
     elif args.mixed_precision == "fp16":
@@ -119,12 +134,14 @@ def main(args):
 
     # Shared model config for two models
     model_config = {
-        "input_size": latent_size,
+        "use_video": args.use_video,
+        "input_size": input_size,
         "num_classes": args.num_classes,
         "enable_layernorm_kernel": args.enable_layernorm_kernel,
         "enable_modulate_kernel": args.enable_modulate_kernel,
         "sequence_parallel_size": args.sequence_parallel_size,
         "sequence_parallel_type": args.sequence_parallel_type,
+        "text_encoder": args.text_encoder,
     }
 
     model: DiT = (
@@ -153,7 +170,6 @@ def main(args):
     ema_shape_dict = record_model_param_shape(ema)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
@@ -173,15 +189,15 @@ def main(args):
     ema.eval()
 
     # Setup data:
-    transform = transforms.Compose(
-        [
-            transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-        ]
-    )
-    dataset = CIFAR10(args.data_path, transform=transform, download=True)
+    if args.use_video:
+        dataset = DatasetFromCSV(
+            args.data_path,
+            transform=get_transforms_video(args.image_size),
+            num_frames=args.num_frames,
+            frame_interval=args.frame_interval,
+        )
+    else:
+        dataset = CIFAR10(args.data_path, transform=get_transforms_image(args.image_size), download=True)
     dataloader = prepare_dataloader(
         dataset,
         batch_size=args.batch_size,
@@ -232,14 +248,21 @@ def main(args):
             initial=start_step,
         ) as pbar:
             for step in pbar:
-                x, y = next(dataloader_iter)
-                x = x.to(device)
-                y = y.to(device)
+                if args.use_video:
+                    batch = next(dataloader_iter)
+                    x = batch["video"].to(device)
+                    y = batch["text"]
+                else:
+                    x, y = next(dataloader_iter)
+                    x = x.to(device)
+                    y = y.to(device)
 
                 # VAE encode
                 with torch.no_grad():
                     # Map input images to latent space + normalize latents:
-                    x = vae.encode(x).latent_dist.sample().mul_(0.18215)
+                    x = vae.encode(x)
+                    if not args.use_video:
+                        x = x.latent_dist.sample().mul_(0.18215)
 
                 # Diffusion
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
@@ -298,9 +321,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
+    parser.add_argument("--use_video", action="store_true", help="Use video data instead of images")
     parser.add_argument("--plugin", type=str, default="zero2")
     parser.add_argument("--outputs", type=str, default="./outputs", help="Path to the output directory")
     parser.add_argument("--load", type=str, default=None, help="Path to a checkpoint dir to load")
+    parser.add_argument("--num_frames", type=int, default=16)
+    parser.add_argument("--frame_interval", type=int, default=1)
+    parser.add_argument("--text_encoder", type=str, default="openai/clip-vit-base-patch32")
 
     parser.add_argument("--data_path", type=str, default="./datasets", help="Path to the dataset")
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
