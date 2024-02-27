@@ -1,4 +1,4 @@
-torchrun --standalone --nproc_per_node=2 train_video.py \
+torchrun --standalone --nproc_per_node=2 train.py \
     --model vDiT-XL/222 \
     --use_video \
     --data_path ./videos/demo.csv \
