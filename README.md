@@ -64,7 +64,7 @@ cd OpenDiT
 pip install -e .
 ```
 
-**(Optional but recommended)** Install libraries for training & inference speed up:
+(Optional but recommended) Install libraries for training & inference speed up:
 
 ```shell
 # Install Triton for fused adaln kernel
@@ -196,6 +196,10 @@ torchrun --standalone --nproc_per_node=8 train.py \
 
 ## Acknowledgement
 
+We extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/) for providing valuable insights into algorithms and aiding in the development of the video pipeline. Additionally, we acknowledge [Shenggan Cheng](https://shenggan.github.io/) for his guidance on code optimization and parallelism. Our appreciation also goes to [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice and contributions.
+
+This codebase borrows from [Meta's DiT](https://github.com/facebookresearch/DiT).
+
 ## Contributing
 
 If you encounter problems using OpenDiT or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
@@ -204,7 +208,7 @@ If you encounter problems using OpenDiT or have a feature request, feel free to 
 ```
 @misc{zhao2024opendit,
   author = {Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
-  title = {OpenDiT},
+  title = {OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference},
   year = {2024},
   publisher = {GitHub},
   journal = {GitHub repository},
