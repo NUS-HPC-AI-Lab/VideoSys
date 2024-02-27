@@ -1,3 +1,5 @@
+# Modified from Meta DiT: https://github.com/facebookresearch/DiT
+
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 
