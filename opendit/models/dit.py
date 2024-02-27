@@ -232,7 +232,6 @@ class DistAttention(nn.Module):
 
         if self.sequence_parallel_type == "ulysses":
             q, k, v = qkv.split(self.head_dim * self.num_heads, dim=-1)
-            # Todo: Use all_to_all_single for q, k, v
             q = all_to_all_comm(q, self.sequence_parallel_group)
             k = all_to_all_comm(k, self.sequence_parallel_group)
             v = all_to_all_comm(v, self.sequence_parallel_group)
@@ -277,7 +276,6 @@ class DistAttention(nn.Module):
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
-            # Todo: implement chunked flash attention
             x = flash_attn_func(
                 q,
                 k,
@@ -306,7 +304,6 @@ class DistAttention(nn.Module):
         else:
             x = x.transpose(1, 2).reshape(x_output_shape)
         if self.sequence_parallel_size > 1:
-            # Todo: Use all_to_all_single for x
             x = all_to_all_comm(x, self.sequence_parallel_group, scatter_dim=1, gather_dim=2)
         x = self.proj(x)
         x = self.proj_drop(x)
@@ -548,9 +545,6 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
-
-        # Todo: Mock video input by repeating the same frame for all timesteps
-        # x = torch.randn(2, 256, 1152).to(torch.bfloat16).cuda()
 
         # origin inputs should be float32, cast to specified dtype
         x = x.to(self.dtype)

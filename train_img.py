@@ -212,7 +212,7 @@ def main(args):
         )
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
 
-    if args.plugin != "ddp":
+    if shard_ema:
         model_sharding(ema)
 
     num_steps_per_epoch = len(dataloader)
