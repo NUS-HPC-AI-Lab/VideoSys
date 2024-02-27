@@ -10,20 +10,20 @@
 
 OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
 
-OpenDiT boasts the following characteristics:
+OpenDiT boasts the performance by the following techniques:
 
 1. Up to 80% speedup and 50% memory reduction on GPU
       * Kernel optimization including FlashAttention, Fused AdaLN, and Fused layernorm kernel.
-      * Hybrid parallelism methods including ZeRO, Gemini, and DDP. Also shard the ema model to further reduce memory cost.
+      * Hybrid parallelism methods including ZeRO, Gemini, and DDP. Also, sharding the ema model further reduces the memory cost.
 2. FastSeq: A novel sequence parallelism method
     * Specially designed for DiT-like workloads where the activation size is large but the parameter size is small.
     * Up to 48% communication save for intra-node sequence parallel.
     * Break the memory limitation of a single GPU and reduce the overall training and inference time.
 3. Ease of use
     * Huge performance improvement gains with a few line changes
-    * User do not need to care about the implementation of distributed training.
+    * Users do not need to know the implementation of distributed training.
 4. Complete pipeline of text-to-image and text-to-video generation
-    * User can easily use and adapt our pipeline to their research without modifying the parallel part.
+    * Researchers and engineers can easily use and adapt our pipeline to real-world applications without modifying the parallel part.
     * Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
 
 <p align="center">
