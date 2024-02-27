@@ -9,7 +9,6 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from colossalai.booster import Booster
-from colossalai.booster.plugin import TorchDDPPlugin
 from colossalai.cluster import DistCoordinator
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
@@ -65,26 +64,31 @@ def save(
     save_dir: str,
     shape_dict: dict,
     sequence_parallel_type: str,
+    shard_ema: bool = False,
 ):
     torch.cuda.empty_cache()
     global_rank = dist.get_rank()
     save_dir = os.path.join(save_dir, f"epoch{epoch}-global_step{global_step}")
     os.makedirs(os.path.join(save_dir, "model"), exist_ok=True)
+    # Rearrange the qkv projection (qkv ... qkv -> q ... q k ... k v ... v) in DiT model when using longseq sequence parallelism
     if global_rank == 0 and sequence_parallel_type == "longseq":
         if isinstance(model.module, DiT):
             model.module.rearrange_attention_weights(flag="save")
         else:
             model.module.module.rearrange_attention_weights(flag="save")
     booster.save_model(model, os.path.join(save_dir, "model"), shard=True)
-    # ema is not boosted, so we don't need to use booster.save_model
-    if not isinstance(booster.plugin, TorchDDPPlugin):
+
+    # Gather the sharded ema model before saving
+    if shard_ema:
         model_gathering(ema, shape_dict)
+    # Rearrange the qkv projection (qkv ... qkv -> q ... q k ... k v ... v) in ema model when using longseq sequence parallelism
     if global_rank == 0 and sequence_parallel_type == "longseq":
         ema.rearrange_attention_weights(flag="save")
-
+    # ema is not boosted, so we don't need to use booster.save_model
     if global_rank == 0:
         torch.save(ema.state_dict(), os.path.join(save_dir, "ema.pt"))
-        if not isinstance(booster.plugin, TorchDDPPlugin):
+        # Shard ema model when using zero2 plugin
+        if shard_ema:
             model_sharding(ema)
     if optimizer is not None:
         booster.save_optimizer(optimizer, os.path.join(save_dir, "optimizer"), shard=True, size_per_shard=4096)
@@ -118,6 +122,7 @@ def load(
     if lr_scheduler is not None:
         booster.load_lr_scheduler(lr_scheduler, os.path.join(load_dir, "lr_scheduler"))
     running_states = load_json(os.path.join(load_dir, "running_states.json"))
+    # Rearrange the qkv projection (q ... q k ... k v ... v -> qkv ... qkv ) in when using longseq sequence parallelism
     if sequence_parallel_type == "longseq":
         if isinstance(model.module, DiT):
             model.module.rearrange_attention_weights()

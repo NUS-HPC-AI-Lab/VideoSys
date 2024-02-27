@@ -162,7 +162,6 @@ def main(args):
     )
     # You can use a lr scheduler if you want
     lr_scheduler = None
-    shard_ema = False if args.plugin == "ddp" else True
 
     # Prepare models for training
     # Ensure EMA is initialized with synced weights
@@ -212,7 +211,9 @@ def main(args):
         )
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
 
-    if args.plugin != "ddp":
+    # Only shard ema model when using zero2 plugin
+    shard_ema = True if args.plugin == "zero2" else False
+    if shard_ema:
         model_sharding(ema)
 
     num_steps_per_epoch = len(dataloader)
