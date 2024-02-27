@@ -107,7 +107,7 @@ We disable all speedup methods by default. Here are details of some key argument
 
 For more details of the configuration of the training process, please visit our code.
 
-<b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the ckpt path to your trained or downloaded [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our]() ckpt.
+<b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the ckpt path to your trained or downloaded [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our](https://drive.google.com/file/d/1P4t2V3RDNcoCiEkbVWAjNetm3KC_4ueI/view?usp=drive_link) ckpt.
 
 ```shell
 # Use script
