@@ -155,7 +155,6 @@ torchrun --standalone --nproc_per_node=8 train_img.py \
     --enable_layernorm_kernel \
     --enable_flashattn \
     --mixed_precision fp16
-
 ```
 
 
