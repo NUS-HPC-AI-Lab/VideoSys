@@ -120,9 +120,6 @@ python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 <b>Train.</b> You can train the video DiT model by executing the following command:
 
 ```shell
-# preprocess
-bash preprocess.sh
-
 # train with scipt
 bash train_video.sh
 # train with command line
@@ -134,6 +131,11 @@ torchrun --standalone --nproc_per_node=2 train.py \
     --num_frames 16 \
     --image_size 256 \
     --frame_interval 3
+
+# preprocess
+# our code read video from csv as the demo shows
+# we provide a code to transfer ucf101 to csv format
+python preprocess.py
 ```
 
 <b>Inference.</b> You can perform inference using DiT model as follows. We are still working on the video ckpt.

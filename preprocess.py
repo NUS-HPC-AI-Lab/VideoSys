@@ -1,118 +1,41 @@
-# This code is modified from https://github.com/wilson1yan/VideoGPT
-# Copyright (c) 2021 Wilson Yan. All rights reserved.
+# This script is used to generate a csv file for the UCF101 dataset.
+# The csv file contains the path to each video and its corresponding class.
+# The csv file will be used to load the dataset in the training script.
 
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
 
-import argparse
+import csv
 import os
 
-import numpy as np
-import torch
-import tqdm
-from matplotlib import animation
-from matplotlib import pyplot as plt
-from torch import nn
-from torchvision.io import read_video, write_video
 
-from opendit.vqvae.data import preprocess
-from opendit.vqvae.download import load_vqvae
-
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
+def get_filelist(file_path):
+    Filelist = []
+    for home, dirs, files in os.walk(file_path):
+        for filename in files:
+            Filelist.append(os.path.join(home, filename))
+    return Filelist
 
 
-@torch.no_grad()
-def visualize(path: str) -> None:
-    video_filename = path
-    sequence_length = 80
-    resolution = 256
-    device = torch.device("cuda")
-
-    # build model and load weights
-    vqvae = load_vqvae("ucf101_stride4x4x4").to(device)
-
-    # read video and preprocess
-    video = read_video(video_filename, pts_unit="sec")[0]
-    video = preprocess(video, resolution, sequence_length).unsqueeze(0).to(device)
-
-    # encode and decode
-    encodings = vqvae.encode(video)
-    video_recon = vqvae.decode(encodings)
-    video_recon = torch.clamp(video_recon, -0.5, 0.5)
-
-    # save reconstruction video
-    videos = video_recon[0].permute(1, 2, 3, 0)
-    videos = ((videos + 0.5) * 255).cpu().to(torch.uint8)
-    write_video("output.mp4", videos, 20, video_codec="h264")
-
-    # compare real and reconstruction video
-    videos = torch.cat((video, video_recon), dim=-1)
-    videos = videos[0].permute(1, 2, 3, 0)  # CTHW -> THWC
-    videos = ((videos + 0.5) * 255).cpu().to(torch.uint8).numpy()
-    fig = plt.figure()
-    plt.title("real (left), reconstruction (right)")
-    plt.axis("off")
-    im = plt.imshow(videos[0, :, :, :])
-    plt.close()
-
-    def init():
-        im.set_data(videos[0, :, :, :])
-
-    def animate(i):
-        im.set_data(videos[i, :, :, :])
-        return im
-
-    anim = animation.FuncAnimation(fig, animate, init_func=init, frames=videos.shape[0], interval=50)
-    mp4_writer = animation.FFMpegWriter(fps=20, bitrate=1800)
-    anim.save("compare.mp4", writer=mp4_writer)
+def split_by_capital(name):
+    # BoxingPunchingBag -> Boxing Punching Bag
+    new_name = ""
+    for i in range(len(name)):
+        if name[i].isupper() and i != 0:
+            new_name += " "
+        new_name += name[i]
+    return new_name
 
 
-@torch.no_grad()
-def encode_video(
-    model: nn.Module,
-    file_path: str,
-    save_dir: str,
-    sequence_length: int = 32,
-    resolution: int = 128,
-    video_type: str = ".mp4",
-) -> None:
-    video_filename = file_path
-    assert video_filename.endswith(video_type)
-    device = torch.device("cuda")
+root = "path/to/ucf101"
+split = "train"
 
-    # read video and preprocess
-    video = read_video(video_filename, pts_unit="sec")[0]
-    video = preprocess(video, resolution, sequence_length).unsqueeze(0).to(device)
+root = os.path.expanduser(root)
+video_lists = get_filelist(os.path.join(root, split))
+classes = [x.split("/")[-2] for x in video_lists]
+classes = [split_by_capital(x) for x in classes]
+samples = list(zip(video_lists, classes))
 
-    # encode
-    encodings = model.encode(video, include_embeddings=True)[1]
-    encodings = encodings.squeeze().cpu().numpy()
+with open(f"preprocess/ucf101_{split}.csv", "w") as f:
+    writer = csv.writer(f)
+    writer.writerows(samples)
 
-    # save encodings
-    os.makedirs(save_dir, exist_ok=True)
-    embed_path = os.path.join(save_dir, os.path.basename(file_path).replace(video_type, ".npy"))
-    np.save(embed_path, encodings)
-
-
-def preprocess_video(args):
-    vqvae = load_vqvae(args.model).to("cuda")
-    video_list = os.listdir(args.data_dir)
-    for v in tqdm.tqdm(video_list):
-        if v.endswith(args.video_type):
-            encode_video(
-                model=vqvae, file_path=os.path.join(args.data_dir, v), save_dir="processed", video_type=args.video_type
-            )
-
-    print("Done!")
-
-
-if "__main__" == __name__:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, required=True)
-    parser.add_argument("--model", type=str, default="ucf101_stride4x4x4")
-    parser.add_argument("--video_type", type=str, default=".mp4")
-    args = parser.parse_args()
-    print(f"Args: {args}")
-    preprocess_video(args)
-    # visualize("./videos/art-museum.mp4")
+print(f"Saved {len(samples)} samples to preprocess/ucf101_{split}.csv.")
