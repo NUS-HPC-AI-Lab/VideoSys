@@ -1,3 +1,11 @@
+# Modified from Meta DiT: https://github.com/facebookresearch/DiT
+
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 import argparse
 import json
 import os
@@ -7,17 +15,20 @@ import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.booster import Booster
-from colossalai.booster.plugin import LowLevelZeroPlugin
+from colossalai.booster.plugin import LowLevelZeroPlugin, TorchDDPPlugin
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
+from diffusers.models import AutoencoderKL
 from torch.utils.tensorboard import SummaryWriter
+from torchvision import transforms
+from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
 from opendit.models.diffusion import create_diffusion
 from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
-from opendit.utils.data_utils import VideoDataset, prepare_dataloader
+from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
 from opendit.utils.operation import model_sharding
 from opendit.utils.pg_utils import ProcessGroupManager
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
@@ -78,6 +89,8 @@ def main(args):
             initial_scale=2**16,
             max_norm=args.grad_clip,
         )
+    elif args.plugin == "ddp":
+        plugin = TorchDDPPlugin()
     else:
         raise ValueError(f"Unknown plugin {args.plugin}")
     booster = Booster(plugin=plugin)
@@ -92,35 +105,26 @@ def main(args):
     # ======================================================
     # Initialize Model, Objective, Optimizer
     # ======================================================
-    # Setup data:
-    dataset = VideoDataset(args.data_path)
-    dataloader = prepare_dataloader(
-        dataset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        drop_last=True,
-        pin_memory=True,
-        num_workers=args.num_workers,
-        pg_manager=pg_manager,
-    )
-    logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
-
     # Create model
-    img_size = dataset[0][0].shape[-1]
+    assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
+    latent_size = args.image_size // 8
     if args.mixed_precision == "bf16":
         dtype = torch.bfloat16
     elif args.mixed_precision == "fp16":
         dtype = torch.float16
+    elif args.mixed_precision == "fp32" and args.plugin == "ddp":
+        dtype = torch.float32
     else:
         raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
 
     # Shared model config for two models
     model_config = {
-        "input_size": img_size,
+        "input_size": latent_size,
         "num_classes": args.num_classes,
         "enable_layernorm_kernel": args.enable_layernorm_kernel,
         "enable_modulate_kernel": args.enable_modulate_kernel,
         "sequence_parallel_size": args.sequence_parallel_size,
+        "sequence_parallel_type": args.sequence_parallel_type,
     }
 
     model: DiT = (
@@ -142,12 +146,14 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema: DiT = DiT_models[args.model](**model_config).to(device).to(torch.float32)
+    ema: DiT = DiT_models[args.model](**model_config).to(device)
+    ema = ema.to(torch.float32) if args.plugin == "zero2" else ema.to(dtype)
     ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
@@ -156,6 +162,7 @@ def main(args):
     )
     # You can use a lr scheduler if you want
     lr_scheduler = None
+    shard_ema = False if args.plugin == "ddp" else True
 
     # Prepare models for training
     # Ensure EMA is initialized with synced weights
@@ -165,12 +172,32 @@ def main(args):
     # EMA model should always be in eval mode
     ema.eval()
 
+    # Setup data:
+    transform = transforms.Compose(
+        [
+            transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
+        ]
+    )
+    dataset = CIFAR10(args.data_path, transform=transform, download=True)
+    dataloader = prepare_dataloader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        drop_last=True,
+        pin_memory=True,
+        num_workers=args.num_workers,
+        pg_manager=pg_manager,
+    )
+    logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
+
     # Boost model for distributed training
     torch.set_default_dtype(dtype)
     model, optimizer, _, dataloader, lr_scheduler = booster.boost(
         model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, dataloader=dataloader
     )
-
     torch.set_default_dtype(torch.float)
     logger.info("Boost model for distributed training")
 
@@ -180,9 +207,14 @@ def main(args):
     sampler_start_idx = 0
     if args.load is not None:
         logger.info("Loading checkpoint")
-        start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
+        start_epoch, start_step, sampler_start_idx = load(
+            booster, model, ema, optimizer, lr_scheduler, args.load, args.sequence_parallel_type
+        )
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
-    model_sharding(ema)
+
+    if args.plugin != "ddp":
+        model_sharding(ema)
+
     num_steps_per_epoch = len(dataloader)
 
     logger.info(f"Training for {args.epochs} epochs...")
@@ -204,9 +236,10 @@ def main(args):
                 x = x.to(device)
                 y = y.to(device)
 
-                # TODO: deal with 4d x
-                x = x.view(x.shape[0], -1, x.shape[-2], x.shape[-1])
-                x = x[:, :4, :, :].contiguous()
+                # VAE encode
+                with torch.no_grad():
+                    # Map input images to latent space + normalize latents:
+                    x = vae.encode(x).latent_dist.sample().mul_(0.18215)
 
                 # Diffusion
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
@@ -218,7 +251,7 @@ def main(args):
                 optimizer.zero_grad()
 
                 # Update EMA
-                update_ema(ema, model.module, optimizer=optimizer)
+                update_ema(ema, model.module, optimizer=optimizer, sharded=shard_ema)
 
                 # Log loss values:
                 all_reduce_mean(loss)
@@ -231,7 +264,7 @@ def main(args):
 
                 # Save checkpoint
                 if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
-                    logger.info(f"Saving checkpoint")
+                    logger.info(f"Saving checkpoint...")
                     save(
                         booster,
                         model,
@@ -245,6 +278,7 @@ def main(args):
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
+                        args.sequence_parallel_type,
                     )
                     logger.info(
                         f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {experiment_dir}"
@@ -261,30 +295,34 @@ def main(args):
 
 
 if __name__ == "__main__":
-    # Default args here will train DiT-XL/2 with the hyperparameters we used in our paper (except training iters).
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-path", type=str, required=True)
-    parser.add_argument(
-        "--plugin", type=str, default="zero2", choices=["gemini", "gemini_auto", "zero2", "zero2_cpu", "3d"]
-    )
-    parser.add_argument("--outputs", type=str, default="outputs")
-    parser.add_argument("--load", type=str, default=None)
     parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
+    parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
+    parser.add_argument("--plugin", type=str, default="zero2")
+    parser.add_argument("--outputs", type=str, default="./outputs", help="Path to the output directory")
+    parser.add_argument("--load", type=str, default=None, help="Path to a checkpoint dir to load")
+
+    parser.add_argument("--data_path", type=str, default="./datasets", help="Path to the dataset")
+    parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)
+
     parser.add_argument("--epochs", type=int, default=1400)
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--global_seed", type=int, default=42)
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--log_every", type=int, default=10)
     parser.add_argument("--ckpt_every", type=int, default=1000)
-    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16"])
+
+    parser.add_argument("--mixed_precision", type=str, default="fp16", choices=["bf16", "fp16", "fp32"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
-    parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
+
     parser.add_argument("--enable_modulate_kernel", action="store_true", help="Enable triton modulate kernel")
     parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
     parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
+    parser.add_argument("--sequence_parallel_type", type=str)
+
     args = parser.parse_args()
     main(args)
