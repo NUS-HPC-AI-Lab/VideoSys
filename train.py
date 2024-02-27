@@ -303,6 +303,7 @@ def main(args):
                         experiment_dir,
                         ema_shape_dict,
                         args.sequence_parallel_type,
+                        shard_ema,
                     )
                     logger.info(
                         f"Saved checkpoint at epoch {epoch} step {step + 1} global_step {global_step + 1} to {experiment_dir}"
