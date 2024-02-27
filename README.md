@@ -85,7 +85,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ### Image
 
-<b>Training:</b> You can train the DiT model by executing the following command:
+<b>Training.</b> You can train the DiT model by executing the following command:
 
 ```shell
 # Use script
@@ -107,7 +107,7 @@ We disable all speedup methods by default. Here are details of some key argument
 
 For more details on the configuration of the training process, please visit our code.
 
-<b>Inference:</b> You can perform inference using DiT model as follows. You need to replace the checkpoint path to your own trained model. Or you can download [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our](https://drive.google.com/file/d/1P4t2V3RDNcoCiEkbVWAjNetm3KC_4ueI/view?usp=drive_link) checkpoint for inference.
+<b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the checkpoint path to your own trained model. Or you can download [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our](https://drive.google.com/file/d/1P4t2V3RDNcoCiEkbVWAjNetm3KC_4ueI/view?usp=drive_link) checkpoint for inference.
 
 ```shell
 # Use script
@@ -117,7 +117,7 @@ python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 ```
 
 ### Video
-<b>Training:</b> You can train the video DiT model by executing the following command:
+<b>Training.</b> You can train the video DiT model by executing the following command:
 
 ```shell
 # train with scipt
@@ -138,7 +138,7 @@ torchrun --standalone --nproc_per_node=2 train.py \
 python preprocess.py
 ```
 
-<b>Inference:</b> You can perform video inference using DiT model as follows. We are still working on the video ckpt.
+<b>Inference.</b> You can perform video inference using DiT model as follows. We are still working on the video ckpt.
 
 ```shell
 # Use script
