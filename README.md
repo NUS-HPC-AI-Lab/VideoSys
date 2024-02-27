@@ -138,7 +138,7 @@ torchrun --standalone --nproc_per_node=2 train.py \
 python preprocess.py
 ```
 
-<b>Inference.</b> You can perform inference using DiT model as follows. We are still working on the video ckpt.
+<b>Inference.</b> You can perform video inference using DiT model as follows. We are still working on the video ckpt.
 
 ```shell
 # Use script
