@@ -146,7 +146,7 @@ Our loss also aligns with the results listed in the paper:
 
 ![Loss](./figure/dit_loss.png)
 
-To reproduce our results, you need to change data to ImageNet in `train_img.py` and execute the following command:
+To reproduce our results, you need to change the dataset to ImageNet in `train_img.py` and execute the following command:
 
 ```
 torchrun --standalone --nproc_per_node=8 train_img.py \
