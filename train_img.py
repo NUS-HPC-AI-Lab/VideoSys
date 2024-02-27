@@ -313,7 +313,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_every", type=int, default=10)
     parser.add_argument("--ckpt_every", type=int, default=1000)
 
-    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16", "fp32"])
+    parser.add_argument("--mixed_precision", type=str, default="fp16", choices=["bf16", "fp16", "fp32"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
     parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")

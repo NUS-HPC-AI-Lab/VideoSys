@@ -89,19 +89,22 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 You can train the DiT model by executing the following command:
 
 ```shell
-# Train the DiT model
+# Use script
 bash train_img.sh
+# Use command line
+torchrun --standalone --nproc_per_node=2 train_img.py \
+    --model DiT-XL/2 \
+    --batch_size 2
 ```
 
-Here are details of some key arguments for training:
-- `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported.
-- `--mixed_precision`: The data type for mixed precision training. The default value is `bf16`.
-- `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`.
-- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`.
-- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`.
-- `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`.
-- `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The defualt value is 1.
-- `--sequence_parallel_type`: The sequence parallelism type you choose. The defualt value is `None`.
+We disable all speedup methods by default. Here are details of some key arguments for training:
+- `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
+- `--mixed_precision`: The data type for mixed precision training. The default value is `fp16`.
+- `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to disable if memory is enough.
+- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enbale for GPU < H100.
+- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enbale.
+- `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enbale.
+- `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The defualt value is 1. Recommend to disable if memory is enough.
 
 For more details of the configuration of the training process, please visit our code.
 
