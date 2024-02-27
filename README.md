@@ -12,7 +12,7 @@ OpenDiT is an open-source project that provides a high-performance implementatio
 
 OpenDiT boasts the following characteristics:
 
-1. Up 80% speedup and 50% memory reduction on GPU
+1. Up to 80% speedup and 50% memory reduction on GPU
       * Kernel optimization including FlashAttention, Fused AdaLN, and Fused layernorm kernel.
       * Hybrid parallelism methods including ZeRO, Gemini, and DDP. And shard ema model to further reduce memory cost.
 2. FastSeq: A novel sequence parallelism method
