@@ -85,8 +85,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ### Image
 
-<b>Train</b>
-You can train the DiT model by executing the following command:
+<b>Train.</b> You can train the DiT model by executing the following command:
 
 ```shell
 # Use script
