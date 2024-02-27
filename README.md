@@ -160,8 +160,8 @@ python sample.py \
 ![fastseq_overview](./figure/fastseq_overview.png)
 
 In the realm of visual generation models, such as DiT, sequence parallelism is indispensable for effective long-sequence training and low-latency inference. Two key features can summarize the distinctive nature of these tasks:
-* The model parameter is small, but the sequence can be very long, making communication a bottleneck.
-* As the model size is generally small, it only needs sequence parallelism within a node.
+* The model parameter is smaller compared with LLMs, but the sequence can be very long, making communication a bottleneck.
+* As the model size is relatively small, it only needs sequence parallelism within a node.
 
 However, existing methods like DeepSpeed-Ulysses and Megatron-LM Sequence Parallelism face limitations when applied to such tasks. They either introduce excessive sequence communication or lack efficiency in handling small-scale sequence parallelism.
 
@@ -182,7 +182,7 @@ Our loss also aligns with the results listed in the paper:
 
 ![Loss](./figure/dit_loss.png)
 
-To reproduce our results, you need to change the dataset to ImageNet in `train_img.py` and execute the following command:
+To reproduce our results, you need to change the dataset in `train_img.py` and execute the following command:
 
 ```
 torchrun --standalone --nproc_per_node=8 train.py \
