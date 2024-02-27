@@ -78,7 +78,6 @@ git clone https://github.com/NVIDIA/apex.git
 cd apex
 git checkout 741bdf50825a97664db08574981962d66436d16a
 pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings "--build-option=--cpp_ext" --config-settings "--build-option=--cuda_ext" ./ --global-option="--cuda_ext" --global-option="--cpp_ext"
-
 ```
 
 
@@ -86,6 +85,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ### Image
 
+<b>Train</b>
 You can train the DiT model by executing the following command:
 
 ```shell
@@ -108,7 +108,7 @@ We disable all speedup methods by default. Here are details of some key argument
 
 For more details of the configuration of the training process, please visit our code.
 
-You can perform inference using DiT model as follows. You need to replace the ckpt path to your trained or downloaded ema model ckpt.
+<b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the ckpt path to your trained or downloaded [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our]() ckpt.
 
 ```shell
 # Use script
