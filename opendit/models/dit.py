@@ -278,11 +278,12 @@ class DistAttention(nn.Module):
         self.sequence_parallel_group = sequence_parallel_group
         self.sequence_parallel_overlap = sequence_parallel_overlap
         self.sequence_parallel_overlap_size = sequence_parallel_overlap_size
-        self.sequence_parallel_rank = dist.get_rank(sequence_parallel_group)
-        self.sequence_parallel_param_slice = slice(
-            self.qkv.out_features // sequence_parallel_size * self.sequence_parallel_rank,
-            self.qkv.out_features // sequence_parallel_size * (self.sequence_parallel_rank + 1),
-        )
+        if self.sequence_parallel_size > 1:
+            self.sequence_parallel_rank = dist.get_rank(sequence_parallel_group)
+            self.sequence_parallel_param_slice = slice(
+                self.qkv.out_features // sequence_parallel_size * self.sequence_parallel_rank,
+                self.qkv.out_features // sequence_parallel_size * (self.sequence_parallel_rank + 1),
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
