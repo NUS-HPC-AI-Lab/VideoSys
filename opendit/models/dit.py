@@ -57,9 +57,100 @@ def modulate(norm_func, x, shift, scale, use_kernel=False):
     return x
 
 
+def get_3d_sincos_pos_embed(embed_dim, grid_size, t_size, cls_token=False):
+    """
+    grid_size: int of the grid height and width
+    t_size: int of the temporal size
+    return:
+    pos_embed: [t_size*grid_size*grid_size, embed_dim] or [1+t_size*grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
+    """
+    assert embed_dim % 4 == 0
+    embed_dim_spatial = embed_dim // 4 * 3
+    embed_dim_temporal = embed_dim // 4
+
+    # spatial
+    grid_h = np.arange(grid_size, dtype=np.float32)
+    grid_w = np.arange(grid_size, dtype=np.float32)
+    grid = np.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = np.stack(grid, axis=0)
+
+    grid = grid.reshape([2, 1, grid_size, grid_size])
+    pos_embed_spatial = get_2d_sincos_pos_embed_from_grid(embed_dim_spatial, grid)
+
+    # temporal
+    grid_t = np.arange(t_size, dtype=np.float32)
+    pos_embed_temporal = get_1d_sincos_pos_embed_from_grid(embed_dim_temporal, grid_t)
+
+    # concate: [T, H, W] order
+    pos_embed_temporal = pos_embed_temporal[:, np.newaxis, :]
+    pos_embed_temporal = np.repeat(pos_embed_temporal, grid_size**2, axis=1)  # [T, H*W, D // 4]
+    pos_embed_spatial = pos_embed_spatial[np.newaxis, :, :]
+    pos_embed_spatial = np.repeat(pos_embed_spatial, t_size, axis=0)  # [T, H*W, D // 4 * 3]
+
+    pos_embed = np.concatenate([pos_embed_temporal, pos_embed_spatial], axis=-1)
+    pos_embed = pos_embed.reshape([-1, embed_dim])  # [T*H*W, D]
+
+    if cls_token:
+        pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
+    return pos_embed
+
+
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
+
+
+class PatchEmbed3D(nn.Module):
+    """Video to Patch Embedding.
+
+    Args:
+        patch_size (int): Patch token size. Default: (2,4,4).
+        in_chans (int): Number of input video channels. Default: 3.
+        embed_dim (int): Number of linear projection output channels. Default: 96.
+        norm_layer (nn.Module, optional): Normalization layer. Default: None
+    """
+
+    def __init__(
+        self,
+        patch_size=(2, 4, 4),
+        in_chans=3,
+        embed_dim=96,
+        norm_layer=None,
+        flatten=True,
+    ):
+        super().__init__()
+        self.patch_size = patch_size
+        self.flatten = flatten
+
+        self.in_chans = in_chans
+        self.embed_dim = embed_dim
+
+        self.proj = nn.Conv3d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        if norm_layer is not None:
+            self.norm = norm_layer(embed_dim)
+        else:
+            self.norm = None
+
+    def forward(self, x):
+        """Forward function."""
+        # padding
+        _, _, D, H, W = x.size()
+        if W % self.patch_size[2] != 0:
+            x = F.pad(x, (0, self.patch_size[2] - W % self.patch_size[2]))
+        if H % self.patch_size[1] != 0:
+            x = F.pad(x, (0, 0, 0, self.patch_size[1] - H % self.patch_size[1]))
+        if D % self.patch_size[0] != 0:
+            x = F.pad(x, (0, 0, 0, 0, 0, self.patch_size[0] - D % self.patch_size[0]))
+
+        x = self.proj(x)  # B C D Wh Ww
+        if self.norm is not None:
+            D, Wh, Ww = x.size(2), x.size(3), x.size(4)
+            x = x.flatten(2).transpose(1, 2)
+            x = self.norm(x)
+            x = x.transpose(1, 2).view(-1, self.embed_dim, D, Wh, Ww)
+        if self.flatten:
+            x = x.flatten(2).transpose(1, 2)  # BCTHW -> BNC
+        return x
 
 
 class TimestepEmbedder(nn.Module):
@@ -187,11 +278,12 @@ class DistAttention(nn.Module):
         self.sequence_parallel_group = sequence_parallel_group
         self.sequence_parallel_overlap = sequence_parallel_overlap
         self.sequence_parallel_overlap_size = sequence_parallel_overlap_size
-        self.sequence_parallel_rank = dist.get_rank(sequence_parallel_group)
-        self.sequence_parallel_param_slice = slice(
-            self.qkv.out_features // sequence_parallel_size * self.sequence_parallel_rank,
-            self.qkv.out_features // sequence_parallel_size * (self.sequence_parallel_rank + 1),
-        )
+        if self.sequence_parallel_size > 1:
+            self.sequence_parallel_rank = dist.get_rank(sequence_parallel_group)
+            self.sequence_parallel_param_slice = slice(
+                self.qkv.out_features // sequence_parallel_size * self.sequence_parallel_rank,
+                self.qkv.out_features // sequence_parallel_size * (self.sequence_parallel_rank + 1),
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
@@ -385,10 +477,12 @@ class FinalLayer(nn.Module):
     The final layer of DiT.
     """
 
-    def __init__(self, hidden_size, patch_size, out_channels):
+    def __init__(self, hidden_size, patch_size, out_channels, use_video):
         super().__init__()
         self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
+        self.linear = nn.Linear(
+            hidden_size, patch_size * out_channels if use_video else patch_size * patch_size * out_channels, bias=True
+        )
         self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=True))
 
     def forward(self, x, c):
@@ -412,7 +506,6 @@ class DiT(nn.Module):
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
-        text_condition=None,
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma: bool = True,
@@ -422,13 +515,17 @@ class DiT(nn.Module):
         sequence_parallel_size: int = 1,
         sequence_parallel_group: Optional[ProcessGroup] = None,
         sequence_parallel_type: str = None,
-        dtype=torch.float32,
+        dtype: torch.dtype = torch.float32,
+        use_video: bool = False,
+        text_encoder: str = None,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
+        self.use_video = use_video
         self.in_channels = in_channels
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
+        self.input_size = input_size
         self.num_heads = num_heads
         self.sequence_parallel_size = sequence_parallel_size
         self.sequence_parallel_group = sequence_parallel_group
@@ -441,18 +538,21 @@ class DiT(nn.Module):
                 torch.bfloat16,
             ], f"Flash attention only supports float16 and bfloat16, but got {self.dtype}"
 
-        self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
+        # For img input, use PatchEmbed and LabelEmbedder
+        # For video input, use PatchEmbed3D and TextEmbedder
+        if self.use_video:
+            self.x_embedder = PatchEmbed3D(patch_size, in_channels, embed_dim=hidden_size)
+            self.y_embedder = TextEmbedder(path=text_encoder, hidden_size=hidden_size)
+            self.num_patches = np.prod([input_size[i] // patch_size[i] for i in range(3)])
+        else:
+            self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
+            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+            self.num_patches = self.x_embedder.num_patches
         self.t_embedder = TimestepEmbedder(hidden_size)
 
-        self.text_condition = text_condition
-        if text_condition is not None:
-            self.y_embedder = TextEmbedder(path=text_condition, hidden_size=hidden_size)
-        else:
-            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
-
-        num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
+        # TODO: add 3d pos embedding
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
 
         self.blocks = nn.ModuleList(
             [
@@ -470,11 +570,12 @@ class DiT(nn.Module):
                 for _ in range(depth)
             ]
         )
-        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
+        self.final_layer = FinalLayer(
+            hidden_size, np.prod(patch_size) if use_video else patch_size, self.out_channels, self.use_video
+        )
         self.initialize_weights()
 
         self.gradient_checkpointing = False
-        self.use_flash_attention = False
 
     def enable_gradient_checkpointing(self):
         self.gradient_checkpointing = True
@@ -483,14 +584,22 @@ class DiT(nn.Module):
         # Initialize transformer layers:
         def _basic_init(module):
             if isinstance(module, nn.Linear):
-                torch.nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
+                if module.weight.requires_grad:
+                    torch.nn.init.xavier_uniform_(module.weight)
+                    if module.bias is not None:
+                        nn.init.constant_(module.bias, 0)
 
         self.apply(_basic_init)
 
         # Initialize (and freeze) pos_embed by sin-cos embedding:
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
+        if self.use_video:
+            pos_embed = get_3d_sincos_pos_embed(
+                self.pos_embed.shape[-1],
+                self.input_size[-1] // self.patch_size[-1],
+                self.input_size[0] // self.patch_size[0],
+            )
+        else:
+            pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
@@ -499,7 +608,7 @@ class DiT(nn.Module):
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
         # Initialize label embedding table:
-        if self.text_condition is None:
+        if isinstance(self.y_embedder, LabelEmbedder):
             nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
@@ -530,6 +639,15 @@ class DiT(nn.Module):
         x = x.reshape(shape=(x.shape[0], h, w, p, p, c))
         x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
+        return imgs
+
+    def unpatchify3D(self, x):
+        c = self.out_channels
+        t, h, w = [self.input_size[i] // self.patch_size[i] for i in range(3)]
+        pt, ph, pw = self.patch_size
+        x = x.reshape(shape=(x.shape[0], t, h, w, pt, ph, pw, c))
+        x = torch.einsum("nthwrpqc->nctrhpwq", x)
+        imgs = x.reshape(shape=(x.shape[0], c, t * pt, h * ph, w * pw))
         return imgs
 
     @staticmethod
@@ -569,7 +687,10 @@ class DiT(nn.Module):
             x = gather_forward_split_backward(x, dim=1, process_group=self.sequence_parallel_group)
 
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-        x = self.unpatchify(x)  # (N, out_channels, H, W)
+        if self.use_video:
+            x = self.unpatchify3D(x)
+        else:
+            x = self.unpatchify(x)  # (N, out_channels, H, W)
 
         # cast to float32 for better accuracy
         x = x.to(torch.float32)
@@ -708,6 +829,16 @@ def DiT_S_8(**kwargs):
     return DiT(depth=12, hidden_size=384, patch_size=8, num_heads=6, **kwargs)
 
 
+def vDiT_XL_222(**kwargs):
+    return DiT(
+        depth=28,
+        hidden_size=1152,
+        patch_size=(2, 2, 2),
+        num_heads=16,
+        **kwargs,
+    )
+
+
 DiT_models = {
     "DiT-XL/2": DiT_XL_2,
     "DiT-XL/4": DiT_XL_4,
@@ -721,4 +852,5 @@ DiT_models = {
     "DiT-S/2": DiT_S_2,
     "DiT-S/4": DiT_S_4,
     "DiT-S/8": DiT_S_8,
+    "vDiT-XL/222": vDiT_XL_222,
 }

@@ -8,11 +8,11 @@
 
 # About
 
-OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by [Colossal-AI](https://github.com/hpcaitech/ColossalAI). Specifically designed to enhance the efficiency of training and inference for DiT applications involving text-to-video and text-to-image generation.
+OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by Colossal-AI. Specifically designed to enhance the efficiency of training and inference for DiT applications including text-to-video and text-to-image generation.
 
 OpenDiT boasts the following characteristics:
 
-1. Up 80% speedup and 50% memory reduction on GPU
+1. Up to 80% speedup and 50% memory reduction on GPU
       * Kernel optimization including FlashAttention, Fused AdaLN, and Fused layernorm kernel.
       * Hybrid parallelism methods including ZeRO, Gemini, and DDP. And shard ema model to further reduce memory cost.
 2. FastSeq: A novel sequence parallelism method
@@ -78,7 +78,6 @@ git clone https://github.com/NVIDIA/apex.git
 cd apex
 git checkout 741bdf50825a97664db08574981962d66436d16a
 pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings "--build-option=--cpp_ext" --config-settings "--build-option=--cuda_ext" ./ --global-option="--cuda_ext" --global-option="--cpp_ext"
-
 ```
 
 
@@ -86,30 +85,35 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ### Image
 
-You can train the DiT model by executing the following command:
+<b>Train.</b> You can train the DiT model by executing the following command:
 
 ```shell
-# Train the DiT model
+# Use script
 bash train_img.sh
+# Use command line
+torchrun --standalone --nproc_per_node=2 train_img.py \
+    --model DiT-XL/2 \
+    --batch_size 2
 ```
 
-Here are details of some key arguments for training:
-- `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported.
-- `--mixed_precision`: The data type for mixed precision training. The default value is `bf16`.
-- `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`.
-- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`.
-- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`.
-- `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`.
-- `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The defualt value is 1.
-- `--sequence_parallel_type`: The sequence parallelism type you choose. The defualt value is `None`.
+We disable all speedup methods by default. Here are details of some key arguments for training:
+- `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
+- `--mixed_precision`: The data type for mixed precision training. The default value is `fp16`.
+- `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to disable if memory is enough.
+- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enbale for GPU < H100.
+- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enbale.
+- `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enbale.
+- `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The defualt value is 1. Recommend to disable if memory is enough.
 
 For more details of the configuration of the training process, please visit our code.
 
-You can perform inference using DiT model by executing the following command. You need to replace the ckpt path to your trained or downloaded ema model ckpt.
+<b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the ckpt path to your trained or downloaded [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our]() ckpt.
 
 ```shell
-# Inference using the trained DiT model
+# Use script
 bash sample.sh
+# Use command line
+python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 ```
 
 ### Video
@@ -146,12 +150,23 @@ Our loss also aligns with the results listed in the paper:
 
 ![Loss](./figure/dit_loss.png)
 
+To reproduce our results, you need to change the dataset to ImageNet in `train_img.py` and execute the following command:
+
+```
+torchrun --standalone --nproc_per_node=8 train_img.py \
+    --model DiT-XL/2 \
+    --batch_size 180 \
+    --enable_layernorm_kernel \
+    --enable_flashattn \
+    --mixed_precision fp16
+```
+
 
 ## Acknowledgement
 
 ## Contributing
 
-If you encounter problems using OpenDiT, feel free to create an issue! We also welcome pull requests from the community.
+If you encounter problems using OpenDiT or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
 
 ## Citation
 ```

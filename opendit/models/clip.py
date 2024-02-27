@@ -19,8 +19,8 @@ class FrozenCLIPEmbedder(AbstractEncoder):
 
     def __init__(self, path="openai/clip-vit-huge-patch14", device="cuda", max_length=77):
         super().__init__()
-        self.tokenizer = CLIPTokenizer.from_pretrained(path, subfolder="tokenizer")
-        self.transformer = CLIPTextModel.from_pretrained(path, subfolder="text_encoder")
+        self.tokenizer = CLIPTokenizer.from_pretrained(path)
+        self.transformer = CLIPTextModel.from_pretrained(path)
         self.device = device
         self.max_length = max_length
         self._freeze()
@@ -61,7 +61,7 @@ class TextEmbedder(nn.Module):
         self.text_encoder = FrozenCLIPEmbedder(path=path)
         self.dropout_prob = dropout_prob
 
-        output_dim = self.text_encoder.config.hidden_size
+        output_dim = self.text_encoder.transformer.config.hidden_size
         self.output_projection = nn.Linear(output_dim, hidden_size)
 
     def token_drop(self, text_prompts, force_drop_ids=None):
