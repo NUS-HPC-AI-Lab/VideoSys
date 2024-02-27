@@ -111,7 +111,7 @@ For more details on the configuration of the training process, please visit our 
 
 ```shell
 # Use script
-bash sample.sh
+bash sample_img.sh
 # Use command line
 python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 ```
@@ -138,11 +138,21 @@ torchrun --standalone --nproc_per_node=2 train.py \
 python preprocess.py
 ```
 
-<b>Inference:</b> You can perform video inference using DiT model as follows. We are still working on the video ckpt.
+This script shares the same speedup methods as we have shown in the image training part. For more details of the configuration of the training process, please visit our code.
+
+<b>Inference.</b> You can perform video inference using DiT model as follows. We are still working on the video ckpt.
 
 ```shell
 # Use script
+bash sample_video.sh
 # Use command line
+python sample.py \
+    --model vDiT-XL/222 \
+    --use_video \
+    --ckpt ckpt_path \
+    --num_frames 16 \
+    --image_size 256 \
+    --frame_interval 3
 ```
 
 ## FastSeq
@@ -175,7 +185,7 @@ Our loss also aligns with the results listed in the paper:
 To reproduce our results, you need to change the dataset to ImageNet in `train_img.py` and execute the following command:
 
 ```
-torchrun --standalone --nproc_per_node=8 train_img.py \
+torchrun --standalone --nproc_per_node=8 train.py \
     --model DiT-XL/2 \
     --batch_size 180 \
     --enable_layernorm_kernel \
