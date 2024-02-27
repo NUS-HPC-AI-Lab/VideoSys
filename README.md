@@ -3,7 +3,7 @@
 </p>
 <p align="center"><b><big>An Easy, Fast and Memory-Efficent System for DiT Training and Inference</big></b></p>
 </p>
-<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a></p>
+<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a></p>
 </p>
 
 # About
@@ -117,7 +117,7 @@ python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 ```
 
 ### Video
-<b>Training.</b> You can train the video DiT model by executing the following command:
+<b>Training.</b> Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
 
 ```shell
 # train with scipt
