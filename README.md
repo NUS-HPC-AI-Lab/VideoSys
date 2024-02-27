@@ -108,11 +108,13 @@ We disable all speedup methods by default. Here are details of some key argument
 
 For more details of the configuration of the training process, please visit our code.
 
-You can perform inference using DiT model by executing the following command. You need to replace the ckpt path to your trained or downloaded ema model ckpt.
+You can perform inference using DiT model as follows. You need to replace the ckpt path to your trained or downloaded ema model ckpt.
 
 ```shell
-# Inference using the trained DiT model
+# Use script
 bash sample.sh
+# Use command line
+python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 ```
 
 ### Video
