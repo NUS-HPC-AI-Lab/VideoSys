@@ -162,7 +162,7 @@ torchrun --standalone --nproc_per_node=8 train_img.py \
 
 ## Contributing
 
-If you encounter problems using OpenDiT, feel free to create an issue! We also welcome pull requests from the community.
+If you encounter problems using OpenDiT or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
 
 ## Citation
 ```
