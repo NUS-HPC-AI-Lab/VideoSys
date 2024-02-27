@@ -35,6 +35,7 @@ setup(
         exclude=(
             "videos",
             "tests",
+            "figure",
             "*.egg-info",
         )
     ),
