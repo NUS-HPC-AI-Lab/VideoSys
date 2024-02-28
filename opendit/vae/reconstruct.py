@@ -5,7 +5,7 @@ from diffusers.models import AutoencoderKL
 from torchvision.io import write_video
 from torchvision.utils import save_image
 
-from opendit.vqvae.wrapper import AutoencoderKLWrapper
+from opendit.vae.wrapper import AutoencoderKLWrapper
 
 
 def t2v(x):

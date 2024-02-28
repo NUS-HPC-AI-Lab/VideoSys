@@ -18,8 +18,8 @@ from torchvision.utils import save_image
 from opendit.models.diffusion import create_diffusion
 from opendit.models.dit import DiT_models
 from opendit.utils.download import find_model
-from opendit.vqvae.reconstruct import save_sample
-from opendit.vqvae.wrapper import AutoencoderKLWrapper
+from opendit.vae.reconstruct import save_sample
+from opendit.vae.wrapper import AutoencoderKLWrapper
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

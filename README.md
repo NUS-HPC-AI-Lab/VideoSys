@@ -97,6 +97,7 @@ torchrun --standalone --nproc_per_node=2 train.py \
 ```
 
 We disable all speedup methods by default. Here are details of some key arguments for training:
+- `--nproc_per_node`: The GPU number you want to use for the current node.
 - `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
 - `--mixed_precision`: The data type for mixed precision training. The default value is `fp16`.
 - `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to disable it when memory is enough.
@@ -106,6 +107,23 @@ We disable all speedup methods by default. Here are details of some key argument
 - `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The defualt value is 1. Recommend to disable it if memory is enough.
 
 For more details on the configuration of the training process, please visit our code.
+
+<b>Multi-Node Training.</b>
+
+To train OpenDiT on mutiple nodes, you can use the following command:
+
+```
+colossalai run --nproc_per_node 8 --hostfile hostfile train.py \
+    --model DiT-XL/2 \
+    --batch_size 2
+```
+
+And you need to create `hostfile` under the current dir. It should contain all IP address of your nodes and you need to make sure all nodes can be connected without password by ssh. An example of hostfile:
+
+```
+111.111.111.111 # ip of node1
+222.222.222.222 # ip of node2
+```
 
 <b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the checkpoint path to your own trained model. Or you can download [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our](https://drive.google.com/file/d/1P4t2V3RDNcoCiEkbVWAjNetm3KC_4ueI/view?usp=drive_link) checkpoint for inference.
 
