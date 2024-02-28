@@ -3,7 +3,7 @@
 </p>
 <p align="center"><b><big>An Easy, Fast and Memory-Efficent System for DiT Training and Inference</big></b></p>
 </p>
-<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a></p>
+<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a> | <a href="https://zhuanlan.zhihu.com/p/684457582">[Zhihu]</a></p>
 </p>
 
 # About
