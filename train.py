@@ -32,7 +32,7 @@ from opendit.utils.operation import model_sharding
 from opendit.utils.pg_utils import ProcessGroupManager
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 from opendit.utils.video_utils import DatasetFromCSV, get_transforms_image, get_transforms_video
-from opendit.vqvae.wrapper import AutoencoderKLWrapper
+from opendit.vae.wrapper import AutoencoderKLWrapper
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -113,8 +113,9 @@ def main(args):
     assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
     if args.use_video:
         # Wrap the VAE in a wrapper that handles video data
-        # Use 3d patch size that is divisible by the input size
+        # We use 2d vae from stableai instead of 3d vqvae from videogpt because it has better results
         vae = AutoencoderKLWrapper(vae)
+        # Use 3d patch size that is divisible by the input size
         input_size = (args.num_frames, args.image_size, args.image_size)
         for i in range(3):
             assert input_size[i] % vae.patch_size[i] == 0, "Input size must be divisible by patch size"
