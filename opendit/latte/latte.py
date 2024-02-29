@@ -16,7 +16,9 @@ from opendit.embed.time_emb import TimestepEmbedder
 
 class Latte(nn.Module):
     """
-    Diffusion model with a Transformer backbone.
+    A DiT-like Latte.
+    We only change the forward method in this class.
+    The rest of the code aligns with DiT.
     """
 
     def __init__(
@@ -34,7 +36,7 @@ class Latte(nn.Module):
         enable_flashattn=False,
         enable_layernorm_kernel=False,
         dtype=torch.float32,
-        latte=False,
+        **kwargs,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -48,7 +50,6 @@ class Latte(nn.Module):
         self.num_temporal = input_size[0] // patch_size[0]
         self.num_spatial = num_patches // self.num_temporal
         self.num_heads = num_heads
-        self.latte = latte
         self.dtype = dtype
         if enable_flashattn:
             assert dtype in [
@@ -164,47 +165,37 @@ class Latte(nn.Module):
         x = rearrange(x, "b (t s) d -> b t s d", t=self.num_temporal, s=self.num_spatial)
         x = x + self.pos_embed_spatial
 
-        if self.latte:
-            x = rearrange(x, "b t s d -> b (t s) d")
-        else:
-            x = rearrange(x, "b t s d -> b s t d")
-            x = x + self.pos_embed_temporal
-            x = rearrange(x, "b s t d -> b (t s) d")
+        x = rearrange(x, "b t s d -> b (t s) d")
 
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         condition = t + y
 
-        if self.latte:
-            condition_spatial = repeat(condition, "b d -> (b t) d", t=self.num_temporal)
-            condition_temporal = repeat(condition, "b d -> (b s) d", s=self.num_spatial)
+        condition_spatial = repeat(condition, "b d -> (b t) d", t=self.num_temporal)
+        condition_temporal = repeat(condition, "b d -> (b s) d", s=self.num_spatial)
 
         # blocks
         for i, block in enumerate(self.blocks):
-            if self.latte:
-                if i % 2 == 0:
-                    # spatial
-                    x = rearrange(x, "b (t s) d -> (b t) s d", t=self.num_temporal, s=self.num_spatial)
-                    c = condition_spatial
-                else:
-                    # temporal
-                    x = rearrange(x, "b (t s) d -> (b s) t d", t=self.num_temporal, s=self.num_spatial)
-                    if i == 1:
-                        x = x + self.pos_embed_temporal
-                    c = condition_temporal
+            if i % 2 == 0:
+                # spatial
+                x = rearrange(x, "b (t s) d -> (b t) s d", t=self.num_temporal, s=self.num_spatial)
+                c = condition_spatial
             else:
-                c = condition
+                # temporal
+                x = rearrange(x, "b (t s) d -> (b s) t d", t=self.num_temporal, s=self.num_spatial)
+                if i == 1:
+                    x = x + self.pos_embed_temporal
+                c = condition_temporal
 
             if self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
             else:
                 x = block(x, c)  # (B, N, D)
 
-            if self.latte:
-                if i % 2 == 0:
-                    x = rearrange(x, "(b t) s d -> b (t s) d", t=self.num_temporal, s=self.num_spatial)
-                else:
-                    x = rearrange(x, "(b s) t d -> b (t s) d", t=self.num_temporal, s=self.num_spatial)
+            if i % 2 == 0:
+                x = rearrange(x, "(b t) s d -> b (t s) d", t=self.num_temporal, s=self.num_spatial)
+            else:
+                x = rearrange(x, "(b s) t d -> b (t s) d", t=self.num_temporal, s=self.num_spatial)
 
         # final process
         x = self.final_layer(x, condition)  # (B, N, num_patches * out_channels)
@@ -244,11 +235,20 @@ def Latte_XL_2x2x2(**kwargs):
         hidden_size=1152,
         patch_size=(2, 2, 2),
         num_heads=16,
-        use_video=True,
         **kwargs,
     )
 
 
+def Latte_XL_1x2x2(**kwargs):
+    return Latte(
+        depth=28,
+        hidden_size=1152,
+        patch_size=(1, 2, 2),
+        num_heads=16,
+        **kwargs,
+    )
+
 Latte_models = {
+    "Latte-XL/1x2x2": Latte_XL_1x2x2,
     "Latte-XL/2x2x2": Latte_XL_2x2x2,
 }

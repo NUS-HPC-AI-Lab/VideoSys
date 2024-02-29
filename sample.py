@@ -10,7 +10,7 @@
 Sample new images from a pre-trained DiT.
 """
 import argparse
-
+import os
 import torch
 from diffusers.models import AutoencoderKL
 from torchvision.utils import save_image
@@ -21,9 +21,11 @@ from opendit.latte.latte import Latte_models
 from opendit.utils.download import find_model
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import AutoencoderKLWrapper
+from opendit.utils.ckpt_utils import load_from_sharded_state_dict
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
+
 
 
 def main(args):
@@ -77,21 +79,28 @@ def main(args):
     )
 
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
-    ckpt_path = args.ckpt or f"DiT-XL-2-{args.image_size}x{args.image_size}.pt"
-    state_dict = find_model(ckpt_path)
-    model.load_state_dict(state_dict)
+    ckpt_path = args.ckpt
+    if ckpt_path.endswith(".pt"):
+        state_dict = find_model(ckpt_path)
+        model.load_state_dict(state_dict)
+    else:
+        load_from_sharded_state_dict(model, ckpt_path)
     model.eval()  # important!
     diffusion = create_diffusion(str(args.num_sampling_steps))
 
-    # Labels to condition the model with (feel free to change):
-    class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
+    
 
     # Create sampling noise:
-    n = len(class_labels)
     if args.use_video:
+        # Labels to condition the model with (feel free to change):
+        class_labels = ["video test"] * 2
+        n = len(class_labels)
         z = torch.randn(n, vae.out_channels, *input_size, device=device)
-        y = ["video test"] * n * 2
+        y = class_labels * 2
     else:
+        # Labels to condition the model with (feel free to change):
+        class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
+        n = len(class_labels)
         z = torch.randn(n, 4, input_size, input_size, device=device)
         y = torch.tensor(class_labels, device=device)
         y_null = torch.tensor([1000] * n, device=device)
@@ -118,7 +127,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
+    parser.add_argument("--model", type=str, choices=list(DiT_models.keys()) + list(Latte_models.keys()), default="DiT-XL/2")
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)

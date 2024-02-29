@@ -10,6 +10,7 @@
 # --------------------------------------------------------
 
 from typing import Optional
+from einops import rearrange, repeat
 
 import numpy as np
 import torch
@@ -23,7 +24,7 @@ from opendit.dit.modules import DiTBlock, FinalLayer
 from opendit.embed.clip_text_emb import TextEmbedder
 from opendit.embed.label_emb import LabelEmbedder
 from opendit.embed.patch_emb import PatchEmbed3D
-from opendit.embed.pos_emb import get_2d_sincos_pos_embed, get_3d_sincos_pos_embed
+from opendit.embed.pos_emb import get_2d_sincos_pos_embed, get_1d_sincos_pos_embed
 from opendit.embed.time_emb import TimestepEmbedder
 from opendit.utils.operation import gather_forward_split_backward
 
@@ -60,6 +61,7 @@ class DiT(nn.Module):
         self.use_video = use_video
         self.in_channels = in_channels
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
+        self.hidden_size = hidden_size
         self.patch_size = patch_size
         self.input_size = input_size
         self.num_heads = num_heads
@@ -86,7 +88,13 @@ class DiT(nn.Module):
             self.num_patches = self.x_embedder.num_patches
         self.t_embedder = TimestepEmbedder(hidden_size)
 
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
+        if self.use_video:
+            self.num_temporal = input_size[0] // patch_size[0]
+            self.num_spatial = self.num_patches // self.num_temporal
+            self.register_buffer("pos_embed_spatial", self.get_spatial_pos_embed())
+            self.register_buffer("pos_embed_temporal", self.get_temporal_pos_embed())
+        else:
+            self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
 
         self.blocks = nn.ModuleList(
             [
@@ -113,6 +121,22 @@ class DiT(nn.Module):
 
     def enable_gradient_checkpointing(self):
         self.gradient_checkpointing = True
+    
+    def get_spatial_pos_embed(self):
+        pos_embed = get_2d_sincos_pos_embed(
+            self.hidden_size,
+            self.input_size[1] // self.patch_size[1],
+        )
+        pos_embed = torch.from_numpy(pos_embed).float().unsqueeze(0).requires_grad_(False)
+        return pos_embed
+
+    def get_temporal_pos_embed(self):
+        pos_embed = get_1d_sincos_pos_embed(
+            self.hidden_size,
+            self.input_size[0] // self.patch_size[0],
+        )
+        pos_embed = torch.from_numpy(pos_embed).float().unsqueeze(0).requires_grad_(False)
+        return pos_embed
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -126,15 +150,9 @@ class DiT(nn.Module):
         self.apply(_basic_init)
 
         # Initialize (and freeze) pos_embed by sin-cos embedding:
-        if self.use_video:
-            pos_embed = get_3d_sincos_pos_embed(
-                self.pos_embed.shape[-1],
-                self.input_size[-1] // self.patch_size[-1],
-                self.input_size[0] // self.patch_size[0],
-            )
-        else:
+        if not self.use_video:
             pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+            self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
         w = self.x_embedder.proj.weight.data
@@ -202,7 +220,16 @@ class DiT(nn.Module):
         # origin inputs should be float32, cast to specified dtype
         x = x.to(self.dtype)
 
-        x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        if self.use_video:
+            x = self.x_embedder(x)
+            x = rearrange(x, "b (t s) d -> b t s d", t=self.num_temporal, s=self.num_spatial)
+            x = x + self.pos_embed_spatial
+            x = rearrange(x, "b t s d -> b s t d")
+            x = x + self.pos_embed_temporal
+            x = rearrange(x, "b s t d -> b (t s) d")
+        else:
+            x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
@@ -307,6 +334,16 @@ def DiT_S_8(**kwargs):
     return DiT(depth=12, hidden_size=384, patch_size=8, num_heads=6, **kwargs)
 
 
+def VDiT_XL_1x2x2(**kwargs):
+    return DiT(
+        depth=28,
+        hidden_size=1152,
+        patch_size=(1, 2, 2),
+        num_heads=16,
+        use_video=True,
+        **kwargs,
+    )
+
 def VDiT_XL_2x2x2(**kwargs):
     return DiT(
         depth=28,
@@ -333,5 +370,6 @@ DiT_models = {
     "DiT-S/4": DiT_S_4,
     "DiT-S/8": DiT_S_8,
     # video model
+    "VDiT-XL/1x2x2": VDiT_XL_1x2x2,
     "VDiT-XL/2x2x2": VDiT_XL_2x2x2,
 }
