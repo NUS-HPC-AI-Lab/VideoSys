@@ -10,6 +10,7 @@
 Sample new images from a pre-trained DiT.
 """
 import argparse
+from contextlib import nullcontext
 
 import torch
 from diffusers.models import AutoencoderKL
@@ -18,8 +19,13 @@ from torchvision.utils import save_image
 from opendit.models.diffusion import create_diffusion
 from opendit.models.dit import DiT_models
 from opendit.utils.download import find_model
+from opendit.utils.import_utils import is_accelerate_available, is_huggingface_hub_available
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import AutoencoderKLWrapper
+
+if is_accelerate_available():
+    from accelerate import init_empty_weights
+    from accelerate.utils import set_module_tensor_to_device
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -33,6 +39,12 @@ def main(args):
 
     if args.ckpt is None:
         raise ValueError("Please specify a checkpoint path with --ckpt.")
+
+    if args.hub_repo_id is not None:
+        if not is_huggingface_hub_available():
+            raise ValueError(
+                "Providing `--hub_repo_id` requires the `huggingface_hub` library installed. Install it using `pip install huggingface_hub`."
+            )
 
     # Load model:
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
@@ -51,8 +63,9 @@ def main(args):
         input_size = args.image_size // 8
 
     dtype = torch.float32
-    model = (
-        DiT_models[args.model](
+    init_ctx = init_empty_weights if is_accelerate_available() else nullcontext
+    with init_ctx():
+        model = DiT_models[args.model](
             use_video=args.use_video,
             input_size=input_size,
             num_classes=args.num_classes,
@@ -61,13 +74,17 @@ def main(args):
             dtype=dtype,
             text_encoder=args.text_encoder,
         )
-        .to(device)
-        .to(dtype)
-    )
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
     ckpt_path = args.ckpt or f"DiT-XL-2-{args.image_size}x{args.image_size}.pt"
-    state_dict = find_model(ckpt_path)
-    model.load_state_dict(state_dict)
+    state_dict = find_model(ckpt_path, args.hub_repo_id)
+
+    if not is_accelerate_available():
+        model.load_state_dict(state_dict)
+    else:
+        for param_name, param in state_dict.items():
+            set_module_tensor_to_device(model, param_name, "cpu", value=param)
+
+    model.to(dtype=dtype, device=device)
     model.eval()  # important!
     diffusion = create_diffusion(str(args.num_sampling_steps))
 
@@ -122,6 +139,12 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Optional path to a DiT checkpoint (default: auto-download a pre-trained DiT-XL/2 model).",
+    )
+    parser.add_argument(
+        "--hub_repo_id",
+        type=str,
+        default=None,
+        help="Hugging Face Hub repository ID (such as: NUS-HPC-AI-Lab/OpenDiT) to download and cache a checkpoint automatically.",
     )
     args = parser.parse_args()
     main(args)

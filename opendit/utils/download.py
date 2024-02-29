@@ -12,18 +12,30 @@ import os
 import torch
 from torchvision.datasets.utils import download_url
 
+from opendit.utils.import_utils import is_huggingface_hub_available
+
+if is_huggingface_hub_available():
+    from huggingface_hub import hf_hub_download
+
 pretrained_models = {"DiT-XL-2-512x512.pt", "DiT-XL-2-256x256.pt"}
 
 
-def find_model(model_name):
+def find_model(model_name, repo_id=None):
     """
     Finds a pre-trained DiT model, downloading it if necessary. Alternatively, loads a model from a local path.
     """
     if model_name in pretrained_models:  # Find/download our pre-trained DiT checkpoints
         return download_model(model_name)
-    else:  # Load a custom DiT checkpoint:
-        assert os.path.isfile(model_name), f"Could not find DiT checkpoint at {model_name}"
-        checkpoint = torch.load(model_name, map_location=lambda storage, loc: storage)
+    else:
+        if repo_id is None:  # Load a custom DiT checkpoint:
+            assert os.path.isfile(model_name), f"Could not find DiT checkpoint at {model_name}"
+            checkpoint = torch.load(model_name, map_location=lambda storage, loc: storage)
+        else:
+            model_name = hf_hub_download(
+                repo_id=repo_id, filename=model_name
+            )  # Load from the HF Hub. Takes care of caching.
+            checkpoint = torch.load(model_name, map_location=lambda storage, loc: storage)
+
         if "ema" in checkpoint:  # supports checkpoints from train.py
             checkpoint = checkpoint["ema"]
         return checkpoint
