@@ -10,7 +10,7 @@
 Sample new images from a pre-trained DiT.
 """
 import argparse
-import os
+
 import torch
 from diffusers.models import AutoencoderKL
 from torchvision.utils import save_image
@@ -18,14 +18,13 @@ from torchvision.utils import save_image
 from opendit.diffusion import create_diffusion
 from opendit.dit.dit import DiT_models
 from opendit.latte.latte import Latte_models
+from opendit.utils.ckpt_utils import load_from_sharded_state_dict
 from opendit.utils.download import find_model
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import AutoencoderKLWrapper
-from opendit.utils.ckpt_utils import load_from_sharded_state_dict
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-
 
 
 def main(args):
@@ -88,8 +87,6 @@ def main(args):
     model.eval()  # important!
     diffusion = create_diffusion(str(args.num_sampling_steps))
 
-    
-
     # Create sampling noise:
     if args.use_video:
         # Labels to condition the model with (feel free to change):
@@ -127,7 +124,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, choices=list(DiT_models.keys()) + list(Latte_models.keys()), default="DiT-XL/2")
+    parser.add_argument(
+        "--model", type=str, choices=list(DiT_models.keys()) + list(Latte_models.keys()), default="DiT-XL/2"
+    )
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)
