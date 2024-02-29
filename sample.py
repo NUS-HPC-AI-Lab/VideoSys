@@ -90,7 +90,7 @@ def main(args):
     # Create sampling noise:
     if args.use_video:
         # Labels to condition the model with (feel free to change):
-        class_labels = ["video test"] * 2
+        class_labels = ["Biking", "Cliff Diving", "Rock Climbing Indoor", "Punch", "TaiChi"]
         n = len(class_labels)
         z = torch.randn(n, vae.out_channels, *input_size, device=device)
         y = class_labels * 2
