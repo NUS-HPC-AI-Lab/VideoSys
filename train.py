@@ -84,14 +84,16 @@ def main(args):
         tensorboard_dir = f"{experiment_dir}/tensorboard"
         os.makedirs(tensorboard_dir, exist_ok=True)
         writer = SummaryWriter(tensorboard_dir)
-    
+
     # ==============================
-    # Initialize Tensorboard
+    # Resolve repository creation.
     # ==============================
     if coordinator.is_master():
         if args.push_to_hub:
             if not is_huggingface_hub_available():
-                raise ValueError("--push_to_hub option needs the `huggingface_hub` library. Install it using `pip install huggingface_hub`.")
+                raise ValueError(
+                    "--push_to_hub option needs the `huggingface_hub` library. Install it using `pip install huggingface_hub`."
+                )
 
             repo_id = create_repo(repo_id=args.hub_model_id or Path(args.experiment_dir).name, exist_ok=True).repo_id
 
@@ -333,7 +335,11 @@ def main(args):
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
 
     if coordinator.is_master():
-        upload_folder(repo_id=repo_id, folder_path=experiment_dir, commit_message="End of training",)
+        upload_folder(
+            repo_id=repo_id,
+            folder_path=experiment_dir,
+            commit_message="End of training",
+        )
 
     logger.info("Done!")
 
@@ -372,8 +378,12 @@ if __name__ == "__main__":
     parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
     parser.add_argument("--sequence_parallel_type", type=str)
 
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the model files to the HF Hub after training.")
-    parser.add_argument("--hub_model_id", type=str, default=None help="ID of the repository to which the model files will be pushed.")
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether to push the model files to the HF Hub after training."
+    )
+    parser.add_argument(
+        "--hub_model_id", type=str, default=None, help="ID of the repository to which the model files will be pushed."
+    )
 
     args = parser.parse_args()
     main(args)
