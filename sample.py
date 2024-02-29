@@ -15,8 +15,8 @@ import torch
 from diffusers.models import AutoencoderKL
 from torchvision.utils import save_image
 
-from opendit.models.diffusion import create_diffusion
-from opendit.models.dit import DiT_models
+from opendit.diffusion import create_diffusion
+from opendit.dit.dit import DiT_models
 from opendit.utils.download import find_model
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import AutoencoderKLWrapper

@@ -22,8 +22,8 @@ from diffusers.models import AutoencoderKL
 from PIL import Image
 from tqdm import tqdm
 
-from opendit.models.diffusion import create_diffusion
-from opendit.models.dit import DiT_models
+from opendit.diffusion import create_diffusion
+from opendit.dit.dit import DiT_models
 from opendit.utils.download import find_model
 
 

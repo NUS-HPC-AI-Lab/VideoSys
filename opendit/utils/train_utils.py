@@ -4,7 +4,7 @@ import torch
 import torch.distributed as dist
 from colossalai.zero.low_level.low_level_optim import LowLevelZeroOptimizer
 
-from opendit.models.dit import DiT
+from opendit.dit.dit import DiT
 
 
 def get_model_numel(model: torch.nn.Module) -> int:
