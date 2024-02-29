@@ -152,18 +152,16 @@ def create_logger(logging_dir):
     return logger
 
 
-
-
 def load_from_sharded_state_dict(model, ckpt_path):
     import colossalai
     from colossalai.booster import Booster
     from colossalai.booster.plugin import LowLevelZeroPlugin
 
-    os.environ['RANK'] = '0'
-    os.environ['LOCAL_RANK'] = '0'
-    os.environ['WORLD_SIZE'] = '1'
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '29500'
+    os.environ["RANK"] = "0"
+    os.environ["LOCAL_RANK"] = "0"
+    os.environ["WORLD_SIZE"] = "1"
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
     colossalai.launch_from_torch({})
     plugin = LowLevelZeroPlugin(
         stage=2,
@@ -173,4 +171,3 @@ def load_from_sharded_state_dict(model, ckpt_path):
     booster = Booster(plugin=plugin)
     model, _, _, _, _ = booster.boost(model=model)
     booster.load_model(model, os.path.join(ckpt_path, "model"))
-

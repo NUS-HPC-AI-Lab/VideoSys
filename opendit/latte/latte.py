@@ -248,6 +248,7 @@ def Latte_XL_1x2x2(**kwargs):
         **kwargs,
     )
 
+
 Latte_models = {
     "Latte-XL/1x2x2": Latte_XL_1x2x2,
     "Latte-XL/2x2x2": Latte_XL_2x2x2,

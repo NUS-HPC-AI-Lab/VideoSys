@@ -10,13 +10,13 @@
 # --------------------------------------------------------
 
 from typing import Optional
-from einops import rearrange, repeat
 
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.utils.checkpoint
+from einops import rearrange
 from timm.models.vision_transformer import PatchEmbed
 from torch.distributed import ProcessGroup
 
@@ -24,7 +24,7 @@ from opendit.dit.modules import DiTBlock, FinalLayer
 from opendit.embed.clip_text_emb import TextEmbedder
 from opendit.embed.label_emb import LabelEmbedder
 from opendit.embed.patch_emb import PatchEmbed3D
-from opendit.embed.pos_emb import get_2d_sincos_pos_embed, get_1d_sincos_pos_embed
+from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_embed
 from opendit.embed.time_emb import TimestepEmbedder
 from opendit.utils.operation import gather_forward_split_backward
 
@@ -121,7 +121,7 @@ class DiT(nn.Module):
 
     def enable_gradient_checkpointing(self):
         self.gradient_checkpointing = True
-    
+
     def get_spatial_pos_embed(self):
         pos_embed = get_2d_sincos_pos_embed(
             self.hidden_size,
@@ -343,6 +343,7 @@ def VDiT_XL_1x2x2(**kwargs):
         use_video=True,
         **kwargs,
     )
+
 
 def VDiT_XL_2x2x2(**kwargs):
     return DiT(
