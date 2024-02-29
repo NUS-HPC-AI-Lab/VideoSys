@@ -1,9 +1,10 @@
-import numpy as np
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
 
-#################################################################################
-#                   Sine/Cosine Positional Embedding Functions                  #
-#################################################################################
-# https://github.com/facebookresearch/mae/blob/main/util/pos_embed.py
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+import numpy as np
 
 
 def get_3d_sincos_pos_embed(embed_dim, grid_size, t_size, cls_token=False):
