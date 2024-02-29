@@ -112,7 +112,7 @@ For more details on the configuration of the training process, please visit our 
 
 <b>Multi-Node Training.</b>
 
-To train OpenDiT on mutiple nodes, you can use the following command:
+To train OpenDiT on multiple nodes, you can use the following command:
 
 ```
 colossalai run --nproc_per_node 8 --hostfile hostfile train.py \
