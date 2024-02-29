@@ -17,6 +17,7 @@ from torchvision.utils import save_image
 
 from opendit.diffusion import create_diffusion
 from opendit.dit.dit import DiT_models
+from opendit.latte.latte import Latte_models
 from opendit.utils.download import find_model
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import AutoencoderKLWrapper
@@ -51,9 +52,19 @@ def main(args):
         input_size = args.image_size // 8
 
     dtype = torch.float32
+    if "DiT" in args.model:
+        if "VDiT" in args.model:
+            assert args.use_video, "VDiT model requires video data"
+        else:
+            assert not args.use_video, "DiT model requires image data"
+        model_class = DiT_models[args.model]
+    elif "Latte" in args.model:
+        assert args.use_video, "Latte model requires video data"
+        model_class = Latte_models[args.model]
+    else:
+        raise ValueError(f"Unknown model {args.model}")
     model = (
-        DiT_models[args.model](
-            use_video=args.use_video,
+        model_class(
             input_size=input_size,
             num_classes=args.num_classes,
             enable_flashattn=False,
@@ -64,6 +75,7 @@ def main(args):
         .to(device)
         .to(dtype)
     )
+
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
     ckpt_path = args.ckpt or f"DiT-XL-2-{args.image_size}x{args.image_size}.pt"
     state_dict = find_model(ckpt_path)

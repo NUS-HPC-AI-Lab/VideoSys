@@ -307,17 +307,19 @@ def DiT_S_8(**kwargs):
     return DiT(depth=12, hidden_size=384, patch_size=8, num_heads=6, **kwargs)
 
 
-def vDiT_XL_222(**kwargs):
+def VDiT_XL_2x2x2(**kwargs):
     return DiT(
         depth=28,
         hidden_size=1152,
         patch_size=(2, 2, 2),
         num_heads=16,
+        use_video=True,
         **kwargs,
     )
 
 
 DiT_models = {
+    # image model
     "DiT-XL/2": DiT_XL_2,
     "DiT-XL/4": DiT_XL_4,
     "DiT-XL/8": DiT_XL_8,
@@ -330,5 +332,6 @@ DiT_models = {
     "DiT-S/2": DiT_S_2,
     "DiT-S/4": DiT_S_4,
     "DiT-S/8": DiT_S_8,
-    "vDiT-XL/222": vDiT_XL_222,
+    # video model
+    "VDiT-XL/2x2x2": VDiT_XL_2x2x2,
 }

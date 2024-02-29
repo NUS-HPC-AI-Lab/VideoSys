@@ -231,3 +231,24 @@ class Latte(nn.Module):
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
         return torch.cat([eps, rest], dim=1)
+
+
+#################################################################################
+#                                   Model Configs                                  #
+#################################################################################
+
+
+def Latte_XL_2x2x2(**kwargs):
+    return Latte(
+        depth=28,
+        hidden_size=1152,
+        patch_size=(2, 2, 2),
+        num_heads=16,
+        use_video=True,
+        **kwargs,
+    )
+
+
+Latte_models = {
+    "Latte-XL/2x2x2": Latte_XL_2x2x2,
+}

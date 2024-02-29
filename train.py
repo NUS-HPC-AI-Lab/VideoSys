@@ -25,7 +25,8 @@ from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
 from opendit.diffusion import create_diffusion
-from opendit.dit.dit import DiT, DiT_models
+from opendit.dit.dit import DiT_models
+from opendit.latte.latte import Latte_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import prepare_dataloader
 from opendit.utils.operation import model_sharding
@@ -124,9 +125,9 @@ def main(args):
         input_size = args.image_size // 8
 
     # Set mixed precision
-    if args.mixed_precision == "bf16":
+    if args.mixed_precision == "bf16" and args.plugin != "ddp":
         dtype = torch.bfloat16
-    elif args.mixed_precision == "fp16":
+    elif args.mixed_precision == "fp16" and args.plugin != "ddp":
         dtype = torch.float16
     elif args.mixed_precision == "fp32" and args.plugin == "ddp":
         dtype = torch.float32
@@ -135,7 +136,6 @@ def main(args):
 
     # Shared model config for two models
     model_config = {
-        "use_video": args.use_video,
         "input_size": input_size,
         "num_classes": args.num_classes,
         "enable_layernorm_kernel": args.enable_layernorm_kernel,
@@ -145,8 +145,20 @@ def main(args):
         "text_encoder": args.text_encoder,
     }
 
-    model: DiT = (
-        DiT_models[args.model](
+    # Create DiT model
+    if "DiT" in args.model:
+        if "VDiT" in args.model:
+            assert args.use_video, "VDiT model requires video data"
+        else:
+            assert not args.use_video, "DiT model requires image data"
+        model_class = DiT_models[args.model]
+    elif "Latte" in args.model:
+        assert args.use_video, "Latte model requires video data"
+        model_class = Latte_models[args.model]
+    else:
+        raise ValueError(f"Unknown model {args.model}")
+    model = (
+        model_class(
             enable_flashattn=args.enable_flashattn,
             sequence_parallel_group=pg_manager.sp_group,
             dtype=dtype,
@@ -164,11 +176,13 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema: DiT = DiT_models[args.model](**model_config).to(device)
-    ema = ema.to(torch.float32) if args.plugin == "zero2" else ema.to(dtype)
+    ema = model_class(**model_config).to(device)
+    ema = ema.to(torch.float32)
     ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
+
+    # Create diffusion
     # default: 1000 steps, linear noise schedule
     diffusion = create_diffusion(timestep_respacing="")
 
@@ -178,6 +192,7 @@ def main(args):
         filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=0, adamw_mode=True
     )
     # You can use a lr scheduler if you want
+    # Recommend if you continue training from a model
     lr_scheduler = None
 
     # Prepare models for training
