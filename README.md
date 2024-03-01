@@ -92,7 +92,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ### Image
 
-<b>Training.</b> You can train the DiT model by executing the following command:
+<b>Training.</b> You can train the DiT model on CIFAR10 by executing the following command:
 
 ```shell
 # Use script
@@ -100,7 +100,8 @@ bash train_img.sh
 # Use command line
 torchrun --standalone --nproc_per_node=2 train.py \
     --model DiT-XL/2 \
-    --batch_size 2
+    --batch_size 2 \
+    --num_classes 10
 ```
 
 We disable all speedup methods by default. Here are details of some key arguments for training:
@@ -108,11 +109,12 @@ We disable all speedup methods by default. Here are details of some key argument
 - `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
 - `--mixed_precision`: The data type for mixed precision training. The default value is `fp16`.
 - `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to disable it when memory is enough.
-- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it for GPU < H100.
+- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. This kernel will introduces NaN under some circumstances. So we recommend to disable it for now.
 - `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it.
 - `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
 - `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The default value is 1. Recommend to disable it if memory is enough.
 - `--load`: Load previous saved checkpoint dir and continue training.
+- `--num_classes`: Label class number. Only used for label-to-image generation.
 
 
 For more details on the configuration of the training process, please visit our code.
@@ -222,6 +224,7 @@ torchrun --standalone --nproc_per_node=8 train.py \
     --enable_layernorm_kernel \
     --enable_flashattn \
     --mixed_precision fp16
+    --num_classes 1000
 ```
 
 
