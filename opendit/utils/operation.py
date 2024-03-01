@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
 from torch.distributed import ProcessGroup
-from torch.distributed._functional_collectives import all_gather_tensor, reduce_scatter_tensor
 
 
 class AllToAll(torch.autograd.Function):
@@ -67,6 +66,8 @@ class AsyncAllGatherForTwo(torch.autograd.Function):
             outputs: Tensor
             handle: Optional[Work], if overlap is True
         """
+        from torch.distributed._functional_collectives import all_gather_tensor
+
         ctx.group = group
         ctx.sp_rank = sp_rank
         ctx.sp_size = sp_size
@@ -93,6 +94,8 @@ class AsyncAllGatherForTwo(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs) -> Tuple[Tensor, None, None]:
+        from torch.distributed._functional_collectives import reduce_scatter_tensor
+
         group = ctx.group
         sp_rank = ctx.sp_rank
         sp_size = ctx.sp_size
