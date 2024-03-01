@@ -22,11 +22,39 @@ def find_model(model_name):
     if model_name in pretrained_models:  # Find/download our pre-trained DiT checkpoints
         return download_model(model_name)
     else:  # Load a custom DiT checkpoint:
-        assert os.path.isfile(model_name), f"Could not find DiT checkpoint at {model_name}"
-        checkpoint = torch.load(model_name, map_location=lambda storage, loc: storage)
-        if "ema" in checkpoint:  # supports checkpoints from train.py
-            checkpoint = checkpoint["ema"]
-        return checkpoint
+        if not os.path.isfile(model_name):
+            # if the model_name is a directory, then we assume we should load it in the Hugging Face manner
+            # i.e. the model weights are sharded into multiple files and there is an index.json file
+            # walk through the files in the directory and find the index.json file
+            index_file = [os.path.join(model_name, f) for f in os.listdir(model_name) if "index.json" in f]
+            assert len(index_file) == 1, f"Could not find index.json in {model_name}"
+
+            # process index json
+            with open (index_file[0], "r") as f:
+                index_data = json.load(f)
+
+            bin_to_weight_mapping = dict()
+            for k, v in index_data['weight_map'].items():
+                if v in bin_to_weight_mapping:
+                    bin_to_weight_mapping[v].append(k)
+                else:
+                    bin_to_weight_mapping[v] = [k]
+            
+            # make state dict
+            state_dict = dict
+            for bin_name, weight_list in bin_to_weight_mapping.items():
+                bin_path = os.path.join(model_name, bin_name)
+                bin_state_dict = torch.load(bin_path, map_location=lambda storage, loc: storage)
+                for weight in weight_list:
+                    state_dict[weight] = bin_state_dict[weight]
+            return state_dict            
+        else:
+            # if it is a file, we just load it directly in the typical PyTorch manner
+            assert os.path.exists(model_name), f"Could not find DiT checkpoint at {model_name}"
+            checkpoint = torch.load(model_name, map_location=lambda storage, loc: storage)
+            if "ema" in checkpoint:  # supports checkpoints from train.py
+                checkpoint = checkpoint["ema"]
+            return checkpoint
 
 
 def download_model(model_name):
