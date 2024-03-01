@@ -6,9 +6,14 @@
 <p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://discord.gg/yXF4n8Et">[Discord]</a> | <a href="./figure/wechat.jpg">[WeChat]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a> | <a href="https://zhuanlan.zhihu.com/p/684457582">[Zhihu]</a> | <a href="https://mp.weixin.qq.com/s/IBb9vlo8hfYKrj9ztxkhjg">[Media]</a></p>
 </p>
 
+###  Latest News 🔥
+
+* [2024/03/01] Support DiT-based Latte for text-to-video generation.
+* [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
+
 # About
 
-OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
+OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer (DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
 
 OpenDiT boasts the performance by the following techniques:
 
@@ -87,7 +92,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ### Image
 
-<b>Training.</b> You can train the DiT model by executing the following command:
+<b>Training.</b> You can train the DiT model on CIFAR10 by executing the following command:
 
 ```shell
 # Use script
@@ -95,7 +100,8 @@ bash train_img.sh
 # Use command line
 torchrun --standalone --nproc_per_node=2 train.py \
     --model DiT-XL/2 \
-    --batch_size 2
+    --batch_size 2 \
+    --num_classes 10
 ```
 
 We disable all speedup methods by default. Here are details of some key arguments for training:
@@ -103,10 +109,13 @@ We disable all speedup methods by default. Here are details of some key argument
 - `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
 - `--mixed_precision`: The data type for mixed precision training. The default value is `fp16`.
 - `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to disable it when memory is enough.
-- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it for GPU < H100.
 - `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it.
 - `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
+- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. This kernel will cause NaN under some circumstances. So we recommend to disable it for now.
 - `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The default value is 1. Recommend to disable it if memory is enough.
+- `--load`: Load previous saved checkpoint dir and continue training.
+- `--num_classes`: Label class number. Only used for label-to-image generation.
+
 
 For more details on the configuration of the training process, please visit our code.
 
@@ -137,14 +146,17 @@ python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 ```
 
 ### Video
-<b>Training.</b> Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
+<b>Training.</b> We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
+
+Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
 
 ```shell
 # train with scipt
 bash train_video.sh
 # train with command line
+# model can also be Latte-XL/1x2x2
 torchrun --standalone --nproc_per_node=2 train.py \
-    --model vDiT-XL/222 \
+    --model VDiT-XL/1x2x2 \
     --use_video \
     --data_path ./videos/demo.csv \
     --batch_size 1 \
@@ -166,14 +178,17 @@ This script shares the same speedup methods as we have shown in the image traini
 # Use script
 bash sample_video.sh
 # Use command line
+# model can also be Latte-XL/1x2x2
 python sample.py \
-    --model vDiT-XL/222 \
+    --model VDiT-XL/1x2x2 \
     --use_video \
     --ckpt ckpt_path \
     --num_frames 16 \
     --image_size 256 \
     --frame_interval 3
 ```
+
+Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX/model`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 ## FastSeq
 
@@ -210,7 +225,8 @@ torchrun --standalone --nproc_per_node=8 train.py \
     --batch_size 180 \
     --enable_layernorm_kernel \
     --enable_flashattn \
-    --mixed_precision fp16
+    --mixed_precision fp16 \
+    --num_classes 1000
 ```
 
 
