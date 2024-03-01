@@ -212,7 +212,12 @@ def main(args):
             frame_interval=args.frame_interval,
         )
     else:
+        # master process goes first
+        if not coordinator.is_master():
+            dist.barrier()
         dataset = CIFAR10(args.data_path, transform=get_transforms_image(args.image_size), download=True)
+        if coordinator.is_master():
+            dist.barrier()
     dataloader = prepare_dataloader(
         dataset,
         batch_size=args.batch_size,

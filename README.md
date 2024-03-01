@@ -1,7 +1,7 @@
 <p align="center">
 <img width="200px" alt="OpenDiT" src="./figure/logo.png?raw=true">
 </p>
-<p align="center"><b><big>An Easy, Fast and Memory-Efficent System for DiT Training and Inference</big></b></p>
+<p align="center"><b><big>An Easy, Fast and Memory-Efficient System for DiT Training and Inference</big></b></p>
 </p>
 <p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://discord.gg/yXF4n8Et">[Discord]</a> | <a href="./figure/wechat.jpg">[WeChat]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a> | <a href="https://zhuanlan.zhihu.com/p/684457582">[Zhihu]</a> | <a href="https://mp.weixin.qq.com/s/IBb9vlo8hfYKrj9ztxkhjg">[Media]</a></p>
 </p>
@@ -117,7 +117,7 @@ For more details on the configuration of the training process, please visit our 
 
 <b>Multi-Node Training.</b>
 
-To train OpenDiT on mutiple nodes, you can use the following command:
+To train OpenDiT on multiple nodes, you can use the following command:
 
 ```
 colossalai run --nproc_per_node 8 --hostfile hostfile train.py \
@@ -237,7 +237,7 @@ If you encounter problems using OpenDiT or have a feature request, feel free to 
 ```
 @misc{zhao2024opendit,
   author = {Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
-  title = {OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference},
+  title = {OpenDiT: An Easy, Fast and Memory-Efficient System for DiT Training and Inference},
   year = {2024},
   publisher = {GitHub},
   journal = {GitHub repository},
