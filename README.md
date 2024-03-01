@@ -107,7 +107,7 @@ torchrun --standalone --nproc_per_node=2 train.py \
 We disable all speedup methods by default. Here are details of some key arguments for training:
 - `--nproc_per_node`: The GPU number you want to use for the current node.
 - `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
-- `--mixed_precision`: The data type for mixed precision training. The default value is `fp16`.
+- `--mixed_precision`: The data type for mixed precision training. The default value is `bf16`.
 - `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to disable it when memory is enough.
 - `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it.
 - `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
@@ -165,7 +165,7 @@ torchrun --standalone --nproc_per_node=2 train.py \
     --frame_interval 3
 
 # preprocess
-# our code read video from csv as the demo shows
+# our code read video from csv using our toy data
 # we provide a code to transfer ucf101 to csv format
 python preprocess.py
 ```
@@ -188,7 +188,7 @@ python sample.py \
     --frame_interval 3
 ```
 
-Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX/model`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
+Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX/model`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 ## FastSeq
 
@@ -225,7 +225,7 @@ torchrun --standalone --nproc_per_node=8 train.py \
     --batch_size 180 \
     --enable_layernorm_kernel \
     --enable_flashattn \
-    --mixed_precision fp16 \
+    --mixed_precision bf16 \
     --num_classes 1000
 ```
 
