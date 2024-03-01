@@ -154,8 +154,9 @@ Our video training pipeline is a faithful implementation, and we encourage you t
 # train with scipt
 bash train_video.sh
 # train with command line
+# model can also be Latte-XL/1x2x2
 torchrun --standalone --nproc_per_node=2 train.py \
-    --model VDiT-XL/1x2x2 # or Latte-XL/1x2x2 \
+    --model VDiT-XL/1x2x2 \
     --use_video \
     --data_path ./videos/demo.csv \
     --batch_size 1 \
@@ -177,8 +178,9 @@ This script shares the same speedup methods as we have shown in the image traini
 # Use script
 bash sample_video.sh
 # Use command line
+# model can also be Latte-XL/1x2x2
 python sample.py \
-     --model VDiT-XL/1x2x2 # or Latte-XL/1x2x2 \
+    --model VDiT-XL/1x2x2 \
     --use_video \
     --ckpt ckpt_path \
     --num_frames 16 \
@@ -223,7 +225,7 @@ torchrun --standalone --nproc_per_node=8 train.py \
     --batch_size 180 \
     --enable_layernorm_kernel \
     --enable_flashattn \
-    --mixed_precision fp16
+    --mixed_precision fp16 \
     --num_classes 1000
 ```
 
