@@ -15,7 +15,7 @@ from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import load, record_model_param_shape, save
 from opendit.utils.train_utils import requires_grad
 
-WORKERS = 4
+WORKERS = 2
 
 
 def sequence_parallel_ckpt_load():
@@ -40,7 +40,7 @@ def sequence_parallel_ckpt_load():
     enable_layernorm_kernel = True
     enable_modulate_kernel = True
     enable_flashattn = False
-    sequence_parallel_size = 4
+    sequence_parallel_size = WORKERS
     sequence_parallel_type = "longseq"
     torch.set_default_dtype(DTYPE)
 
@@ -171,7 +171,7 @@ def sequence_parallel_ckpt_save():
     enable_layernorm_kernel = True
     enable_modulate_kernel = True
     enable_flashattn = False
-    sequence_parallel_size = 4
+    sequence_parallel_size = WORKERS
     sequence_parallel_type = "longseq"
     torch.set_default_dtype(DTYPE)
 

@@ -56,6 +56,9 @@ class DistAttention(nn.Module):
         self.sequence_parallel_overlap = sequence_parallel_overlap
         self.sequence_parallel_overlap_size = sequence_parallel_overlap_size
         if self.sequence_parallel_size > 1:
+            assert (
+                self.num_heads % self.sequence_parallel_size == 0
+            ), "num_heads should be divisible by sequence_parallel_size"
             self.sequence_parallel_rank = dist.get_rank(sequence_parallel_group)
             self.sequence_parallel_param_slice = slice(
                 self.qkv.out_features // sequence_parallel_size * self.sequence_parallel_rank,
