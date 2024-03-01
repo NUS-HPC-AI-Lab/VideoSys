@@ -8,7 +8,7 @@
 Functions for downloading pre-trained DiT models
 """
 import os
-
+import json
 import torch
 from torchvision.datasets.utils import download_url
 
@@ -41,7 +41,7 @@ def find_model(model_name):
                     bin_to_weight_mapping[v] = [k]
             
             # make state dict
-            state_dict = dict
+            state_dict = dict()
             for bin_name, weight_list in bin_to_weight_mapping.items():
                 bin_path = os.path.join(model_name, bin_name)
                 bin_state_dict = torch.load(bin_path, map_location=lambda storage, loc: storage)
