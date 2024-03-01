@@ -6,9 +6,14 @@
 <p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://discord.gg/yXF4n8Et">[Discord]</a> | <a href="./figure/wechat.jpg">[WeChat]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a> | <a href="https://zhuanlan.zhihu.com/p/684457582">[Zhihu]</a> | <a href="https://mp.weixin.qq.com/s/IBb9vlo8hfYKrj9ztxkhjg">[Media]</a></p>
 </p>
 
+###  Latest News 🔥
+
+* [2024/03/01] Support DiT-based Latte for text-to-video generation.
+* [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
+
 # About
 
-OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer(DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
+OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer (DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
 
 OpenDiT boasts the performance by the following techniques:
 
@@ -137,14 +142,16 @@ python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
 ```
 
 ### Video
-<b>Training.</b> Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
+<b>Training.</b> We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
+
+Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
 
 ```shell
 # train with scipt
 bash train_video.sh
 # train with command line
 torchrun --standalone --nproc_per_node=2 train.py \
-    --model vDiT-XL/222 \
+    --model VDiT-XL/1x2x2 # or Latte-XL/1x2x2 \
     --use_video \
     --data_path ./videos/demo.csv \
     --batch_size 1 \
@@ -167,13 +174,15 @@ This script shares the same speedup methods as we have shown in the image traini
 bash sample_video.sh
 # Use command line
 python sample.py \
-    --model vDiT-XL/222 \
+     --model VDiT-XL/1x2x2 # or Latte-XL/1x2x2 \
     --use_video \
     --ckpt ckpt_path \
     --num_frames 16 \
     --image_size 256 \
     --frame_interval 3
 ```
+
+Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 ## FastSeq
 
