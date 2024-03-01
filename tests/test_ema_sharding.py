@@ -27,7 +27,7 @@ def assert_params_equal(model1, model2):
 def run_ema_sharding():
     plugin = LowLevelZeroPlugin(precision="fp16", stage=2, max_norm=1.0, initial_scale=32)
     booster = Booster(plugin=plugin)
-    model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4).cuda().half()
+    model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4, dtype=torch.float16).cuda().half()
 
     ema_sharding = deepcopy(model).eval()
     model_param_shape = record_model_param_shape(ema_sharding)

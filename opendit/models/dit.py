@@ -80,13 +80,14 @@ class DiT(nn.Module):
         # For video input, use PatchEmbed3D and TextEmbedder
         if self.use_video:
             self.x_embedder = PatchEmbed3D(patch_size, in_channels, embed_dim=hidden_size)
+            self.t_embedder = TimestepEmbedder(hidden_size)
             self.y_embedder = TextEmbedder(path=text_encoder, hidden_size=hidden_size)
             self.num_patches = np.prod([input_size[i] // patch_size[i] for i in range(3)])
         else:
             self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
+            self.t_embedder = TimestepEmbedder(hidden_size)
             self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
             self.num_patches = self.x_embedder.num_patches
-        self.t_embedder = TimestepEmbedder(hidden_size)
 
         if self.use_video:
             self.num_temporal = input_size[0] // patch_size[0]

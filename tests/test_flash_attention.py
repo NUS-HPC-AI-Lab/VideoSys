@@ -7,7 +7,7 @@ import torch
 from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
 from torch.testing import assert_close
 
-from opendit.models.dit import DistAttention
+from opendit.modules.attn import DistAttention
 
 torch.manual_seed(1024)
 

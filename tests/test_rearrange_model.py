@@ -33,7 +33,7 @@ def sequence_parallel_ckpt_load():
     lr_scheduler = None
     dataloader = None
 
-    model_type = "DiT-XL/2"
+    model_type = "DiT-S/2"
     image_size = 256
     latent_size = image_size // 8
     num_classes = 1000
@@ -164,7 +164,7 @@ def sequence_parallel_ckpt_save():
     lr_scheduler = None
     dataloader = None
 
-    model_type = "DiT-XL/2"
+    model_type = "DiT-S/2"
     image_size = 256
     latent_size = image_size // 8
     num_classes = 1000

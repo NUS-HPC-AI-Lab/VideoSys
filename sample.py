@@ -18,7 +18,6 @@ from torchvision.utils import save_image
 from opendit.diffusion import create_diffusion
 from opendit.models.dit import DiT_models
 from opendit.models.latte import Latte_models
-from opendit.utils.ckpt_utils import load_from_sharded_state_dict
 from opendit.utils.download import find_model
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import AutoencoderKLWrapper
@@ -79,11 +78,8 @@ def main(args):
 
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
     ckpt_path = args.ckpt
-    if ckpt_path.endswith(".pt"):
-        state_dict = find_model(ckpt_path)
-        model.load_state_dict(state_dict)
-    else:
-        load_from_sharded_state_dict(model, ckpt_path)
+    state_dict = find_model(ckpt_path)
+    model.load_state_dict(state_dict)
     model.eval()  # important!
     diffusion = create_diffusion(str(args.num_sampling_steps))
 

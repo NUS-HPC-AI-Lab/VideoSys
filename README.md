@@ -112,6 +112,8 @@ We disable all speedup methods by default. Here are details of some key argument
 - `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it.
 - `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
 - `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The default value is 1. Recommend to disable it if memory is enough.
+- `--load`: Load previous saved checkpoint dir and continue training.
+
 
 For more details on the configuration of the training process, please visit our code.
 
@@ -182,7 +184,7 @@ python sample.py \
     --frame_interval 3
 ```
 
-Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
+Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX/model`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 ## FastSeq
 

@@ -17,7 +17,7 @@ from opendit.models.dit import DiT
 def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
     plugin = LowLevelZeroPlugin(precision="fp16", stage=stage, max_norm=1.0, initial_scale=32, cpu_offload=offload)
     booster = Booster(plugin=plugin)
-    model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4).half()
+    model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4, dtype=torch.float16).half()
     criterion = lambda x: x.mean()
     optimizer = HybridAdam((model.parameters()), lr=0.001)
     model, optimizer, criterion, _, _ = booster.boost(model, optimizer, criterion)
@@ -44,7 +44,7 @@ def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
 
     dist.barrier()
 
-    new_model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4).half()
+    new_model = DiT(depth=2, hidden_size=64, patch_size=2, num_heads=4, dtype=torch.float16).half()
     new_optimizer = HybridAdam((new_model.parameters()), lr=0.001)
     new_model, new_optimizer, _, _, _ = booster.boost(new_model, new_optimizer)
 

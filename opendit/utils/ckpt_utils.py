@@ -5,12 +5,10 @@ import operator
 import os
 from typing import Tuple
 
-import colossalai
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 from colossalai.booster import Booster
-from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
@@ -152,20 +150,3 @@ def create_logger(logging_dir):
         logger = logging.getLogger(__name__)
         logger.addHandler(logging.NullHandler())
     return logger
-
-
-def load_from_sharded_state_dict(model, ckpt_path):
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29501"
-    colossalai.launch_from_torch({})
-    plugin = LowLevelZeroPlugin(
-        stage=2,
-        precision="fp32",
-        initial_scale=2**16,
-    )
-    booster = Booster(plugin=plugin)
-    model, _, _, _, _ = booster.boost(model=model)
-    booster.load_model(model, os.path.join(ckpt_path, "model"))
