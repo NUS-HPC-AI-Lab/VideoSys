@@ -92,11 +92,14 @@ def main(args):
         y = class_labels * 2
     else:
         # Labels to condition the model with (feel free to change):
-        class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
+        if args.num_classes == 1000:
+            class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
+        else:
+            class_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         n = len(class_labels)
         z = torch.randn(n, 4, input_size, input_size, device=device)
         y = torch.tensor(class_labels, device=device)
-        y_null = torch.tensor([1000] * n, device=device)
+        y_null = torch.tensor([0] * n, device=device)
         y = torch.cat([y, y_null], 0)
 
     # Setup classifier-free guidance:

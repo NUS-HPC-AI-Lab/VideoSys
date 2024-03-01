@@ -114,7 +114,7 @@ We disable all speedup methods by default. Here are details of some key argument
 - `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. This kernel will cause NaN under some circumstances. So we recommend to disable it for now.
 - `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The default value is 1. Recommend to disable it if memory is enough.
 - `--load`: Load previous saved checkpoint dir and continue training.
-- `--num_classes`: Label class number. Only used for label-to-image generation.
+- `--num_classes`: Label class number. Should be 10 for CIFAR10 and 1000 for ImageNet. Only used for label-to-image generation.
 
 
 For more details on the configuration of the training process, please visit our code.
@@ -126,7 +126,8 @@ To train OpenDiT on multiple nodes, you can use the following command:
 ```
 colossalai run --nproc_per_node 8 --hostfile hostfile train.py \
     --model DiT-XL/2 \
-    --batch_size 2
+    --batch_size 2 \
+    --num_classes 10
 ```
 
 And you need to create `hostfile` under the current dir. It should contain all IP address of your nodes and you need to make sure all nodes can be connected without password by ssh. An example of hostfile:
@@ -142,8 +143,15 @@ And you need to create `hostfile` under the current dir. It should contain all I
 # Use script
 bash sample_img.sh
 # Use command line
-python sample.py --model DiT-XL/2 --image_size 256 --ckpt ./model.pt
+python sample.py \
+    --model DiT-XL/2 \
+    --image_size 256 \
+    --num_classes 10 \
+    --ckpt ./model.pt
 ```
+Here are details of some addtional key arguments for inference:
+- `--ckpt`: The weight of ema model `ema.pt`. To check your training progress, it can also be our saved base model `epochXX-global_stepXX/model`, it will produce better results than ema in early training stage.
+- `--num_classes`: Label class number. Should be 10 for CIFAR10 and 1000 for ImageNet.
 
 ### Video
 <b>Training.</b> We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
