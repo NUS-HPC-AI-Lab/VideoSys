@@ -16,8 +16,8 @@ from diffusers.models import AutoencoderKL
 from torchvision.utils import save_image
 
 from opendit.diffusion import create_diffusion
-from opendit.dit.dit import DiT_models
-from opendit.latte.latte import Latte_models
+from opendit.models.dit import DiT_models
+from opendit.models.latte import Latte_models
 from opendit.utils.ckpt_utils import load_from_sharded_state_dict
 from opendit.utils.download import find_model
 from opendit.vae.reconstruct import save_sample

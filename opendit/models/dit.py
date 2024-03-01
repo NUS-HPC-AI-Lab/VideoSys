@@ -20,12 +20,12 @@ from einops import rearrange
 from timm.models.vision_transformer import PatchEmbed
 from torch.distributed import ProcessGroup
 
-from opendit.dit.modules import DiTBlock, FinalLayer
 from opendit.embed.clip_text_emb import TextEmbedder
 from opendit.embed.label_emb import LabelEmbedder
 from opendit.embed.patch_emb import PatchEmbed3D
 from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_embed
 from opendit.embed.time_emb import TimestepEmbedder
+from opendit.modules.block import DiTBlock, FinalLayer
 from opendit.utils.operation import gather_forward_split_backward
 
 

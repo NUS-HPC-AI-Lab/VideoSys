@@ -25,8 +25,8 @@ from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
 from opendit.diffusion import create_diffusion
-from opendit.dit.dit import DiT_models
-from opendit.latte.latte import Latte_models
+from opendit.models.dit import DiT_models
+from opendit.models.latte import Latte_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import prepare_dataloader
 from opendit.utils.operation import model_sharding

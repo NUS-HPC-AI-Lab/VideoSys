@@ -18,7 +18,7 @@ import torch.utils.checkpoint
 from timm.models.vision_transformer import Mlp
 from torch.distributed import ProcessGroup
 
-from opendit.dit.attn import DistAttention
+from opendit.modules.attn import DistAttention
 
 
 def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
