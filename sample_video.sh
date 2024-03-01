@@ -1,5 +1,5 @@
 python sample.py \
-    --model VDiT-XL/2x2x2 \
+    --model VDiT-XL/1x2x2 \
     --use_video \
     --ckpt ckpt_path \
     --num_frames 16 \
