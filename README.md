@@ -151,7 +151,7 @@ python sample.py \
 ```
 Here are details of some addtional key arguments for inference:
 - `--ckpt`: The weight of ema model `ema.pt`. To check your training progress, it can also be our saved base model `epochXX-global_stepXX/model`, it will produce better results than ema in early training stage.
-- `--num_classes`: Label class number. Should be 10 for CIFAR10 and 1000 for ImageNet.
+- `--num_classes`: Label class number. Should be 10 for CIFAR10, and 1000 for ImageNet (including official and our checkpoint).
 
 ### Video
 <b>Training.</b> We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
