@@ -147,7 +147,7 @@ python sample.py \
     --model DiT-XL/2 \
     --image_size 256 \
     --num_classes 10 \
-    --ckpt ./model.pt
+    --ckpt ckpt_path
 ```
 Here are details of some addtional key arguments for inference:
 - `--ckpt`: The weight of ema model `ema.pt`. To check your training progress, it can also be our saved base model `epochXX-global_stepXX/model`, it will produce better results than ema in early training stage.
