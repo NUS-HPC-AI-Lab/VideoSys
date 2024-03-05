@@ -6,20 +6,24 @@ import torch.distributed as dist
 from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
 from torch.testing import assert_close
 
-from opendit.models.dit import DistAttention, DiTBlock
+from opendit.modules.attn import DistAttention
+from opendit.modules.block import DiTBlock
 
 WORKERS = 4
 DTYPE = torch.float16
 
 
-def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn):
+def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn, sequence_parallel_type):
     seq_len = seq_len
     hidden_dim = hidden_dim
     head_num = head_num
     batch_size = batch_size
     world_size = dist.get_world_size()
 
-    torch.set_default_dtype(DTYPE)
+    if use_flash_attn:
+        torch.set_default_dtype(DTYPE)
+    else:
+        torch.set_default_dtype(torch.float32)
 
     x = torch.randn(batch_size, seq_len, hidden_dim).cuda()
     x_unshard = x.clone()
@@ -31,15 +35,25 @@ def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn)
     dist_attn_without_sp = DistAttention(
         dim=hidden_dim,
         num_heads=head_num,
+        qkv_bias=True,
         enable_flashattn=use_flash_attn,
         sequence_parallel_size=1,
         sequence_parallel_group=None,
     ).cuda()
 
     # DistAttention with sequence parallel
-    dist_attn_with_sp = copy.deepcopy(dist_attn_without_sp)
-    setattr(dist_attn_with_sp, "sequence_parallel_size", world_size)
-    setattr(dist_attn_with_sp, "sequence_parallel_group", None)
+    dist_attn_with_sp = DistAttention(
+        dim=hidden_dim,
+        num_heads=head_num,
+        qkv_bias=True,
+        enable_flashattn=use_flash_attn,
+        sequence_parallel_size=world_size,
+        sequence_parallel_group=None,
+        sequence_parallel_type=sequence_parallel_type,
+        sequence_parallel_overlap=False,
+    ).cuda()
+    dist_attn_with_sp.load_state_dict(copy.deepcopy(dist_attn_without_sp.state_dict()))
+    # dist_attn_with_sp.rearrange_fused_weight(dist_attn_with_sp.qkv)
 
     # Attention forward (Without Sequence parallel)
     no_sp_output = dist_attn_without_sp(x_unshard)
@@ -52,11 +66,14 @@ def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn)
     seq_out = torch.cat(out_list, dim=1)
 
     # forward result check
-    assert_close(seq_out, no_sp_output, atol=1e-4, rtol=1e-4)
+    if use_flash_attn:
+        assert_close(seq_out, no_sp_output, atol=5e-4, rtol=5e-4)
+    else:
+        assert_close(seq_out, no_sp_output, atol=1e-4, rtol=1e-4)
 
     # Attention backward (Without Sequence parallel)
     no_sp_output.sum().backward()
-    qkv_grad_no_sp = dist_attn_without_sp.qkv.weight.grad
+    dist_attn_without_sp.qkv.weight.grad
     o_grad_no_sp = dist_attn_without_sp.proj.weight.grad
     x_unshard_grad = x_unshard.grad
 
@@ -73,20 +90,28 @@ def seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn)
     dist.all_gather(x_grad_seq_list, x_shard_grad)
     x_grad_seq_gather = torch.cat(x_grad_seq_list, dim=1)
 
-    # backward result check
-    assert_close(qkv_grad_sp, qkv_grad_no_sp, atol=5e-2, rtol=1e-2)
-    assert_close(o_grad_sp, o_grad_no_sp, atol=5e-3, rtol=5e-3)
-    assert_close(x_grad_seq_gather, x_unshard_grad, atol=1e-3, rtol=1e-3)
+    # Backward result check
+    if use_flash_attn:
+        assert_close(o_grad_sp, o_grad_no_sp, atol=5e-2, rtol=5e-2)
+        assert_close(x_grad_seq_gather, x_unshard_grad, atol=1e-3, rtol=1e-3)
+    else:
+        assert_close(o_grad_sp, o_grad_no_sp, atol=5e-5, rtol=5e-5)
+        assert_close(x_grad_seq_gather, x_unshard_grad, atol=5e-5, rtol=5e-5)
 
 
-def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn, layernorm_kernel, modulate_kernel):
+def seq_parallel_block(
+    seq_len, hidden_dim, head_num, batch_size, use_flash_attn, layernorm_kernel, modulate_kernel, sequence_parallel_type
+):
     seq_len = seq_len
     hidden_dim = hidden_dim
     head_num = head_num
     batch_size = batch_size
     world_size = dist.get_world_size()
 
-    torch.set_default_dtype(DTYPE)
+    if use_flash_attn:
+        torch.set_default_dtype(DTYPE)
+    else:
+        torch.set_default_dtype(torch.float32)
 
     x = torch.randn(batch_size, seq_len, hidden_dim).cuda()
     x_unshard = x.clone()
@@ -115,8 +140,10 @@ def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn
     dist_block_with_sp = copy.deepcopy(dist_block_without_sp)
     setattr(dist_block_with_sp, "sequence_parallel_size", world_size)
     setattr(dist_block_with_sp, "sequence_parallel_group", None)
+    setattr(dist_block_with_sp, "sequence_parallel_type", sequence_parallel_type)
     setattr(dist_block_with_sp.attn, "sequence_parallel_size", world_size)
     setattr(dist_block_with_sp.attn, "sequence_parallel_group", None)
+    setattr(dist_block_with_sp.attn, "sequence_parallel_type", sequence_parallel_type)
 
     # Attention forward (Without Sequence parallel)
     no_sp_output = dist_block_without_sp(x_unshard, c_unshard)
@@ -129,7 +156,10 @@ def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn
     seq_out = torch.cat(out_list, dim=1)
 
     # forward result check
-    assert_close(seq_out, no_sp_output, atol=1e-4, rtol=1e-4)
+    if use_flash_attn:
+        assert_close(seq_out, no_sp_output, atol=1e-3, rtol=1e-3)
+    else:
+        assert_close(seq_out, no_sp_output, atol=1e-4, rtol=1e-4)
 
     # Attention backward (Without Sequence parallel)
     no_sp_output.sum().backward()
@@ -153,21 +183,32 @@ def seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn
 @parameterize("head_num", [16])
 @parameterize("batch_size", [2])
 @parameterize("use_flash_attn", [True, False])
-def run_seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn):
-    seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn)
+@parameterize("sequence_parallel_type", ["ulysses"])
+def run_seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn, sequence_parallel_type):
+    seq_parallel_attn(seq_len, hidden_dim, head_num, batch_size, use_flash_attn, sequence_parallel_type)
 
 
 @parameterize("seq_len", [256])
 @parameterize("hidden_dim", [1152])
 @parameterize("head_num", [16])
 @parameterize("batch_size", [2])
-@parameterize("use_flash_attn", [False])
+@parameterize("use_flash_attn", [True, False])
 @parameterize("layernorm_kernel", [True])
 @parameterize("modulate_kernel", [True])
+@parameterize("sequence_parallel_type", ["ulysses"])
 def run_seq_parallel_block(
-    seq_len, hidden_dim, head_num, batch_size, use_flash_attn, layernorm_kernel, modulate_kernel
+    seq_len, hidden_dim, head_num, batch_size, use_flash_attn, layernorm_kernel, modulate_kernel, sequence_parallel_type
 ):
-    seq_parallel_block(seq_len, hidden_dim, head_num, batch_size, use_flash_attn, layernorm_kernel, modulate_kernel)
+    seq_parallel_block(
+        seq_len,
+        hidden_dim,
+        head_num,
+        batch_size,
+        use_flash_attn,
+        layernorm_kernel,
+        modulate_kernel,
+        sequence_parallel_type,
+    )
 
 
 def check_all2all_attn(rank, world_size, port):

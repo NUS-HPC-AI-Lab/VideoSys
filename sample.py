@@ -16,8 +16,9 @@ import torch
 from diffusers.models import AutoencoderKL
 from torchvision.utils import save_image
 
-from opendit.models.diffusion import create_diffusion
+from opendit.diffusion import create_diffusion
 from opendit.models.dit import DiT_models
+from opendit.models.latte import Latte_models
 from opendit.utils.download import find_model
 from opendit.utils.import_utils import is_accelerate_available, is_huggingface_hub_available
 from opendit.vae.reconstruct import save_sample
@@ -63,43 +64,60 @@ def main(args):
         input_size = args.image_size // 8
 
     dtype = torch.float32
-    init_ctx = init_empty_weights if is_accelerate_available() else nullcontext
-    with init_ctx():
-        model = DiT_models[args.model](
-            use_video=args.use_video,
-            input_size=input_size,
-            num_classes=args.num_classes,
-            enable_flashattn=False,
-            enable_layernorm_kernel=False,
-            dtype=dtype,
-            text_encoder=args.text_encoder,
-        )
-    # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
-    ckpt_path = args.ckpt or f"DiT-XL-2-{args.image_size}x{args.image_size}.pt"
-    state_dict = find_model(ckpt_path, args.hub_repo_id)
-
-    if not is_accelerate_available():
-        model.load_state_dict(state_dict)
+    if "DiT" in args.model:
+        if "VDiT" in args.model:
+            assert args.use_video, "VDiT model requires video data"
+        else:
+            assert not args.use_video, "DiT model requires image data"
+        model_class = DiT_models[args.model]
+    elif "Latte" in args.model:
+        assert args.use_video, "Latte model requires video data"
+        model_class = Latte_models[args.model]
     else:
+        raise ValueError(f"Unknown model {args.model}")
+
+    if not args.use_video and "DiT" in args.model:
+        init_ctx = init_empty_weights if is_accelerate_available() else nullcontext
+        with init_ctx():
+            model = model_class(
+                input_size=input_size,
+                num_classes=args.num_classes,
+                enable_flashattn=False,
+                enable_layernorm_kernel=False,
+                dtype=dtype,
+                text_encoder=args.text_encoder,
+            )
+
+    model = model.to(device=device, dtype=dtype)
+
+    # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
+    ckpt_path = args.ckpt
+    state_dict = find_model(ckpt_path)
+    if not args.use_video and "DiT" in args.model and is_accelerate_available():
         for param_name, param in state_dict.items():
             set_module_tensor_to_device(model, param_name, "cpu", value=param)
-
-    model.to(dtype=dtype, device=device)
+    else:
+        model.load_state_dict(state_dict)
     model.eval()  # important!
     diffusion = create_diffusion(str(args.num_sampling_steps))
 
-    # Labels to condition the model with (feel free to change):
-    class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
-
     # Create sampling noise:
-    n = len(class_labels)
     if args.use_video:
+        # Labels to condition the model with (feel free to change):
+        class_labels = ["Biking", "Cliff Diving", "Rock Climbing Indoor", "Punch", "TaiChi"]
+        n = len(class_labels)
         z = torch.randn(n, vae.out_channels, *input_size, device=device)
-        y = ["video test"] * n * 2
+        y = class_labels * 2
     else:
+        # Labels to condition the model with (feel free to change):
+        if args.num_classes == 1000:
+            class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
+        else:
+            class_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        n = len(class_labels)
         z = torch.randn(n, 4, input_size, input_size, device=device)
         y = torch.tensor(class_labels, device=device)
-        y_null = torch.tensor([1000] * n, device=device)
+        y_null = torch.tensor([0] * n, device=device)
         y = torch.cat([y, y_null], 0)
 
     # Setup classifier-free guidance:
@@ -123,7 +141,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
+    parser.add_argument(
+        "--model", type=str, choices=list(DiT_models.keys()) + list(Latte_models.keys()), default="DiT-XL/2"
+    )
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)
@@ -139,12 +159,6 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Optional path to a DiT checkpoint (default: auto-download a pre-trained DiT-XL/2 model).",
-    )
-    parser.add_argument(
-        "--hub_repo_id",
-        type=str,
-        default=None,
-        help="Hugging Face Hub repository ID (such as: NUS-HPC-AI-Lab/OpenDiT) to download and cache a checkpoint automatically.",
     )
     args = parser.parse_args()
     main(args)

@@ -1,4 +1,4 @@
-import torch
+from einops import rearrange
 from torch import nn
 
 
@@ -11,22 +11,16 @@ class AutoencoderKLWrapper(nn.Module):
 
     def encode(self, x):
         # x is (B, C, T, H, W)
-        B, C, T, H, W = x.shape
-        x = torch.einsum("bcthw->btcwh", x)
-        x = x.contiguous()
-        x = x.view(B * T, C, H, W)
+        B = x.shape[0]
+        x = rearrange(x, "b c t h w -> (b t) c h w")
         x = self.module.encode(x).latent_dist.sample().mul_(0.18215)
-        x = x.view(B, T, *x.shape[1:])
-        x = torch.einsum("btcwh->bcthw", x)
+        x = rearrange(x, "(b t) c h w -> b c t h w", b=B)
         return x
 
     def decode(self, x):
         # x is (B, C, T, H, W)
-        B, C, T, H, W = x.shape
-        x = torch.einsum("bcthw->btcwh", x)
-        x = x.contiguous()
-        x = x.view(B * T, C, H, W)
+        B = x.shape[0]
+        x = rearrange(x, "b c t h w -> (b t) c h w")
         x = self.module.decode(x / 0.18215).sample
-        x = x.view(B, T, *x.shape[1:])
-        x = torch.einsum("btcwh->bcthw", x)
+        x = rearrange(x, "(b t) c h w -> b c t h w", b=B)
         return x
