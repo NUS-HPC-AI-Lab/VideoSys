@@ -262,4 +262,4 @@ If you encounter problems using OpenDiT or have a feature request, feel free to 
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/OpenDiT&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/OpenDiT&Date)
+[![Star History Chart](https://api.star-history.com/repos=NUS-HPC-AI-Lab/OpenDiT&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/OpenDiT&Date)
