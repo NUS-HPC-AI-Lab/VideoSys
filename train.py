@@ -49,7 +49,7 @@ def main(args):
     # ==============================
     # Initialize Distributed Training
     # ==============================
-    colossalai.launch_from_torch({})
+    colossalai.launch_from_torch({}, seed=args.global_seed)
     coordinator = DistCoordinator()
     device = get_current_device()
 
