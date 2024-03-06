@@ -259,3 +259,7 @@ If you encounter problems using OpenDiT or have a feature request, feel free to 
   howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/OpenDiT}},
 }
 ```
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/OpenDiT&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/OpenDiT&Date)
