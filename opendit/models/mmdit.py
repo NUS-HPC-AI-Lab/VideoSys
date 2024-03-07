@@ -228,7 +228,6 @@ class MMDiT(nn.Module):
         text_embedding_temp = repeat(c, 'n d -> (n c) d', c=self.pos_embed.shape[1])
 
         t = t + ts_proj
-        c = t + c  # (N, D)
 
         # Chunk x on sequence dimension to sp group
         if self.sequence_parallel_size > 1:
