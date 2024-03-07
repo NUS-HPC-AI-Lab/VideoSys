@@ -8,6 +8,7 @@
 
 ###  Latest News 🔥
 
+* [2024/03/08] Support DiT and Latte-based MMDiT (see Stable Diffusion 3 paper) for text-to-image and text-to-video generation.
 * [2024/03/01] Support DiT-based Latte for text-to-video generation.
 * [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
