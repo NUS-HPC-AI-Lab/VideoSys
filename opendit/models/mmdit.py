@@ -235,9 +235,9 @@ class MMDiT(nn.Module):
 
         for block in self.blocks:
             if self.gradient_checkpointing:
-                x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), x, c)
+                x = torch.utils.checkpoint.checkpoint(self.create_custom_forward(block), t, x, c)
             else:
-                x = block(x, c)  # (N, T, D)
+                x = block(t, x, c)  # (N, T, D)
 
         if self.sequence_parallel_size > 1:
             x = gather_forward_split_backward(x, dim=1, process_group=self.sequence_parallel_group)
