@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
+from typing import Optional
 
 from einops import rearrange, repeat
 from timm.models.vision_transformer import Mlp, PatchEmbed
