@@ -13,7 +13,7 @@ from colossalai.cluster import DistCoordinator
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
-from opendit.models.dit import DiT
+from opendit.models.dit.dit import DiT
 from opendit.utils.operation import model_sharding
 
 

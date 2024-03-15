@@ -1,11 +1,3 @@
-# Modified from Meta DiT: https://github.com/facebookresearch/DiT
-
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
 import argparse
 import json
 import os
@@ -24,13 +16,12 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
+from opendit.core.parallel_mgr import get_parallel_manager, get_sequence_parallel_group, set_parallel_manager
 from opendit.diffusion import create_diffusion
-from opendit.models.dit import DiT_models
-from opendit.models.latte import Latte_models
+from opendit.models.dit.dit import DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import prepare_dataloader
 from opendit.utils.operation import model_sharding
-from opendit.utils.pg_utils import ProcessGroupManager
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 from opendit.utils.video_utils import DatasetFromCSV, get_transforms_image, get_transforms_video
 from opendit.vae.wrapper import AutoencoderKLWrapper
@@ -102,7 +93,7 @@ def main(args):
     # ==============================
     sp_size = args.sequence_parallel_size
     dp_size = dist.get_world_size() // sp_size
-    pg_manager = ProcessGroupManager(dp_size, sp_size, dp_axis=0, sp_axis=1)
+    set_parallel_manager(dp_size, sp_size, dp_axis=0, sp_axis=1)
 
     # ======================================================
     # Initialize Model, Objective, Optimizer
@@ -152,15 +143,12 @@ def main(args):
         else:
             assert not args.use_video, "DiT model requires image data"
         model_class = DiT_models[args.model]
-    elif "Latte" in args.model:
-        assert args.use_video, "Latte model requires video data"
-        model_class = Latte_models[args.model]
     else:
         raise ValueError(f"Unknown model {args.model}")
     model = (
         model_class(
             enable_flashattn=args.enable_flashattn,
-            sequence_parallel_group=pg_manager.sp_group,
+            sequence_parallel_group=get_sequence_parallel_group(),
             dtype=dtype,
             **model_config,
         )
@@ -225,7 +213,7 @@ def main(args):
         drop_last=True,
         pin_memory=True,
         num_workers=args.num_workers,
-        pg_manager=pg_manager,
+        pg_manager=get_parallel_manager(),
     )
     logger.info(f"Dataset contains {len(dataset):,} images ({args.data_path})")
 
@@ -342,9 +330,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model", type=str, choices=list(DiT_models.keys()) + list(Latte_models.keys()), default="DiT-XL/2"
-    )
+    parser.add_argument("--model", type=str, choices=DiT_models.keys(), default="DiT-XL/2")
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
     parser.add_argument("--use_video", action="store_true", help="Use video data instead of images")
     parser.add_argument("--plugin", type=str, default="zero2")

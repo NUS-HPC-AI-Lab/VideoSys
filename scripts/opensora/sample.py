@@ -16,8 +16,7 @@ from diffusers.models import AutoencoderKL
 from torchvision.utils import save_image
 
 from opendit.diffusion import create_diffusion
-from opendit.models.dit import DiT_models
-from opendit.models.latte import Latte_models
+from opendit.models.dit.dit import DiT_models
 from opendit.utils.download import find_model
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import AutoencoderKLWrapper
@@ -58,9 +57,6 @@ def main(args):
         else:
             assert not args.use_video, "DiT model requires image data"
         model_class = DiT_models[args.model]
-    elif "Latte" in args.model:
-        assert args.use_video, "Latte model requires video data"
-        model_class = Latte_models[args.model]
     else:
         raise ValueError(f"Unknown model {args.model}")
     model = (
@@ -123,9 +119,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model", type=str, choices=list(DiT_models.keys()) + list(Latte_models.keys()), default="DiT-XL/2"
-    )
+    parser.add_argument("--model", type=str, choices=DiT_models.keys(), default="DiT-XL/2")
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)

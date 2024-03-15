@@ -6,8 +6,8 @@ import torch.distributed as dist
 from colossalai.testing import parameterize, rerun_if_address_is_in_use, spawn
 from torch.testing import assert_close
 
+from opendit.models.dit.dit import DiTBlock
 from opendit.modules.attn import DistAttention
-from opendit.modules.block import DiTBlock
 
 WORKERS = 4
 DTYPE = torch.float16

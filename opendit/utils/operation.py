@@ -348,20 +348,64 @@ class _GatherForwardSplitBackward(torch.autograd.Function):
 
     Args:
         input_: input matrix.
-        parallel_mode: parallel mode.
+        process_group: parallel mode.
         dim: dimension
     """
 
     @staticmethod
-    def forward(ctx, input_, dim, process_group):
-        ctx.process_group = process_group
+    def symbolic(graph, input_):
+        return _gather(input_)
+
+    @staticmethod
+    def forward(ctx, input_, process_group, dim, grad_scale):
+        ctx.mode = process_group
         ctx.dim = dim
-        return _gather(input_, dim, process_group)
+        ctx.grad_scale = grad_scale
+        return _gather(input_, process_group, dim)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return _split(grad_output, ctx.dim, ctx.process_group), None, None
+        if ctx.grad_scale == "up":
+            grad_output = grad_output * dist.get_world_size(ctx.mode)
+        elif ctx.grad_scale == "down":
+            grad_output = grad_output / dist.get_world_size(ctx.mode)
+
+        return _split(grad_output, ctx.mode, ctx.dim), None, None, None
 
 
-def gather_forward_split_backward(input_, dim, process_group):
-    return _GatherForwardSplitBackward.apply(input_, dim, process_group)
+class _SplitForwardGatherBackward(torch.autograd.Function):
+    """
+    Split the input and keep only the corresponding chuck to the rank.
+
+    Args:
+        input_: input matrix.
+        process_group: parallel mode.
+        dim: dimension
+    """
+
+    @staticmethod
+    def symbolic(graph, input_):
+        return _split(input_)
+
+    @staticmethod
+    def forward(ctx, input_, process_group, dim, grad_scale):
+        ctx.mode = process_group
+        ctx.dim = dim
+        ctx.grad_scale = grad_scale
+        return _split(input_, process_group, dim)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        if ctx.grad_scale == "up":
+            grad_output = grad_output * dist.get_world_size(ctx.mode)
+        elif ctx.grad_scale == "down":
+            grad_output = grad_output / dist.get_world_size(ctx.mode)
+        return _gather(grad_output, ctx.mode, ctx.dim), None, None, None
+
+
+def split_forward_gather_backward(input_, process_group, dim, grad_scale=1.0):
+    return _SplitForwardGatherBackward.apply(input_, process_group, dim, grad_scale)
+
+
+def gather_forward_split_backward(input_, process_group, dim, grad_scale=None):
+    return _GatherForwardSplitBackward.apply(input_, process_group, dim, grad_scale)

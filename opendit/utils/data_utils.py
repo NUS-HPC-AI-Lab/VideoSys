@@ -8,7 +8,7 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from opendit.utils.pg_utils import ProcessGroupManager
+from opendit.core.parallel_mgr import ParallelManager
 
 
 class StatefulDistributedSampler(DistributedSampler):
@@ -45,7 +45,7 @@ def prepare_dataloader(
     drop_last=False,
     pin_memory=False,
     num_workers=0,
-    pg_manager: Optional[ProcessGroupManager] = None,
+    pg_manager: Optional[ParallelManager] = None,
     **kwargs,
 ):
     r"""

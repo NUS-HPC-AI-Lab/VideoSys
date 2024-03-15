@@ -6,8 +6,8 @@ from colossalai.utils import get_current_device
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 
+from opendit.core.parallel_mgr import ParallelManager
 from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
-from opendit.utils.pg_utils import ProcessGroupManager
 
 WORKERS = 4
 
@@ -18,7 +18,7 @@ WORKERS = 4
 def run_dataloader_test(batch_size, sequence_parallel_size, image_size, num_workers=0, data_path="../datasets"):
     sp_size = sequence_parallel_size
     dp_size = dist.get_world_size() // sp_size
-    pg_manager = ProcessGroupManager(dp_size, sp_size, dp_axis=0, sp_axis=1)
+    pg_manager = ParallelManager(dp_size, sp_size, dp_axis=0, sp_axis=1)
     device = get_current_device()
 
     # Setup data:
