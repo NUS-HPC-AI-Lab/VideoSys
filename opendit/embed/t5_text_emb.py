@@ -1,11 +1,12 @@
-# Adapted from PixArt
+# Adapted from OpenSora
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # --------------------------------------------------------
 # References:
-# PixArt: https://github.com/PixArt-alpha/PixArt-alpha
-# T5:     https://github.com/google-research/text-to-text-transfer-transformer
+# OpenSora: https://github.com/hpcaitech/Open-Sora
+# PixArt:   https://github.com/PixArt-alpha/PixArt-alpha
+# T5:       https://github.com/google-research/text-to-text-transfer-transformer
 # --------------------------------------------------------
 
 
@@ -82,7 +83,7 @@ class T5Embedder:
 
         self.use_text_preprocessing = use_text_preprocessing
         self.hf_token = hf_token
-        self.cache_dir = cache_dir or os.path.expanduser("~/.cache/IF_")
+        self.cache_dir = cache_dir or os.path.expanduser("~/.cache/opendit")
         self.dir_or_name = dir_or_name
         tokenizer_path, path = dir_or_name, dir_or_name
         if local_cache:
@@ -124,7 +125,7 @@ class T5Embedder:
                 )
             tokenizer_path = cache_dir
 
-        print(tokenizer_path)
+        print(f"\nModel path: {path}, tokenizer path: {tokenizer_path}\n\n", end="")
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
         self.model = T5EncoderModel.from_pretrained(path, **t5_model_kwargs).eval()
         self.model_max_length = model_max_length
@@ -284,20 +285,18 @@ class T5Embedder:
 class T5Encoder:
     def __init__(
         self,
-        from_pretrained=None,
+        model_name="t5-v1_1-xxl",
         model_max_length=120,
         device="cuda",
         dtype=torch.float,
-        local_cache=True,
         shardformer=False,
     ):
-        assert from_pretrained is not None, "Please specify the path to the T5 model"
+        assert model_name == "t5-v1_1-xxl", "Only t5-v1_1-xxl is supported now"
 
         self.t5 = T5Embedder(
+            dir_or_name=model_name,
             device=device,
             torch_dtype=dtype,
-            local_cache=local_cache,
-            cache_dir=from_pretrained,
             model_max_length=model_max_length,
         )
         self.t5.model.to(dtype=dtype)

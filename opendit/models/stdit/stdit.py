@@ -1,5 +1,12 @@
-# this code is modifed from https://github.com/hpcaitech/Open-Sora
+# Adapted from OpenSora and DiT
 
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+# --------------------------------------------------------
+# References:
+# DiT:      https://github.com/facebookresearch/DiT
+# OpenSora: https://github.com/hpcaitech/Open-Sora
+# --------------------------------------------------------
 
 import numpy as np
 import torch
@@ -16,8 +23,35 @@ from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_emb
 from opendit.embed.time_emb import TimestepEmbedder
 from opendit.models.stdit.ckpt_io import load_checkpoint
 from opendit.modules.attn import Attention, MultiHeadCrossAttention
-from opendit.modules.layers import FinalLayer, approx_gelu, get_layernorm, t2i_modulate
+from opendit.modules.layers import get_layernorm
 from opendit.utils.operation import gather_forward_split_backward, split_forward_gather_backward
+
+
+def t2i_modulate(x, shift, scale):
+    return x * (1 + scale) + shift
+
+
+def approx_gelu():
+    return nn.GELU(approximate="tanh")
+
+
+class STDiTFinalLayer(nn.Module):
+    """
+    The final layer of PixArt.
+    """
+
+    def __init__(self, hidden_size, num_patch, out_channels):
+        super().__init__()
+        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.linear = nn.Linear(hidden_size, num_patch * out_channels, bias=True)
+        self.scale_shift_table = nn.Parameter(torch.randn(2, hidden_size) / hidden_size**0.5)
+        self.out_channels = out_channels
+
+    def forward(self, x, t):
+        shift, scale = (self.scale_shift_table[None] + t[:, None]).chunk(2, dim=1)
+        x = t2i_modulate(self.norm_final(x), shift, scale)
+        x = self.linear(x)
+        return x
 
 
 class STDiTBlock(nn.Module):
@@ -48,7 +82,7 @@ class STDiTBlock(nn.Module):
             qkv_bias=True,
             enable_flashattn=enable_flashattn,
         )
-        self.cross_attn = self.mha_cls(hidden_size, num_heads)
+        self.cross_attn = self.mha_cls(hidden_size, num_heads, enable_flashattn=enable_flashattn)
         self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
@@ -180,7 +214,7 @@ class STDiT(nn.Module):
                 for i in range(self.depth)
             ]
         )
-        self.final_layer = FinalLayer(hidden_size, np.prod(self.patch_size), self.out_channels)
+        self.final_layer = STDiTFinalLayer(hidden_size, np.prod(self.patch_size), self.out_channels)
 
         # init model
         self.initialize_weights()

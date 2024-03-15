@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
-from opendit.core.parallel_mgr import get_parallel_manager, get_sequence_parallel_group, set_parallel_manager
+from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.diffusion import create_diffusion
 from opendit.models.dit.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
@@ -25,7 +25,6 @@ from opendit.utils.operation import model_sharding
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 from opendit.utils.video_utils import get_transforms_image
 
-# the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
@@ -97,13 +96,6 @@ def main(args):
     # ======================================================
     # Initialize Model, Objective, Optimizer
     # ======================================================
-    # Create VAE encoder
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
-
-    # Configure input size
-    assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
-    input_size = args.image_size // 8
-
     # Set mixed precision
     if args.mixed_precision == "bf16" and args.plugin != "ddp":
         dtype = torch.bfloat16
@@ -113,6 +105,13 @@ def main(args):
         dtype = torch.float32
     else:
         raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
+
+    # Create VAE encoder
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device).to(dtype)
+
+    # Configure input size
+    assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
+    input_size = args.image_size // 8
 
     # Shared model config for two models
     model_config = {
@@ -126,7 +125,6 @@ def main(args):
     model: DiT = (
         DiT_models[args.model](
             enable_flashattn=args.enable_flashattn,
-            sequence_parallel_group=get_sequence_parallel_group(),
             dtype=dtype,
             **model_config,
         )
@@ -201,9 +199,7 @@ def main(args):
     sampler_start_idx = 0
     if args.load is not None:
         logger.info("Loading checkpoint")
-        start_epoch, start_step, sampler_start_idx = load(
-            booster, model, ema, optimizer, lr_scheduler, args.load, args.sequence_parallel_type
-        )
+        start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
 
     # Only shard ema model when using zero2 plugin
@@ -235,7 +231,10 @@ def main(args):
                 # VAE encode
                 with torch.no_grad():
                     # Map input images to latent space + normalize latents:
+                    x = x.to(dtype)
                     x = vae.encode(x).latent_dist.sample().mul_(0.18215)
+                    # cast back to fp32 for bettet diffusion accuracy
+                    x = x.to(torch.float32)
 
                 # Diffusion
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
@@ -274,7 +273,6 @@ def main(args):
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
-                        args.sequence_parallel_type,
                         shard_ema,
                     )
                     logger.info(

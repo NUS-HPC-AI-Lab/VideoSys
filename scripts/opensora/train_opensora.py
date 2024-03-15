@@ -7,26 +7,25 @@ import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.booster import Booster
-from colossalai.booster.plugin import LowLevelZeroPlugin, TorchDDPPlugin
+from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
-from diffusers.models import AutoencoderKL
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
-from opendit.core.parallel_mgr import get_parallel_manager, get_sequence_parallel_group, set_parallel_manager
-from opendit.diffusion import create_diffusion
-from opendit.models.dit.dit import DiT_models
+from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
+from opendit.embed.t5_text_emb import T5Encoder
+from opendit.models.stdit.scheduler import IDDPM
+from opendit.models.stdit.stdit import STDiT_XL_2
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import prepare_dataloader
 from opendit.utils.operation import model_sharding
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
-from opendit.utils.video_utils import DatasetFromCSV, get_transforms_image, get_transforms_video
-from opendit.vae.wrapper import AutoencoderKLWrapper
+from opendit.utils.utils import str_to_dtype
+from opendit.utils.video_utils import DatasetFromCSV, get_transforms_video
+from opendit.vae.wrapper import VideoAutoencoderKL
 
-# the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
@@ -43,6 +42,7 @@ def main(args):
     colossalai.launch_from_torch({}, seed=args.global_seed)
     coordinator = DistCoordinator()
     device = get_current_device()
+    dtype = str_to_dtype(args.dtype)
 
     # ==============================
     # Setup an experiment folder
@@ -82,8 +82,6 @@ def main(args):
             initial_scale=2**16,
             max_norm=args.grad_clip,
         )
-    elif args.plugin == "ddp":
-        plugin = TorchDDPPlugin()
     else:
         raise ValueError(f"Unknown plugin {args.plugin}")
     booster = Booster(plugin=plugin)
@@ -99,62 +97,35 @@ def main(args):
     # Initialize Model, Objective, Optimizer
     # ======================================================
     # Create VAE encoder
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+    vae = VideoAutoencoderKL(args.vae_pretrained_path, split=4).to(device, dtype)
 
     # Configure input size
     assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
-    if args.use_video:
-        # Wrap the VAE in a wrapper that handles video data
-        # We use 2d vae from stableai instead of 3d vqvae from videogpt because it has better results
-        vae = AutoencoderKLWrapper(vae)
-        # Use 3d patch size that is divisible by the input size
-        input_size = (args.num_frames, args.image_size, args.image_size)
-        for i in range(3):
-            assert input_size[i] % vae.patch_size[i] == 0, "Input size must be divisible by patch size"
-        input_size = [input_size[i] // vae.patch_size[i] for i in range(3)]
-    else:
-        input_size = args.image_size // 8
-
-    # Set mixed precision
-    if args.mixed_precision == "bf16" and args.plugin != "ddp":
-        dtype = torch.bfloat16
-    elif args.mixed_precision == "fp16" and args.plugin != "ddp":
-        dtype = torch.float16
-    elif args.mixed_precision == "fp32" and args.plugin == "ddp":
-        dtype = torch.float32
-    else:
-        raise ValueError(f"Unknown mixed precision {args.mixed_precision}")
+    # Use 3d patch size that is divisible by the input size
+    input_size = (args.num_frames, args.image_size, args.image_size)
+    latent_size = vae.get_latent_size(input_size)
+    text_encoder = T5Encoder(
+        args.text_pretrained_path, args.text_max_length, device=device, shardformer=args.text_speedup
+    )
 
     # Shared model config for two models
     model_config = {
-        "input_size": input_size,
-        "num_classes": args.num_classes,
+        "from_pretrained": args.model_pretrained_path,
+        "time_scale": args.model_time_scale,
+        "space_scale": args.model_space_scale,
+        "input_size": latent_size,
+        "in_channels": vae.out_channels,
+        "caption_channels": text_encoder.output_dim,
+        "model_max_length": text_encoder.model_max_length,
         "enable_layernorm_kernel": args.enable_layernorm_kernel,
-        "enable_modulate_kernel": args.enable_modulate_kernel,
-        "sequence_parallel_size": args.sequence_parallel_size,
-        "sequence_parallel_type": args.sequence_parallel_type,
-        "text_encoder": args.text_encoder,
     }
 
     # Create DiT model
-    if "DiT" in args.model:
-        if "VDiT" in args.model:
-            assert args.use_video, "VDiT model requires video data"
-        else:
-            assert not args.use_video, "DiT model requires image data"
-        model_class = DiT_models[args.model]
-    else:
-        raise ValueError(f"Unknown model {args.model}")
-    model = (
-        model_class(
-            enable_flashattn=args.enable_flashattn,
-            sequence_parallel_group=get_sequence_parallel_group(),
-            dtype=dtype,
-            **model_config,
-        )
-        .to(device)
-        .to(dtype)
-    )
+    model = STDiT_XL_2(
+        enable_flashattn=args.enable_flashattn,
+        dtype=dtype,
+        **model_config,
+    ).to(device, dtype)
 
     model_numel = get_model_numel(model)
     logger.info(f"Model params: {format_numel_str(model_numel)}")
@@ -164,7 +135,7 @@ def main(args):
     # Create ema and vae model
     # Note that parameter initialization is done within the DiT constructor
     # Create an EMA of the model for use after training
-    ema = model_class(**model_config).to(device)
+    ema = STDiT_XL_2(**model_config).to(device)
     ema = ema.to(torch.float32)
     ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
@@ -172,7 +143,7 @@ def main(args):
 
     # Create diffusion
     # default: 1000 steps, linear noise schedule
-    diffusion = create_diffusion(timestep_respacing="")
+    scheduler = IDDPM(timestep_respacing="")
 
     # Setup optimizer
     # We used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper
@@ -192,20 +163,12 @@ def main(args):
     ema.eval()
 
     # Setup data:
-    if args.use_video:
-        dataset = DatasetFromCSV(
-            args.data_path,
-            transform=get_transforms_video(args.image_size),
-            num_frames=args.num_frames,
-            frame_interval=args.frame_interval,
-        )
-    else:
-        # master process goes first
-        if not coordinator.is_master():
-            dist.barrier()
-        dataset = CIFAR10(args.data_path, transform=get_transforms_image(args.image_size), download=True)
-        if coordinator.is_master():
-            dist.barrier()
+    dataset = DatasetFromCSV(
+        args.data_path,
+        transform=get_transforms_video(args.image_size),
+        num_frames=args.num_frames,
+        frame_interval=args.frame_interval,
+    )
     dataloader = prepare_dataloader(
         dataset,
         batch_size=args.batch_size,
@@ -231,9 +194,7 @@ def main(args):
     sampler_start_idx = 0
     if args.load is not None:
         logger.info("Loading checkpoint")
-        start_epoch, start_step, sampler_start_idx = load(
-            booster, model, ema, optimizer, lr_scheduler, args.load, args.sequence_parallel_type
-        )
+        start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
 
     # Only shard ema model when using zero2 plugin
@@ -258,26 +219,22 @@ def main(args):
             initial=start_step,
         ) as pbar:
             for step in pbar:
-                if args.use_video:
-                    batch = next(dataloader_iter)
-                    x = batch["video"].to(device)
-                    y = batch["text"]
-                else:
-                    x, y = next(dataloader_iter)
-                    x = x.to(device)
-                    y = y.to(device)
+                batch = next(dataloader_iter)
+                x = batch["video"].to(device)
+                y = batch["text"]
 
                 # VAE encode
                 with torch.no_grad():
                     # Map input images to latent space + normalize latents:
-                    x = vae.encode(x)
-                    if not args.use_video:
-                        x = x.latent_dist.sample().mul_(0.18215)
+                    x = vae.encode(x.to(dtype)).to(torch.float32)
+                    # Prepare text inputs
+                    model_args = text_encoder.encode(y)
 
                 # Diffusion
-                t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
-                model_kwargs = dict(y=y)
-                loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
+                t = torch.randint(0, scheduler.num_timesteps, (x.shape[0],), device=device)
+                loss_dict = scheduler.training_losses(model, x, t, model_args)
+
+                # Backward & update
                 loss = loss_dict["loss"].mean()
                 booster.backward(loss=loss, optimizer=optimizer)
                 optimizer.step()
@@ -311,7 +268,6 @@ def main(args):
                         coordinator,
                         experiment_dir,
                         ema_shape_dict,
-                        args.sequence_parallel_type,
                         shard_ema,
                     )
                     logger.info(
@@ -330,35 +286,48 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, choices=DiT_models.keys(), default="DiT-XL/2")
-    parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
-    parser.add_argument("--use_video", action="store_true", help="Use video data instead of images")
-    parser.add_argument("--plugin", type=str, default="zero2")
-    parser.add_argument("--outputs", type=str, default="./outputs", help="Path to the output directory")
-    parser.add_argument("--load", type=str, default=None, help="Path to a checkpoint dir to load")
-    parser.add_argument("--num_frames", type=int, default=16)
-    parser.add_argument("--frame_interval", type=int, default=1)
-    parser.add_argument("--text_encoder", type=str, default="openai/clip-vit-base-patch32")
 
-    parser.add_argument("--data_path", type=str, default="./datasets", help="Path to the dataset")
-    parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
-    parser.add_argument("--num_classes", type=int, default=1000)
-
+    # train
     parser.add_argument("--epochs", type=int, default=1400)
     parser.add_argument("--batch_size", type=int, default=2)
+    parser.add_argument("--lr", type=float, default=2e-5, help="Gradient clipping value")
+    parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
+    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16", "fp32"])
+
     parser.add_argument("--global_seed", type=int, default=42)
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--log_every", type=int, default=10)
     parser.add_argument("--ckpt_every", type=int, default=1000)
-
-    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["bf16", "fp16", "fp32"])
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Gradient clipping value")
-    parser.add_argument("--grad_checkpoint", action="store_true", help="Use gradient checkpointing")
 
-    parser.add_argument("--enable_modulate_kernel", action="store_true", help="Enable triton modulate kernel")
+    parser.add_argument("--outputs", type=str, default="./outputs", help="Path to the output directory")
+    parser.add_argument("--load", type=str, default=None, help="Path to a checkpoint dir to load")
+    parser.add_argument("--data_path", type=str, default="./datasets", help="Path to the dataset")
+
+    # sample
+    parser.add_argument("--num_frames", type=int, default=16)
+    parser.add_argument("--image_size", nargs="+", type=int, default=[512, 512])
+    parser.add_argument("--frame_interval", type=int, default=3)
+
+    # model
+    parser.add_argument("--model_space_scale", type=float, default=1.0)
+    parser.add_argument("--model_time_scale", type=float, default=1.0)
+    parser.add_argument("--model_pretrained_path", type=str, required=True)
+
+    # vae
+    parser.add_argument("--vae_pretrained_path", type=str, default="stabilityai/sd-vae-ft-ema")
+
+    # text encoer
+    parser.add_argument("--text_pretrained_path", type=str, default="t5-v1_1-xxl")
+    parser.add_argument("--text_max_length", type=int, default=120)
+    parser.add_argument("--text_speedup", action="store_true")
+
+    # kernel
     parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
+
+    # parallel
+    parser.add_argument("--plugin", type=str, default="zero2")
     parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
     parser.add_argument("--sequence_parallel_type", type=str)
 

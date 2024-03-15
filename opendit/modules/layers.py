@@ -61,10 +61,3 @@ class FinalLayer(nn.Module):
         x = modulate(self.norm_final, x, shift, scale)
         x = self.linear(x)
         return x
-
-
-def t2i_modulate(x, shift, scale):
-    return x * (1 + scale) + shift
-
-
-approx_gelu = lambda: nn.GELU(approximate="tanh")
