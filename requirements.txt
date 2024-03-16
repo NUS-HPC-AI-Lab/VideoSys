@@ -14,10 +14,7 @@ einops
 pydantic
 ray
 protobuf
-pytorch_lightning
-h5py
 gdown
-scikit-video
 pyav
 tensorboard
 timm
@@ -25,5 +22,4 @@ matplotlib
 accelerate
 diffusers
 transformers
-flash_attn
 colossalai
