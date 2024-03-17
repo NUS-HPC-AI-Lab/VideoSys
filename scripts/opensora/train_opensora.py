@@ -101,7 +101,7 @@ def main(args):
     input_size = (args.num_frames, args.image_size[0], args.image_size[1])
     latent_size = vae.get_latent_size(input_size)
     text_encoder = T5Encoder(
-        args.text_pretrained_path, args.text_max_length, device=device, shardformer=args.text_speedup
+        args.text_pretrained_path, args.text_max_length, shardformer=args.text_speedup, device=device
     )
 
     # Shared model config for two models

@@ -56,7 +56,9 @@ def main(args):
     input_size = (args.num_frames, args.image_size[0], args.image_size[1])
     vae = VideoAutoencoderKL(args.vae_pretrained_path, split=8)
     latent_size = vae.get_latent_size(input_size)
-    text_encoder = T5Encoder(args.text_pretrained_path, args.text_max_length, device=device)
+    text_encoder = T5Encoder(
+        args.text_pretrained_path, args.text_max_length, shardformer=args.text_speedup, device=device
+    )
     model = STDiT_XL_2(
         from_pretrained=args.model_pretrained_path,
         time_scale=args.model_time_scale,
@@ -135,6 +137,7 @@ if __name__ == "__main__":
     # text encoer
     parser.add_argument("--text_pretrained_path", type=str, default="t5-v1_1-xxl")
     parser.add_argument("--text_max_length", type=int, default=120)
+    parser.add_argument("--text_speedup", action="store_true")
 
     # scheduler
     parser.add_argument("--scheduler_num_sampling_steps", type=int, default=100)
