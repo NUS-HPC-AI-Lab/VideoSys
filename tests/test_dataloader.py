@@ -7,7 +7,8 @@ from torchvision import transforms
 from torchvision.datasets import CIFAR10
 
 from opendit.core.parallel_mgr import ParallelManager
-from opendit.utils.data_utils import center_crop_arr, prepare_dataloader
+from opendit.datasets.dataloader import prepare_dataloader
+from opendit.datasets.image_transform import center_crop_arr
 
 WORKERS = 4
 

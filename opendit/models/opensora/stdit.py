@@ -235,6 +235,9 @@ class STDiT(nn.Module):
 
         self.gradient_checkpointing = False
 
+    def enable_gradient_checkpointing(self):
+        self.gradient_checkpointing = True
+
     @staticmethod
     def create_custom_forward(module):
         def custom_forward(*inputs):

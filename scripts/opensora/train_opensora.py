@@ -15,15 +15,15 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
+from opendit.datasets.dataloader import prepare_dataloader
 from opendit.embed.t5_text_emb import T5Encoder
+from opendit.models.opensora.datasets import DatasetFromCSV, get_transforms_video
 from opendit.models.opensora.scheduler import IDDPM
 from opendit.models.opensora.stdit import STDiT_XL_2
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
-from opendit.utils.data_utils import prepare_dataloader
 from opendit.utils.operation import model_sharding
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 from opendit.utils.utils import str_to_dtype
-from opendit.utils.video_utils import DatasetFromCSV, get_transforms_video
 from opendit.vae.wrapper import VideoAutoencoderKL
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -42,7 +42,7 @@ def main(args):
     colossalai.launch_from_torch({}, seed=args.global_seed)
     coordinator = DistCoordinator()
     device = get_current_device()
-    dtype = str_to_dtype(args.dtype)
+    dtype = str_to_dtype(args.mixed_precision)
 
     # ==============================
     # Setup an experiment folder
@@ -50,10 +50,8 @@ def main(args):
     # Make outputs folder (holds all experiment subfolders)
     os.makedirs(args.outputs, exist_ok=True)
     experiment_index = len(glob(f"{args.outputs}/*"))
-    # e.g., DiT-XL/2 --> DiT-XL-2 (for naming folders)
-    model_string_name = args.model.replace("/", "-")
     # Create an experiment folder
-    experiment_dir = f"{args.outputs}/{experiment_index:03d}-{model_string_name}"
+    experiment_dir = f"{args.outputs}/{experiment_index:03d}-OpenSora"
     dist.barrier()
     if coordinator.is_master():
         os.makedirs(experiment_dir, exist_ok=True)
@@ -104,7 +102,7 @@ def main(args):
     latent_size = vae.get_latent_size(input_size)
     text_encoder = T5Encoder(
         args.text_pretrained_path, args.text_max_length, device=device, shardformer=args.text_speedup
-    ).eval()
+    )
 
     # Shared model config for two models
     model_config = {
@@ -165,7 +163,7 @@ def main(args):
     # Setup data:
     dataset = DatasetFromCSV(
         args.data_path,
-        transform=get_transforms_video(args.image_size),
+        transform=get_transforms_video(args.image_size[0]),
         num_frames=args.num_frames,
         frame_interval=args.frame_interval,
     )
