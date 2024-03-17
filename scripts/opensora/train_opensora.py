@@ -16,8 +16,8 @@ from tqdm import tqdm
 
 from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.embed.t5_text_emb import T5Encoder
-from opendit.models.stdit.scheduler import IDDPM
-from opendit.models.stdit.stdit import STDiT_XL_2
+from opendit.models.opensora.scheduler import IDDPM
+from opendit.models.opensora.stdit import STDiT_XL_2
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.data_utils import prepare_dataloader
 from opendit.utils.operation import model_sharding
@@ -100,13 +100,11 @@ def main(args):
     vae = VideoAutoencoderKL(args.vae_pretrained_path, split=4).to(device, dtype)
 
     # Configure input size
-    assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
-    # Use 3d patch size that is divisible by the input size
-    input_size = (args.num_frames, args.image_size, args.image_size)
+    input_size = (args.num_frames, args.image_size[0], args.image_size[1])
     latent_size = vae.get_latent_size(input_size)
     text_encoder = T5Encoder(
         args.text_pretrained_path, args.text_max_length, device=device, shardformer=args.text_speedup
-    )
+    ).eval()
 
     # Shared model config for two models
     model_config = {
@@ -140,6 +138,8 @@ def main(args):
     ema.load_state_dict(model.state_dict())
     requires_grad(ema, False)
     ema_shape_dict = record_model_param_shape(ema)
+    # Only shard ema model when using zero2 plugin
+    shard_ema = True if args.plugin == "zero2" else False
 
     # Create diffusion
     # default: 1000 steps, linear noise schedule
@@ -197,8 +197,7 @@ def main(args):
         start_epoch, start_step, sampler_start_idx = load(booster, model, ema, optimizer, lr_scheduler, args.load)
         logger.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
 
-    # Only shard ema model when using zero2 plugin
-    shard_ema = True if args.plugin == "zero2" else False
+    # shard ema parameter
     if shard_ema:
         model_sharding(ema)
 

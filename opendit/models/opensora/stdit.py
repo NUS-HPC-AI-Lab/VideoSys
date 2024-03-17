@@ -21,7 +21,7 @@ from opendit.embed.clip_text_emb import CaptionEmbedder
 from opendit.embed.patch_emb import PatchEmbed3D
 from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_embed
 from opendit.embed.time_emb import TimestepEmbedder
-from opendit.models.stdit.ckpt_io import load_checkpoint
+from opendit.models.opensora.ckpt_io import load_checkpoint
 from opendit.modules.attn import Attention, MultiHeadCrossAttention
 from opendit.modules.layers import get_layernorm
 from opendit.utils.operation import gather_forward_split_backward, split_forward_gather_backward

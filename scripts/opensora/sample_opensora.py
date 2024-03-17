@@ -14,8 +14,8 @@ import os
 import torch
 
 from opendit.embed.t5_text_emb import T5Encoder
-from opendit.models.stdit.scheduler import IDDPM
-from opendit.models.stdit.stdit import STDiT_XL_2
+from opendit.models.opensora.scheduler import IDDPM
+from opendit.models.opensora.stdit import STDiT_XL_2
 from opendit.utils.utils import set_seed, str_to_dtype
 from opendit.vae.reconstruct import save_sample
 from opendit.vae.wrapper import VideoAutoencoderKL
