@@ -8,12 +8,14 @@
 
 ### Latest News 🔥
 
-- [2024/03/01] Support DiT-based Latte for text-to-video generation.
+- [2024/03/18] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): An open-source initiative dedicated to efficiently reproducing OpenAI's Sora.
 - [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
 # About
 
 OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer (DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
+
+OpenDiT has been adopted by [OpenSora](https://github.com/hpcaitech/Open-Sora), [MiniSora](https://github.com/mini-sora/minisora).
 
 OpenDiT boasts the performance by the following techniques:
 
@@ -243,7 +245,11 @@ torchrun --standalone --nproc_per_node=8 train.py \
 
 We extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/) for providing valuable insights into algorithms and aiding in the development of the video pipeline. Additionally, we acknowledge [Shenggan Cheng](https://shenggan.github.io/) for his guidance on code optimization and parallelism. Our appreciation also goes to [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice and contributions.
 
-This codebase borrows from [Meta's DiT](https://github.com/facebookresearch/DiT).
+This codebase borrows from:
+* [OpenSora](https://github.com/hpcaitech/Open-Sora): An open-source initiative dedicated to efficiently reproducing OpenAI's Sora.
+* [DiT](https://github.com/facebookresearch/DiT): Scalable Diffusion Models with Transformers.
+* [PixArt](https://github.com/PixArt-alpha/PixArt-alpha): An open-source DiT-based text-to-image model.
+* [Latte](https://github.com/Vchitect/Latte): An attempt to efficiently train DiT for video.
 
 ## Contributing
 
