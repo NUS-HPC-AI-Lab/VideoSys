@@ -9,24 +9,58 @@
 # MAE:   https://github.com/facebookresearch/mae/blob/main/models_mae.py
 # --------------------------------------------------------
 
-from typing import Optional
-
-import numpy as np
 import torch
-import torch.distributed as dist
 import torch.nn as nn
 import torch.utils.checkpoint
-from einops import rearrange
-from timm.models.vision_transformer import PatchEmbed
-from torch.distributed import ProcessGroup
+from timm.models.vision_transformer import Mlp, PatchEmbed
 
-from opendit.embed.clip_text_emb import TextEmbedder
 from opendit.embed.label_emb import LabelEmbedder
-from opendit.embed.patch_emb import PatchEmbed3D
-from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_embed
+from opendit.embed.pos_emb import get_2d_sincos_pos_embed
 from opendit.embed.time_emb import TimestepEmbedder
-from opendit.modules.block import DiTBlock, FinalLayer
-from opendit.utils.operation import gather_forward_split_backward
+from opendit.modules.attn import Attention
+from opendit.modules.layers import FinalLayer, get_layernorm, modulate
+
+
+class DiTBlock(nn.Module):
+    """
+    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
+    """
+
+    def __init__(
+        self,
+        hidden_size,
+        num_heads,
+        mlp_ratio=4.0,
+        enable_flashattn=False,
+        enable_layernorm_kernel=False,
+        enable_modulate_kernel=False,
+        **block_kwargs,
+    ):
+        super().__init__()
+        self.enable_modulate_kernel = enable_modulate_kernel
+        self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
+        self.attn = Attention(
+            hidden_size,
+            num_heads=num_heads,
+            qkv_bias=True,
+            enable_flashattn=enable_flashattn,
+            **block_kwargs,
+        )
+        self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
+        mlp_hidden_dim = int(hidden_size * mlp_ratio)
+        approx_gelu = lambda: nn.GELU(approximate="tanh")
+        self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
+
+    def forward(self, x, c):
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+        x = x + gate_msa.unsqueeze(1) * self.attn(
+            modulate(self.norm1, x, shift_msa, scale_msa, self.enable_modulate_kernel)
+        )
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(
+            modulate(self.norm2, x, shift_mlp, scale_mlp, self.enable_modulate_kernel)
+        )
+        return x
 
 
 class DiT(nn.Module):
@@ -49,26 +83,16 @@ class DiT(nn.Module):
         enable_flashattn: bool = False,
         enable_layernorm_kernel: bool = False,
         enable_modulate_kernel: bool = False,
-        sequence_parallel_size: int = 1,
-        sequence_parallel_group: Optional[ProcessGroup] = None,
-        sequence_parallel_type: str = None,
         dtype: torch.dtype = torch.float32,
-        use_video: bool = False,
-        text_encoder: str = None,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
-        self.use_video = use_video
         self.in_channels = in_channels
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.hidden_size = hidden_size
         self.patch_size = patch_size
         self.input_size = input_size
         self.num_heads = num_heads
-        self.sequence_parallel_size = sequence_parallel_size
-        self.sequence_parallel_group = sequence_parallel_group
-        self.sequence_parallel_type = sequence_parallel_type
-
         self.dtype = dtype
         if enable_flashattn:
             assert dtype in [
@@ -76,26 +100,12 @@ class DiT(nn.Module):
                 torch.bfloat16,
             ], f"Flash attention only supports float16 and bfloat16, but got {self.dtype}"
 
-        # For img input, use PatchEmbed and LabelEmbedder
-        # For video input, use PatchEmbed3D and TextEmbedder
-        if self.use_video:
-            self.x_embedder = PatchEmbed3D(patch_size, in_channels, embed_dim=hidden_size)
-            self.t_embedder = TimestepEmbedder(hidden_size)
-            self.y_embedder = TextEmbedder(path=text_encoder, hidden_size=hidden_size)
-            self.num_patches = np.prod([input_size[i] // patch_size[i] for i in range(3)])
-        else:
-            self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
-            self.t_embedder = TimestepEmbedder(hidden_size)
-            self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
-            self.num_patches = self.x_embedder.num_patches
+        self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
+        self.t_embedder = TimestepEmbedder(hidden_size)
+        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+        self.num_patches = self.x_embedder.num_patches
 
-        if self.use_video:
-            self.num_temporal = input_size[0] // patch_size[0]
-            self.num_spatial = self.num_patches // self.num_temporal
-            self.register_buffer("pos_embed_spatial", self.get_spatial_pos_embed())
-            self.register_buffer("pos_embed_temporal", self.get_temporal_pos_embed())
-        else:
-            self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
 
         self.blocks = nn.ModuleList(
             [
@@ -106,38 +116,17 @@ class DiT(nn.Module):
                     enable_flashattn=enable_flashattn,
                     enable_modulate_kernel=enable_modulate_kernel,
                     enable_layernorm_kernel=enable_layernorm_kernel,
-                    sequence_parallel_size=self.sequence_parallel_size,
-                    sequence_parallel_group=self.sequence_parallel_group,
-                    sequence_parallel_type=self.sequence_parallel_type,
                 )
                 for _ in range(depth)
             ]
         )
-        self.final_layer = FinalLayer(
-            hidden_size, np.prod(patch_size) if use_video else patch_size ** 2, self.out_channels
-        )
+        self.final_layer = FinalLayer(hidden_size, patch_size**2, self.out_channels)
         self.initialize_weights()
 
         self.gradient_checkpointing = False
 
     def enable_gradient_checkpointing(self):
         self.gradient_checkpointing = True
-
-    def get_spatial_pos_embed(self):
-        pos_embed = get_2d_sincos_pos_embed(
-            self.hidden_size,
-            self.input_size[1] // self.patch_size[1],
-        )
-        pos_embed = torch.from_numpy(pos_embed).float().unsqueeze(0).requires_grad_(False)
-        return pos_embed
-
-    def get_temporal_pos_embed(self):
-        pos_embed = get_1d_sincos_pos_embed(
-            self.hidden_size,
-            self.input_size[0] // self.patch_size[0],
-        )
-        pos_embed = torch.from_numpy(pos_embed).float().unsqueeze(0).requires_grad_(False)
-        return pos_embed
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -151,9 +140,8 @@ class DiT(nn.Module):
         self.apply(_basic_init)
 
         # Initialize (and freeze) pos_embed by sin-cos embedding:
-        if not self.use_video:
-            pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
-            self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
+        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
         w = self.x_embedder.proj.weight.data
@@ -194,15 +182,6 @@ class DiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
-    def unpatchify3D(self, x):
-        c = self.out_channels
-        t, h, w = [self.input_size[i] // self.patch_size[i] for i in range(3)]
-        pt, ph, pw = self.patch_size
-        x = x.reshape(shape=(x.shape[0], t, h, w, pt, ph, pw, c))
-        x = torch.einsum("nthwrpqc->nctrhpwq", x)
-        imgs = x.reshape(shape=(x.shape[0], c, t * pt, h * ph, w * pw))
-        return imgs
-
     @staticmethod
     def create_custom_forward(module):
         def custom_forward(*inputs):
@@ -221,23 +200,11 @@ class DiT(nn.Module):
         # origin inputs should be float32, cast to specified dtype
         x = x.to(self.dtype)
 
-        if self.use_video:
-            x = self.x_embedder(x)
-            x = rearrange(x, "b (t s) d -> b t s d", t=self.num_temporal, s=self.num_spatial)
-            x = x + self.pos_embed_spatial
-            x = rearrange(x, "b t s d -> b s t d")
-            x = x + self.pos_embed_temporal
-            x = rearrange(x, "b s t d -> b (t s) d")
-        else:
-            x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
 
         t = self.t_embedder(t, dtype=x.dtype)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
-
-        # Chunk x on sequence dimension to sp group
-        if self.sequence_parallel_size > 1:
-            x = x.chunk(self.sequence_parallel_size, dim=1)[dist.get_rank(self.sequence_parallel_group)]
 
         for block in self.blocks:
             if self.gradient_checkpointing:
@@ -245,14 +212,8 @@ class DiT(nn.Module):
             else:
                 x = block(x, c)  # (N, T, D)
 
-        if self.sequence_parallel_size > 1:
-            x = gather_forward_split_backward(x, dim=1, process_group=self.sequence_parallel_group)
-
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-        if self.use_video:
-            x = self.unpatchify3D(x)
-        else:
-            x = self.unpatchify(x)  # (N, out_channels, H, W)
+        x = self.unpatchify(x)  # (N, out_channels, H, W)
 
         # cast to float32 for better accuracy
         x = x.to(torch.float32)
@@ -275,11 +236,6 @@ class DiT(nn.Module):
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
         return torch.cat([eps, rest], dim=1)
-
-    def rearrange_attention_weights(self, flag="load"):
-        for block in self.blocks:
-            block.attn.rearrange_fused_weight(block.attn.qkv, flag)
-        torch.cuda.empty_cache()
 
 
 #################################################################################
@@ -335,30 +291,7 @@ def DiT_S_8(**kwargs):
     return DiT(depth=12, hidden_size=384, patch_size=8, num_heads=6, **kwargs)
 
 
-def VDiT_XL_1x2x2(**kwargs):
-    return DiT(
-        depth=28,
-        hidden_size=1152,
-        patch_size=(1, 2, 2),
-        num_heads=16,
-        use_video=True,
-        **kwargs,
-    )
-
-
-def VDiT_XL_2x2x2(**kwargs):
-    return DiT(
-        depth=28,
-        hidden_size=1152,
-        patch_size=(2, 2, 2),
-        num_heads=16,
-        use_video=True,
-        **kwargs,
-    )
-
-
 DiT_models = {
-    # image model
     "DiT-XL/2": DiT_XL_2,
     "DiT-XL/4": DiT_XL_4,
     "DiT-XL/8": DiT_XL_8,
@@ -371,7 +304,4 @@ DiT_models = {
     "DiT-S/2": DiT_S_2,
     "DiT-S/4": DiT_S_4,
     "DiT-S/8": DiT_S_8,
-    # video model
-    "VDiT-XL/1x2x2": VDiT_XL_1x2x2,
-    "VDiT-XL/2x2x2": VDiT_XL_2x2x2,
 }

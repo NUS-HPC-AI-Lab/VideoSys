@@ -163,6 +163,3 @@ coverage.xml
 # ignore testmon and coverage files
 .coverage
 .testmondata*
-
-# ignore data files
-datasets

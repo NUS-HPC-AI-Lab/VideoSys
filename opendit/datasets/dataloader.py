@@ -1,14 +1,12 @@
-import os
 import random
 from typing import Iterator, Optional
 
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from opendit.utils.pg_utils import ProcessGroupManager
+from opendit.core.parallel_mgr import ParallelManager
 
 
 class StatefulDistributedSampler(DistributedSampler):
@@ -45,7 +43,7 @@ def prepare_dataloader(
     drop_last=False,
     pin_memory=False,
     num_workers=0,
-    pg_manager: Optional[ProcessGroupManager] = None,
+    pg_manager: Optional[ParallelManager] = None,
     **kwargs,
 ):
     r"""
@@ -94,46 +92,3 @@ def prepare_dataloader(
         num_workers=num_workers,
         **_kwargs,
     )
-
-
-def center_crop_arr(pil_image, image_size):
-    """
-    Center cropping implementation from ADM.
-    https://github.com/openai/guided-diffusion/blob/8fb3ad9197f16bbc40620447b2742e13458d2831/guided_diffusion/image_datasets.py#L126
-    """
-    while min(*pil_image.size) >= 2 * image_size:
-        pil_image = pil_image.resize(tuple(x // 2 for x in pil_image.size), resample=Image.BOX)
-
-    scale = image_size / min(*pil_image.size)
-    pil_image = pil_image.resize(tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC)
-
-    arr = np.array(pil_image)
-    crop_y = (arr.shape[0] - image_size) // 2
-    crop_x = (arr.shape[1] - image_size) // 2
-    return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
-
-
-class VideoDataset(Dataset):
-    def __init__(self, data_path: str):
-        self.data_path = data_path
-        file_list = os.listdir(data_path)
-        self.video_list = [v for v in file_list if v.endswith(".npy")]
-
-        # if toy dataset, repeat the video list
-        if set(self.video_list) == set(["art-museum.npy", "lagos.npy", "man-on-the-cloud.npy", "suv-in-the-dust.npy"]):
-            print("Using toy dataset, repeating the video data 100 times")
-            self.video_list = self.video_list * 100
-        else:
-            raise ValueError("Invalid dataset")
-
-        self.num_samples = len(self.video_list)
-        # TODO: add label
-        self.label_list = [random.randint(0, 9) for _ in self.video_list]
-
-    def __len__(self):
-        return self.num_samples
-
-    def __getitem__(self, idx):
-        video = torch.tensor(np.load(os.path.join(self.data_path, self.video_list[idx])))
-        label = torch.tensor(self.label_list[idx])
-        return video, label

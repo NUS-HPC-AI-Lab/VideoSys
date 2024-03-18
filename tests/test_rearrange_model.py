@@ -11,7 +11,7 @@ from colossalai.testing import rerun_if_address_is_in_use, spawn
 from colossalai.utils import get_current_device
 from torch.testing import assert_close
 
-from opendit.models.dit import DiT, DiT_models
+from opendit.models.dit.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import load, record_model_param_shape, save
 from opendit.utils.train_utils import requires_grad
 

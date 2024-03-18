@@ -8,12 +8,14 @@
 
 ### Latest News 🔥
 
-- [2024/03/01] Support DiT-based Latte for text-to-video generation.
+- [2024/03/18] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): An open-source initiative dedicated to efficiently reproducing OpenAI's Sora.
 - [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
 # About
 
 OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer (DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
+
+OpenDiT has been adopted by [OpenSora](https://github.com/hpcaitech/Open-Sora), [MiniSora](https://github.com/mini-sora/minisora).
 
 OpenDiT boasts the performance by the following techniques:
 
@@ -37,7 +39,7 @@ OpenDiT boasts the performance by the following techniques:
 
 Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/)
 
-More features are coming soon!
+OpenDiT will continue to integrate more open-source DiT models. Stay tuned for upcoming enhancements and additional features!
 
 ## Installation
 
@@ -89,116 +91,13 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ## Usage
 
-### Image
+Here are supported models and their usage:
 
-<b>Training.</b> You can train the DiT model on CIFAR10 by executing the following command:
+| Model | Source | Fucntion | Usage | Optimize |
+| ------ | ------ | ------ | ------ | ------ |
+| DiT | https://github.com/facebookresearch/DiT | label-to-image | [Usage](./docs/dit.md) | ✅ |
+| OpenSora | https://github.com/hpcaitech/Open-Sora | text-to-video | [Usage](./docs/opensora.md) | ✅ |
 
-```shell
-# Use script
-bash train_img.sh
-# Use command line
-torchrun --standalone --nproc_per_node=2 train.py \
-    --model DiT-XL/2 \
-    --batch_size 2 \
-    --num_classes 10
-```
-
-We disable all speedup methods by default. Here are details of some key arguments for training:
-
-- `--nproc_per_node`: The GPU number you want to use for the current node.
-- `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
-- `--mixed_precision`: The data type for mixed precision training. The default value is `bf16`.
-- `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to disable it when memory is enough.
-- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it.
-- `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
-- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. This kernel will cause NaN under some circumstances. So we recommend to disable it for now.
-- `--sequence_parallel_size`: The sequence parallelism size. Will enable sequence parallelism when setting a value > 1. The default value is 1. Recommend to disable it if memory is enough.
-- `--load`: Load previous saved checkpoint dir and continue training.
-- `--num_classes`: Label class number. Should be 10 for CIFAR10 and 1000 for ImageNet. Only used for label-to-image generation.
-
-For more details on the configuration of the training process, please visit our code.
-
-<b>Multi-Node Training.</b>
-
-To train OpenDiT on multiple nodes, you can use the following command:
-
-```
-colossalai run --nproc_per_node 8 --hostfile hostfile train.py \
-    --model DiT-XL/2 \
-    --batch_size 2 \
-    --num_classes 10
-```
-
-And you need to create `hostfile` under the current dir. It should contain all IP address of your nodes and you need to make sure all nodes can be connected without password by ssh. An example of hostfile:
-
-```
-111.111.111.111 # ip of node1
-222.222.222.222 # ip of node2
-```
-
-<b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the checkpoint path to your own trained model. Or you can download [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our](https://drive.google.com/file/d/1P4t2V3RDNcoCiEkbVWAjNetm3KC_4ueI/view?usp=drive_link) checkpoint for inference.
-
-```shell
-# Use script
-bash sample_img.sh
-# Use command line
-python sample.py \
-    --model DiT-XL/2 \
-    --image_size 256 \
-    --num_classes 10 \
-    --ckpt ckpt_path
-```
-
-Here are details of some addtional key arguments for inference:
-
-- `--ckpt`: The weight of ema model `ema.pt`. To check your training progress, it can also be our saved base model `epochXX-global_stepXX/model`, it will produce better results than ema in early training stage.
-- `--num_classes`: Label class number. Should be 10 for CIFAR10, and 1000 for ImageNet (including official and our checkpoint).
-
-### Video
-
-<b>Training.</b> We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
-
-Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
-
-```shell
-# train with scipt
-bash train_video.sh
-# train with command line
-# model can also be Latte-XL/1x2x2
-torchrun --standalone --nproc_per_node=2 train.py \
-    --model VDiT-XL/1x2x2 \
-    --use_video \
-    --data_path ./videos/demo.csv \
-    --batch_size 1 \
-    --num_frames 16 \
-    --image_size 256 \
-    --frame_interval 3
-
-# preprocess
-# our code read video from csv using our toy data
-# we provide a code to transfer ucf101 to csv format
-python preprocess.py
-```
-
-This script shares the same speedup methods as we have shown in the image training part. For more details of the configuration of the training process, please visit our code.
-
-<b>Inference.</b> You can perform video inference using DiT model as follows. We are still working on the video ckpt.
-
-```shell
-# Use script
-bash sample_video.sh
-# Use command line
-# model can also be Latte-XL/1x2x2
-python sample.py \
-    --model VDiT-XL/1x2x2 \
-    --use_video \
-    --ckpt ckpt_path \
-    --num_frames 16 \
-    --image_size 256 \
-    --frame_interval 3
-```
-
-Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX/model`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 ## FastSeq
 
@@ -227,23 +126,18 @@ Our loss also aligns with the results listed in the paper:
 
 ![Loss](./figure/dit_loss.png)
 
-To reproduce our results, you need to change the dataset in `train_img.py` and execute the following command:
-
-```
-torchrun --standalone --nproc_per_node=8 train.py \
-    --model DiT-XL/2 \
-    --batch_size 180 \
-    --enable_layernorm_kernel \
-    --enable_flashattn \
-    --mixed_precision bf16 \
-    --num_classes 1000
-```
+To reproduce our results, you can follow our [instruction](./docs/dit.md/#reproduction
+).
 
 ## Acknowledgement
 
 We extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/) for providing valuable insights into algorithms and aiding in the development of the video pipeline. Additionally, we acknowledge [Shenggan Cheng](https://shenggan.github.io/) for his guidance on code optimization and parallelism. Our appreciation also goes to [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice and contributions.
 
-This codebase borrows from [Meta's DiT](https://github.com/facebookresearch/DiT).
+This codebase borrows from:
+* [OpenSora](https://github.com/hpcaitech/Open-Sora): An open-source initiative dedicated to efficiently reproducing OpenAI's Sora.
+* [DiT](https://github.com/facebookresearch/DiT): Scalable Diffusion Models with Transformers.
+* [PixArt](https://github.com/PixArt-alpha/PixArt-alpha): An open-source DiT-based text-to-image model.
+* [Latte](https://github.com/Vchitect/Latte): An attempt to efficiently train DiT for video.
 
 ## Contributing
 

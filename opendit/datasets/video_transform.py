@@ -1,14 +1,19 @@
-import csv
+# Adapted from OpenSora and Latte
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+# --------------------------------------------------------
+# References:
+# OpenSora: https://github.com/hpcaitech/Open-Sora
+# Latte:    https://github.com/Vchitect/Latte
+# --------------------------------------------------------
+
 import numbers
 import random
 
 import numpy as np
 import torch
-import torchvision
-import torchvision.transforms as transforms
-from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
-
-from opendit.utils.data_utils import center_crop_arr
+from PIL import Image
 
 
 def _is_tensor_video_clip(clip):
@@ -19,6 +24,23 @@ def _is_tensor_video_clip(clip):
         raise ValueError("clip should be 4D. Got %dD" % clip.dim())
 
     return True
+
+
+def center_crop_arr(pil_image, image_size):
+    """
+    Center cropping implementation from ADM.
+    https://github.com/openai/guided-diffusion/blob/8fb3ad9197f16bbc40620447b2742e13458d2831/guided_diffusion/image_datasets.py#L126
+    """
+    while min(*pil_image.size) >= 2 * image_size:
+        pil_image = pil_image.resize(tuple(x // 2 for x in pil_image.size), resample=Image.BOX)
+
+    scale = image_size / min(*pil_image.size)
+    pil_image = pil_image.resize(tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC)
+
+    arr = np.array(pil_image)
+    crop_y = (arr.shape[0] - image_size) // 2
+    crop_x = (arr.shape[1] - image_size) // 2
+    return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
 
 
 def crop(clip, i, j, h, w):
@@ -417,89 +439,3 @@ class TemporalRandomCrop(object):
         begin_index = random.randint(0, rand_end)
         end_index = min(begin_index + self.size, total_frames)
         return begin_index, end_index
-
-
-class DatasetFromCSV(torch.utils.data.Dataset):
-    """load video according to the csv file.
-
-    Args:
-        target_video_len (int): the number of video frames will be load.
-        align_transform (callable): Align different videos in a specified size.
-        temporal_sample (callable): Sample the target length of a video.
-    """
-
-    def __init__(
-        self,
-        csv_path,
-        num_frames=16,
-        frame_interval=1,
-        transform=None,
-    ):
-        self.csv_path = csv_path
-        with open(csv_path, "r") as f:
-            reader = csv.reader(f)
-            self.samples = list(reader)
-
-        ext = self.samples[0][0].split(".")[-1]
-        if ext.lower() in ["mp4", "avi", "mov", "mkv"]:
-            self.is_video = True
-        else:
-            assert f".{ext.lower()}" in IMG_EXTENSIONS
-            self.is_video = False
-
-        self.transform = transform
-
-        self.num_frames = num_frames
-        self.frame_interval = frame_interval
-        self.temporal_sample = TemporalRandomCrop(num_frames * frame_interval)
-
-    def __getitem__(self, index):
-        path, text = self.samples[index]
-
-        if self.is_video:
-            vframes, aframes, info = torchvision.io.read_video(filename=path, pts_unit="sec", output_format="TCHW")
-            total_frames = len(vframes)
-
-            # Sampling video frames
-            start_frame_ind, end_frame_ind = self.temporal_sample(total_frames)
-            assert end_frame_ind - start_frame_ind >= self.num_frames
-            frame_indice = np.linspace(start_frame_ind, end_frame_ind - 1, self.num_frames, dtype=int)
-
-            video = vframes[frame_indice]
-            video = self.transform(video)  # T C H W
-        else:
-            image = pil_loader(path)
-            image = self.transform(image)
-            video = image.unsqueeze(0).repeat(self.num_frames, 1, 1, 1)
-
-        # TCHW -> CTHW
-        video = video.permute(1, 0, 2, 3)
-
-        return {"video": video, "text": text}
-
-    def __len__(self):
-        return len(self.samples)
-
-
-def get_transforms_video(resolution=256):
-    transform_video = transforms.Compose(
-        [
-            ToTensorVideo(),  # TCHW
-            RandomHorizontalFlipVideo(),
-            UCFCenterCropVideo(resolution),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-        ]
-    )
-    return transform_video
-
-
-def get_transforms_image(image_size=256):
-    transform = transforms.Compose(
-        [
-            transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, image_size)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-        ]
-    )
-    return transform
