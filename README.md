@@ -91,6 +91,12 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ## Usage
 
+| Model    | Fucntion    | Usage    |
+| ------ | ------ | ------ |
+| [DiT](https://raw.githubusercontent.com/facebookresearch/DiT) | label-to-image | [link](./docs/dit.md) |
+| [OpenSora](https://github.com/hpcaitech/Open-Sora)| text-to-video | [link](./docs/dit.md) |
+
+
 ### Video
 
 <b>Training.</b> We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
