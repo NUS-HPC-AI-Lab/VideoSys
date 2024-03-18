@@ -164,7 +164,7 @@ Our loss also aligns with the results listed in the paper:
 
 ![Loss](./figure/dit_loss.png)
 
-To reproduce our results, you can follow our [instruction](./docs/dit.md/###reproduction
+To reproduce our results, you can follow our [instruction](./docs/dit.md/#reproduction
 ).
 
 ## Acknowledgement
