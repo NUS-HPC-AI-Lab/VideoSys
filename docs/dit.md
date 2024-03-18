@@ -1,5 +1,7 @@
 # DiT
 
+https://github.com/facebookresearch/DiT
+
 We support label-to-image generation for DiT.
 
 ### Training

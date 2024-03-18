@@ -93,57 +93,11 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 Here are supported models and their usage:
 
-| Model &nbsp;&nbsp;&nbsp;&nbsp;| Fucntion &nbsp;&nbsp;&nbsp;&nbsp;| Usage &nbsp;&nbsp;&nbsp;&nbsp;|
+| Model | Fucntion | Usage |
 | ------ | ------ | ------ |
-| [DiT](https://raw.githubusercontent.com/facebookresearch/DiT)| label-to-image | [link](./docs/dit.md)|
-| [OpenSora](https://github.com/hpcaitech/Open-Sora)| text-to-video | [link](./docs/dit.md) |
+| [DiT](https://raw.githubusercontent.com/facebookresearch/DiT)| label-to-image | [link](./docs/dit.md) |
+| [OpenSora](https://github.com/hpcaitech/Open-Sora)| text-to-video | [link](./docs/opensora.md) |
 
-
-### Video
-
-<b>Training.</b> We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
-
-Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
-
-```shell
-# train with scipt
-bash train_video.sh
-# train with command line
-# model can also be Latte-XL/1x2x2
-torchrun --standalone --nproc_per_node=2 train.py \
-    --model VDiT-XL/1x2x2 \
-    --use_video \
-    --data_path ./videos/demo.csv \
-    --batch_size 1 \
-    --num_frames 16 \
-    --image_size 256 \
-    --frame_interval 3
-
-# preprocess
-# our code read video from csv using our toy data
-# we provide a code to transfer ucf101 to csv format
-python preprocess.py
-```
-
-This script shares the same speedup methods as we have shown in the image training part. For more details of the configuration of the training process, please visit our code.
-
-<b>Inference.</b> You can perform video inference using DiT model as follows. We are still working on the video ckpt.
-
-```shell
-# Use script
-bash sample_video.sh
-# Use command line
-# model can also be Latte-XL/1x2x2
-python sample.py \
-    --model VDiT-XL/1x2x2 \
-    --use_video \
-    --ckpt ckpt_path \
-    --num_frames 16 \
-    --image_size 256 \
-    --frame_interval 3
-```
-
-Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX/model`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 ## FastSeq
 
