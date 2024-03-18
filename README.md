@@ -95,8 +95,8 @@ Here are supported models and their usage:
 
 | Model | Source | Fucntion | Usage | Optimize |
 | ------ | ------ | ------ | ------ | ------ |
-| DiT | https://github.com/facebookresearch/DiT | label-to-image | [Usage](./docs/dit.md) | ✓ |
-| OpenSora | https://github.com/hpcaitech/Open-Sora | text-to-video | [Usage](./docs/opensora.md) | ✓ |
+| DiT | https://github.com/facebookresearch/DiT | label-to-image | [Usage](./docs/dit.md) | ✅ |
+| OpenSora | https://github.com/hpcaitech/Open-Sora | text-to-video | [Usage](./docs/opensora.md) | ✅ |
 
 
 ## FastSeq
