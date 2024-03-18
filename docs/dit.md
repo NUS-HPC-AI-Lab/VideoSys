@@ -2,7 +2,9 @@
 
 We support label-to-image generation for DiT.
 
-<b>Training.</b> You can train the DiT model on CIFAR10 by executing the following command:
+### Training
+
+You can train the DiT model on CIFAR10 by executing the following command:
 
 ```shell
 # Use script
@@ -28,7 +30,7 @@ We disable all speedup methods by default. Here are details of some key argument
 
 For more details on the configuration of the training process, please visit our code.
 
-<b>Multi-Node Training.</b>
+### Multi-Node Training
 
 To train OpenDiT on multiple nodes, you can use the following command:
 
@@ -48,7 +50,9 @@ And you need to create `hostfile` under the current dir. It should contain all I
 
 Or you can use the standard `torchrun` to launch multi-node training as well.
 
-<b>Inference.</b> You can perform inference using DiT model as follows. You need to replace the checkpoint path to your own trained model. Or you can download [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our](https://drive.google.com/file/d/1P4t2V3RDNcoCiEkbVWAjNetm3KC_4ueI/view?usp=drive_link) checkpoint for inference.
+### Inference
+
+You can perform inference using DiT model as follows. You need to replace the checkpoint path to your own trained model. Or you can download [official](https://github.com/facebookresearch/DiT?tab=readme-ov-file#sampling--) or [our](https://drive.google.com/file/d/1P4t2V3RDNcoCiEkbVWAjNetm3KC_4ueI/view?usp=drive_link) checkpoint for inference.
 
 ```shell
 # Use script
@@ -65,3 +69,18 @@ Here are details of some addtional key arguments for inference:
 
 - `--ckpt`: The weight of ema model `ema.pt`. To check your training progress, it can also be our saved base model `epochXX-global_stepXX/model`, it will produce better results than ema in early training stage.
 - `--num_classes`: Label class number. Should be 10 for CIFAR10, and 1000 for ImageNet (including official and our checkpoint).
+
+
+### Reproduction
+
+To reproduce our results, you need to change the dataset in `scripts/dit/train_dit.py` and execute the following command:
+
+```
+torchrun --standalone --nproc_per_node=8 scripts/dit/train_dit.py \
+    --model DiT-XL/2 \
+    --batch_size 180 \
+    --enable_layernorm_kernel \
+    --enable_flashattn \
+    --mixed_precision bf16 \
+    --num_classes 1000
+```
