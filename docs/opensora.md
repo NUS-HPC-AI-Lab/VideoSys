@@ -2,27 +2,24 @@
 
 https://github.com/hpcaitech/Open-Sora
 
-We support text-to-video generation for OpenSora.
+We support text-to-video generation for OpenSora. Open-Sora is an open-source initiative dedicated to efficiently reproducing OpenAI's Sora which uses `DiT` model with `Spatial-Temporal Attention`.
+
 
 ### Training
 
-We current support `VDiT` and `Latte` for video generation. VDiT adopts DiT structure and use video as inputs data. Latte further use more efficient spatial & temporal blocks based on VDiT (not exactly align with origin [Latte](https://github.com/Vchitect/Latte)).
-
-Our video training pipeline is a faithful implementation, and we encourage you to explore your own strategies using OpenDiT. You can train the video DiT model by executing the following command:
+You can train the video DiT model by executing the following command:
 
 ```shell
 # train with scipt
-bash train_video.sh
+bash scripts/opensora/train_opensora.sh
 # train with command line
-# model can also be Latte-XL/1x2x2
-torchrun --standalone --nproc_per_node=2 train.py \
-    --model VDiT-XL/1x2x2 \
-    --use_video \
-    --data_path ./videos/demo.csv \
-    --batch_size 1 \
-    --num_frames 16 \
-    --image_size 256 \
-    --frame_interval 3
+torchrun --standalone --nproc_per_node=2 scripts/opensora/train_opensora.py \
+    --batch_size 2 \
+    --mixed_precision bf16 \
+    --lr $LR \
+    --grad_checkpoint \
+    --data_path "./videos/demo.csv" \
+    --model_pretrained_path "ckpt_path"
 ```
 
 We disable all speedup methods by default. Here are details of some key arguments for training:
@@ -34,6 +31,7 @@ We disable all speedup methods by default. Here are details of some key argument
 - `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it.
 - `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
 - `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. This kernel will cause NaN under some circumstances. So we recommend to disable it for now.
+- `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the training process. The default value is `False`. Requires apex install.
 - `--load`: Load previous saved checkpoint dir and continue training.
 
 
@@ -62,19 +60,19 @@ You can perform video inference using DiT model as follows. We are still working
 
 ```shell
 # Use script
-bash sample_video.sh
+bash scripts/opensora/sample_opensora.sh
 # Use command line
-# model can also be Latte-XL/1x2x2
-python sample.py \
-    --model VDiT-XL/1x2x2 \
-    --use_video \
-    --ckpt ckpt_path \
+python scripts/opensora/sample_opensora.py \
+    --model_time_scale 1 \
+    --model_space_scale 1 \
+    --image_size 512 512 \
     --num_frames 16 \
-    --image_size 256 \
-    --frame_interval 3
+    --fps 8 \
+    --dtype fp16 \
+    --model_pretrained_path "ckpt_path"
 ```
 
-Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX/model`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
+Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 ### Data Preparation
 
