@@ -56,7 +56,7 @@ Or you can use the standard `torchrun` to launch multi-node training as well.
 
 ### Inference
 
-You can perform video inference using DiT model as follows. We are still working on the video ckpt.
+You can perform video inference using DiT model as follows. Model weights can be downloaded [here](https://github.com/hpcaitech/Open-Sora/tree/main?tab=readme-ov-file#model-weights).
 
 ```shell
 # Use script
