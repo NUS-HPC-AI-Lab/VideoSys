@@ -93,10 +93,10 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 Here are supported models and their usage:
 
-| Model | Fucntion | Usage |
-| ------ | ------ | ------ |
-| [DiT](https://raw.githubusercontent.com/facebookresearch/DiT)| label-to-image | [link](./docs/dit.md) |
-| [OpenSora](https://github.com/hpcaitech/Open-Sora)| text-to-video | [link](./docs/opensora.md) |
+| Model | Source | Fucntion | Usage | Optimize |
+| ------ | ------ | ------ | ------ | ------ |
+| DiT | https://github.com/facebookresearch/DiT | label-to-image | [Usage](./docs/dit.md) | ✓ |
+| OpenSora | https://github.com/hpcaitech/Open-Sora | text-to-video | [Usage](./docs/opensora.md) | ✓ |
 
 
 ## FastSeq
