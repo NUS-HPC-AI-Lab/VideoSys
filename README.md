@@ -8,6 +8,7 @@
 
 ### Latest News 🔥
 
+- [2024/03/20] Propose Dynamic Sequence Parallel (DSP) [[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], speedup sequence parallelism by 2x for training and 1x for inference.
 - [2024/03/18] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): An open-source initiative dedicated to efficiently reproducing OpenAI's Sora.
 - [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
