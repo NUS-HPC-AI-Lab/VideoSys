@@ -16,7 +16,7 @@ import torch
 import torch.distributed as dist
 from colossalai.utils import get_current_device
 
-from opendit.core.parallel_mgr import get_sequence_parallel_rank, set_parallel_manager
+from opendit.core.parallel_mgr import get_data_parallel_rank, get_sequence_parallel_rank, set_parallel_manager
 from opendit.embed.t5_text_emb import T5Encoder
 from opendit.models.opensora.scheduler import IDDPM
 from opendit.models.opensora.stdit import STDiT_XL_2
@@ -54,6 +54,8 @@ def main(args):
     sp_size = args.sequence_parallel_size
     dp_size = dist.get_world_size() // sp_size
     set_parallel_manager(dp_size, sp_size, dp_axis=0, sp_axis=1)
+    dp_rank = get_data_parallel_rank()
+    sp_rank = get_sequence_parallel_rank()
 
     # ======================================================
     # 4. Runtime variables
@@ -61,8 +63,9 @@ def main(args):
     set_seed(args.seed)
     prompts = [
         "The majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene. The camera angle provides a bird's eye view of the waterfall, allowing viewers to appreciate the full height and grandeur of the waterfall. The video is a stunning representation of nature's power and beauty.",
-        "A majestic lion in its natural habitat. The lion, with its golden fur, is seen walking through a lush green field. The field is dotted with bushes and trees, providing a serene and natural backdrop. The lion's movement is captured in three frames, each showing the lion in a different position, giving a sense of its journey through the field. The overall style of the video is realistic and naturalistic, capturing the beauty of the lion in its environment.",
-        "A lively scene in a park, where a large flock of pigeons is seen in the grassy field. The birds are scattered across the field, some standing, some walking, and some pecking at the ground. The park is lush with green grass and trees, providing a natural habitat for the birds. In the background, there are playground equipment and a building, indicating that the park is located in an urban area. The video is shot in daylight, with the sunlight casting a warm glow on the scene. The overall style of the video is a real-life, candid capture of a moment in the park, showcasing the interaction between the birds and their environment.",
+        "A soaring drone footage captures the majestic beauty of a coastal cliff, its red and yellow stratified rock faces rich in color and against the vibrant turquoise of the sea. Seabirds can be seen taking flight around the cliff's precipices. As the drone slowly moves from different angles, the changing sunlight casts shifting shadows that highlight the rugged textures of the cliff and the surrounding calm sea. The water gently laps at the rock base and the greenery that clings to the top of the cliff, and the scene gives a sense of peaceful isolation at the fringes of the ocean. The video captures the essence of pristine natural beauty untouched by human structures.",
+        "A serene night scene in a forested area. The first frame shows a tranquil lake reflecting the star-filled sky above. The second frame reveals a beautiful sunset, casting a warm glow over the landscape. The third frame showcases the night sky, filled with stars and a vibrant Milky Way galaxy. The video is a time-lapse, capturing the transition from day to night, with the lake and forest serving as a constant backdrop. The style of the video is naturalistic, emphasizing the beauty of the night sky and the peacefulness of the forest.",
+        "A bustling city street at night, filled with the glow of car headlights and the ambient light of streetlights. The scene is a blur of motion, with cars speeding by and pedestrians navigating the crosswalks. The cityscape is a mix of towering buildings and illuminated signs, creating a vibrant and dynamic atmosphere. The perspective of the video is from a high angle, providing a bird's eye view of the street and its surroundings. The overall style of the video is dynamic and energetic, capturing the essence of urban life at night.",
     ]
 
     # ======================================================
@@ -103,12 +106,22 @@ def main(args):
     # ======================================================
     # 6. inference
     # ======================================================
-    sample_idx = 0
+    # makedir
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=True)
+    # config data parallel for sample
+    if dp_size > 1:
+        assert len(prompts) % dp_size == 0, (
+            "For data parallel, sample number should be divided by dp size, ",
+            f"but got sample number {len(prompts)} and dp size {dp_size}",
+        )
+    local_prompt_len = len(prompts) // dp_size
+    start_idx = local_prompt_len * dp_rank
+    sample_idx = start_idx
     dist.barrier()
-    for i in range(0, len(prompts), args.batch_size):
-        batch_prompts = prompts[i : i + args.batch_size]
+
+    for i in range(0, local_prompt_len, args.batch_size):
+        batch_prompts = prompts[start_idx + i : start_idx + i + args.batch_size]
         samples = scheduler.sample(
             model,
             text_encoder,
@@ -119,7 +132,7 @@ def main(args):
         )
         samples = vae.decode(samples.to(dtype))
         for idx, sample in enumerate(samples):
-            if get_sequence_parallel_rank() == 0:
+            if sp_rank == 0:
                 print(f"Prompt: {batch_prompts[idx]}")
                 save_path = os.path.join(save_dir, f"sample_{sample_idx}")
                 save_sample(sample, fps=args.fps, save_path=save_path)
