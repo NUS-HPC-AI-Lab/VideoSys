@@ -88,15 +88,9 @@ class STDiTBlock(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
-        # temporal attention
+        # spatial temporal size
         self.d_s = d_s
         self.d_t = d_t
-
-        # if self.enable_sequence_parallelism:
-        #     sp_size = get_sequence_parallel_size()
-        #     # make sure d_t is divisible by sp_size
-        #     assert d_t % sp_size == 0
-        #     self.d_t = d_t // sp_size
 
         self.attn_temp = self.attn_cls(
             hidden_size,
