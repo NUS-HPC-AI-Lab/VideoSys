@@ -74,7 +74,7 @@ cd OpenDiT
 pip install -e .
 ```
 
-(Optional but recommended) Install libraries for training & inference speed up:
+(Optional but recommended) Install libraries for training & inference speed up (you can run our code without these libraries):
 
 ```shell
 # Install Triton for fused adaln kernel
@@ -92,30 +92,28 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ## Usage
 
-Here are supported models and their usage:
+Here are our supported models and their usage:
 
-| Model | Source | Fucntion | Usage | Optimize |
+| Model | Source | Function | Usage | Optimize |
 | ------ | ------ | ------ | ------ | ------ |
 | DiT | https://github.com/facebookresearch/DiT | label-to-image | [Usage](./docs/dit.md) | ✅ |
 | OpenSora | https://github.com/hpcaitech/Open-Sora | text-to-video | [Usage](./docs/opensora.md) | ✅ |
 
 
-## FastSeq
+## Technique Overview
+
+### DSP [[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)]
+
+![dsp_overview](./figure/dsp_overview.png)
+
+
+DSP (Dynamic Sequence Parallelism) is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture. It improves end-to-end speed by **2x** for training and **1x** for inference in [OpenSora](https://github.com/hpcaitech/Open-Sora). See its detail and usage [here](./docs/dsp.md).
+
+### FastSeq [[doc](./docs/fastseq.md)]
 
 ![fastseq_overview](./figure/fastseq_overview.png)
 
-In the realm of visual generation models, such as DiT, sequence parallelism is indispensable for effective long-sequence training and low-latency inference. Two key features can summarize the distinctive nature of these tasks:
-
-- The model parameter is smaller compared with LLMs, but the sequence can be very long, making communication a bottleneck.
-- As the model size is relatively small, it only needs sequence parallelism within a node.
-
-However, existing methods like DeepSpeed-Ulysses and Megatron-LM Sequence Parallelism face limitations when applied to such tasks. They either introduce excessive sequence communication or lack efficiency in handling small-scale sequence parallelism.
-
-To this end, we present FastSeq, a novel sequence parallelism for large sequences and small-scale parallelism. Our method focuses on minimizing sequence communication by employing only two communication operators for every transformer layer. We leverage AllGather to enhance communication efficiency, and we strategically employ an async ring to overlap AllGather communication with qkv computation, further optimizing performance.
-
-Here are the results of our experiments, more results will be coming soon:
-
-![fastseq_exp](./figure/fastseq_exp.png)
+FastSeq is a novel sequence parallelism for large sequences and small-scale parallelism. Our method focuses on minimizing sequence communication by employing only two communication operators for every transformer layer. We leverage AllGather to enhance communication efficiency, and we strategically employ an async ring to overlap AllGather communication with qkv computation, further optimizing performance.
 
 ## DiT Reproduction Result
 
@@ -154,6 +152,14 @@ If you encounter problems using OpenDiT or have a feature request, feel free to 
   publisher = {GitHub},
   journal = {GitHub repository},
   howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/OpenDiT}},
+}
+@misc{zhao2024dsp,
+      title={DSP: Dynamic Sequence Parallelism for Multi-Dimensional Transformers},
+      author={Xuanlei Zhao and Shenggan Cheng and Zangwei Zheng and Zheming Yang and Ziming Liu and Yang You},
+      year={2024},
+      eprint={2403.10266},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC}
 }
 ```
 
