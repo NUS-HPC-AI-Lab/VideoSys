@@ -8,7 +8,7 @@
 
 ### Latest News 🔥
 
-- [2024/03/20] Propose Dynamic Sequence Parallel (DSP) [[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], speedup sequence parallelism by **2x** for training and **1x** for inference.
+- [2024/03/20] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism.
 - [2024/03/18] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): An open-source initiative dedicated to efficiently reproducing OpenAI's Sora.
 - [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
@@ -109,14 +109,11 @@ Here are our supported models and their usage:
 
 DSP (Dynamic Sequence Parallelism) is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
 
-It improves end-to-end speed by **2x** for training and **1x** for inference in OpenSora. For a 10s (80 frames) of 512x512 video, the inference latency of OpenSora is:
+It achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism ([DeepSpeed Ulysses](https://arxiv.org/abs/2309.14509)). For a 10s (80 frames) of 512x512 video, the inference latency of OpenSora is:
 
-<p align="center">
-
-| <span style="font-weight:normal">Method</span> | <span style="font-weight:normal">1xH800</span> | <span style="font-weight:normal">8xH800 ([DS Ulysses](https://arxiv.org/abs/2309.14509))</span> | <span style="font-weight:normal">8xH800 (DSP)</span> |
+| Method | 1xH800 | 8xH800 (DS Ulysses) | 8xH800 (DSP) |
 | ------ | ------ | ------ | ------ |
 | Latency(s) | 106 | 45 | 22 |
-</p>
 
 See its detail and usage [here](./docs/dsp.md)
 
