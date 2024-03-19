@@ -1,6 +1,6 @@
 # FastSeq
 
-![fastseq_overview](./figure/fastseq_overview.png)
+![fastseq_overview](../figure/fastseq_overview.png)
 
 In the realm of visual generation models, such as DiT, sequence parallelism is indispensable for effective long-sequence training and low-latency inference. Two key features can summarize the distinctive nature of these tasks:
 
@@ -13,4 +13,4 @@ To this end, we present FastSeq, a novel sequence parallelism for large sequence
 
 Here are the results of our experiments, more results will be coming soon:
 
-![fastseq_exp](./figure/fastseq_exp.png)
+![fastseq_exp](../figure/fastseq_exp.png)
