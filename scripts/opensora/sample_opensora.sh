@@ -9,15 +9,15 @@ torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
     --model_pretrained_path ckpt_path
 
 # sequence parallel (DSP) infernece
-torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
-    --model_time_scale 1 \
-    --model_space_scale 1 \
-    --image_size 512 512 \
-    --num_frames 16 \
-    --fps 8 \
-    --dtype fp16 \
-    --sequence_parallel_size 2 \
-    --model_pretrained_path ckpt_path
+# torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
+#     --model_time_scale 1 \
+#     --model_space_scale 1 \
+#     --image_size 512 512 \
+#     --num_frames 16 \
+#     --fps 8 \
+#     --dtype fp16 \
+#     --sequence_parallel_size 2 \
+#     --model_pretrained_path ckpt_path
 
 # recommend setting for speedup
 #   --dtype fp16 \
