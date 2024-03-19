@@ -95,7 +95,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 Here are our supported models and their usage:
 
 | Model | Source | Function | Usage | Optimize |
-| ------ | ------ | ------ | ------ | ------ |
+| ------ | ------ | ------ | ------ | :------: |
 | DiT | https://github.com/facebookresearch/DiT | label-to-image | [Usage](./docs/dit.md) | ✅ |
 | OpenSora | https://github.com/hpcaitech/Open-Sora | text-to-video | [Usage](./docs/opensora.md) | ✅ |
 
@@ -109,9 +109,9 @@ Here are our supported models and their usage:
 
 DSP (Dynamic Sequence Parallelism) is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
 
-It improves end-to-end speed by **2x** for training and **1x** for inference in [OpenSora](https://github.com/hpcaitech/Open-Sora) . For a 10s (80 frames) of 512x512 video, the inference speed of [OpenSora](https://github.com/hpcaitech/Open-Sora) is:
+It improves end-to-end speed by **2x** for training and **1x** for inference in OpenSora. For a 10s (80 frames) of 512x512 video, the inference latency of OpenSora is:
 
-| | 1xH800 | 8xH800 ([DS Ulysses](https://arxiv.org/abs/2309.14509)) | 8xH800 (DSP) |
+Method | 1xH800 | 8xH800 ([DS Ulysses](https://arxiv.org/abs/2309.14509)) | 8xH800 (DSP) |
 | ------ | ------ | ------ | ------ |
 | Latency(s) | 106 | 45 | 22 |
 
