@@ -111,9 +111,12 @@ DSP (Dynamic Sequence Parallelism) is a novel, elegant and super efficient seque
 
 It improves end-to-end speed by **2x** for training and **1x** for inference in OpenSora. For a 10s (80 frames) of 512x512 video, the inference latency of OpenSora is:
 
-Method | 1xH800 | 8xH800 ([DS Ulysses](https://arxiv.org/abs/2309.14509)) | 8xH800 (DSP) |
+<div style="text-align: center;">
+
+| <span style="font-weight:normal">Method</span> | <span style="font-weight:normal">1xH800</span> | <span style="font-weight:normal">8xH800 ([DS Ulysses](https://arxiv.org/abs/2309.14509))</span> | <span style="font-weight:normal">8xH800 (DSP)</span> |
 | ------ | ------ | ------ | ------ |
 | Latency(s) | 106 | 45 | 22 |
+</div>
 
 See its detail and usage [here](./docs/dsp.md)
 
