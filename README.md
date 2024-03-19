@@ -115,7 +115,9 @@ It achieves **3x** speed for training and **2x** speed for inference in OpenSora
 | ------ | ------ | ------ | ------ |
 | Latency(s) | 106 | 45 | 22 |
 
-See its detail and usage [here](./docs/dsp.md)
+See its detail and usage [here](./docs/dsp.md).
+
+<br>
 
 ### FastSeq [[doc](./docs/fastseq.md)]
 
