@@ -7,7 +7,7 @@ We support text-to-video generation for OpenSora. Open-Sora is an open-source in
 
 ### Training
 
-You can train the video DiT model by executing the following command:
+You can train the OpenSora model by executing the following command. Model weights can be downloaded [here](https://github.com/hpcaitech/Open-Sora/tree/main?tab=readme-ov-file#model-weights).
 
 ```shell
 # train with scipt
@@ -16,7 +16,7 @@ bash scripts/opensora/train_opensora.sh
 torchrun --standalone --nproc_per_node=2 scripts/opensora/train_opensora.py \
     --batch_size 2 \
     --mixed_precision bf16 \
-    --lr $LR \
+    --lr 2e-5 \
     --grad_checkpoint \
     --data_path "./videos/demo.csv" \
     --model_pretrained_path "ckpt_path"
@@ -56,13 +56,13 @@ Or you can use the standard `torchrun` to launch multi-node training as well.
 
 ### Inference
 
-You can perform video inference using DiT model as follows. Model weights can be downloaded [here](https://github.com/hpcaitech/Open-Sora/tree/main?tab=readme-ov-file#model-weights).
+You can perform video inference as follows. Model weights can be downloaded [here](https://github.com/hpcaitech/Open-Sora/tree/main?tab=readme-ov-file#model-weights).
 
 ```shell
 # Use script
 bash scripts/opensora/sample_opensora.sh
 # Use command line
-python scripts/opensora/sample_opensora.py \
+torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
     --model_time_scale 1 \
     --model_space_scale 1 \
     --image_size 512 512 \
@@ -72,7 +72,36 @@ python scripts/opensora/sample_opensora.py \
     --model_pretrained_path "ckpt_path"
 ```
 
+We disable all speedup methods by default. Here are details of some key arguments for training:
+
+- `--nproc_per_node`: The GPU number you want to use for the current node.
+- `--dtype`: The data type for sampling. The default value is `fp32`.
+- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. The default value is `False`. Recommend to enable it.
+- `--enable_flashattn`: Whether enable the FlashAttention. The default value is `False`. Recommend to enable.
+- `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the text encoder. The default value is `False`. Requires apex install.
+- `--sequence_parallel_size`: Whether enable sequence parallel. This speeds up the sampling latency. The default value is `False`.
+
 Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
+
+
+### Low-Latency Inference with DSP
+
+You can perform low-latency video inference using our Dynamic Sequence Parallel (DSP) as follows.
+
+```shell
+torchrun --standalone --nproc_per_node=8 scripts/opensora/sample_opensora.py \
+    --model_time_scale 1 \
+    --model_space_scale 1 \
+    --image_size 512 512 \
+    --num_frames 80 \
+    --fps 8 \
+    --dtype fp16 \
+    --sequence_parallel_size 8 \
+    --enable_flashattn \
+    --enable_layernorm_kernel \
+    --text_speedup \
+    --model_pretrained_path "ckpt_path"
+```
 
 ### Data Preparation
 
