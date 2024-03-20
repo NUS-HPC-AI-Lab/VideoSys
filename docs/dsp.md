@@ -15,7 +15,7 @@ It achieves **3x** speed for training and **2x** speed for inference in OpenSora
 | ------ | ------ | ------ | ------ |
 | Latency(s) | 106 | 45 | 22 |
 
-The following is DSP's end-to-end throughput for training in OpenSora:
+The following is DSP's end-to-end throughput for training of OpenSora:
 
 ![dsp_overview](../figure/dsp_exp.png)
 
