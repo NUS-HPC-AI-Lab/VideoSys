@@ -14,6 +14,7 @@ from colossalai.utils import get_current_device
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+from opendit.core.comm import model_sharding
 from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.datasets.dataloader import prepare_dataloader
 from opendit.embed.t5_text_emb import T5Encoder
@@ -21,7 +22,6 @@ from opendit.models.opensora.datasets import DatasetFromCSV, get_transforms_vide
 from opendit.models.opensora.scheduler import IDDPM
 from opendit.models.opensora.stdit import STDiT_XL_2
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
-from opendit.utils.operation import model_sharding
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 from opendit.utils.utils import str_to_dtype
 from opendit.vae.wrapper import VideoAutoencoderKL
@@ -326,7 +326,6 @@ if __name__ == "__main__":
     # parallel
     parser.add_argument("--plugin", type=str, default="zero2")
     parser.add_argument("--sequence_parallel_size", type=int, default=1, help="Sequence parallel size, enable if > 1")
-    parser.add_argument("--sequence_parallel_type", type=str)
 
     args = parser.parse_args()
     main(args)

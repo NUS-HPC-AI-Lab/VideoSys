@@ -9,7 +9,7 @@ import torch.utils.checkpoint
 from einops import rearrange
 from torch.distributed import ProcessGroup
 
-from opendit.utils.operation import AllGather, AsyncAllGatherForTwo, all_to_all_comm
+from opendit.core.comm import AllGather, AsyncAllGatherForTwo, all_to_all_comm
 
 
 class DistAttention(nn.Module):

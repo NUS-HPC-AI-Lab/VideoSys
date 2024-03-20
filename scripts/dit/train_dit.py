@@ -16,13 +16,13 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
+from opendit.core.comm import model_sharding
 from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.datasets.dataloader import prepare_dataloader
 from opendit.datasets.image_transform import get_transforms_image
 from opendit.diffusion import create_diffusion
 from opendit.models.dit.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
-from opendit.utils.operation import model_sharding
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -171,6 +171,9 @@ def main(args):
     # master process goes first
     if not coordinator.is_master():
         dist.barrier()
+    # To use ImageNet, you need to download it and:
+    # from torchvision.datasets import ImageFolder
+    # dataset = ImageFolder(args.data_path, transform=get_transforms_image(args.image_size))
     dataset = CIFAR10(args.data_path, transform=get_transforms_image(args.image_size), download=True)
     if coordinator.is_master():
         dist.barrier()
