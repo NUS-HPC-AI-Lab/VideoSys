@@ -249,7 +249,7 @@ def main(args):
                 optimizer.zero_grad()
 
                 # Update EMA
-                update_ema(ema, model.module, optimizer=optimizer, sharded=shard_ema)
+                update_ema(ema, model.unwrap(), optimizer=optimizer, sharded=shard_ema)
 
                 # Log loss values:
                 all_reduce_mean(loss)
