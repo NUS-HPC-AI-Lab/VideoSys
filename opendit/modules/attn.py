@@ -296,14 +296,6 @@ class MultiHeadCrossAttention(nn.Module):
         kv = self.kv_linear(cond).view(1, -1, 2, self.num_heads, self.head_dim)
         k, v = kv.unbind(2)
 
-        # import xformers
-        # import xformers.ops
-        # attn_bias = None
-        # if mask is not None:
-        #     attn_bias = xformers.ops.fmha.BlockDiagonalMask.from_seqlens([N] * B, mask)
-        # x = xformers.ops.memory_efficient_attention(q, k, v, p=self.attn_drop.p, attn_bias=attn_bias)
-        # x = x.view(B, -1, C)
-
         if self.enable_flashattn:
             x = self.flash_attn_impl(q, k, v, mask, B, N, C)
         else:
@@ -337,16 +329,16 @@ class MultiHeadCrossAttention(nn.Module):
         k = k.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
         v = v.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attn_mask = torch.zeros(B, N, k.shape[2], dtype=torch.bool, device=q.device)
+        attn_mask = torch.zeros(B, N, k.shape[2], dtype=torch.float32, device=q.device)
         for i, m in enumerate(mask):
-            attn_mask[i, :, :m] = -1e9
+            attn_mask[i, :, m:] = -1e8
 
         scale = 1 / q.shape[-1] ** 0.5
         q = q * scale
         attn = q @ k.transpose(-2, -1)
+        attn = attn.to(torch.float32)
         if mask is not None:
             attn = attn + attn_mask.unsqueeze(1)
-        attn = attn.to(torch.float32)
         attn = attn.softmax(-1)
         attn = attn.to(v.dtype)
         out = attn @ v
