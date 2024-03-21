@@ -44,7 +44,7 @@ def get_sequence_parallel_rank():
     return PARALLEL_MANAGER.sp_rank
 
 
-def use_sequecne_parallelism():
+def use_sequence_parallelism():
     return PARALLEL_MANAGER.enable_sp
 
 
