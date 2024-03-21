@@ -16,7 +16,7 @@ from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 
 from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
-from opendit.core.parallel_mgr import get_sequence_parallel_group, get_sequence_parallel_size, use_sequecne_parallelism
+from opendit.core.parallel_mgr import get_sequence_parallel_group, get_sequence_parallel_size, use_sequence_parallelism
 from opendit.embed.clip_text_emb import CaptionEmbedder
 from opendit.embed.patch_emb import PatchEmbed3D
 from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_embed
@@ -68,7 +68,7 @@ class STDiTBlock(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.enable_flashattn = enable_flashattn
-        self.enable_sequence_parallelism = use_sequecne_parallelism()
+        self.enable_sequence_parallelism = use_sequence_parallelism()
 
         self.attn_cls = Attention
         self.mha_cls = MultiHeadCrossAttention
@@ -251,7 +251,7 @@ class STDiT(nn.Module):
                 self.freeze_text()
 
         # sequence parallel related configs
-        self.enable_sequence_parallelism = use_sequecne_parallelism()
+        self.enable_sequence_parallelism = use_sequence_parallelism()
 
         self.gradient_checkpointing = False
 

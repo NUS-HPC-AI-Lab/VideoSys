@@ -36,8 +36,6 @@ def update_ema(
     """
     Step the EMA model towards the current model.
     """
-    if not hasattr(model, "named_parameters"):
-        model = model.module
     ema_params = OrderedDict(ema_model.named_parameters())
     model_params = OrderedDict(model.named_parameters())
 
