@@ -92,7 +92,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 
 ## Usage
 
-Here are our supported models and their usage:
+OpenDiT fully supports the following models, including training and inference, which align with the original methods. Through our novel techniques, we enable these models to run faster and consume less memory. Here's how you can use them:
 
 | Model | Source | Function | Usage | Optimize |
 | ------ | ------ | ------ | ------ | :------: |
