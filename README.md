@@ -16,7 +16,7 @@
 
 OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer (DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
 
-OpenDiT has been adopted by [OpenSora](https://github.com/hpcaitech/Open-Sora), [MiniSora](https://github.com/mini-sora/minisora).
+OpenDiT has been adopted by: [OpenSora](https://github.com/hpcaitech/Open-Sora), [MiniSora](https://github.com/mini-sora/minisora), [SpeeDiT](https://github.com/1zeryu/SpeeDiT).
 
 OpenDiT boasts the performance by the following techniques:
 
