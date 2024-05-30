@@ -318,7 +318,7 @@ if __name__ == "__main__":
     parser.add_argument("--vae_pretrained_path", type=str, default="stabilityai/sd-vae-ft-ema")
 
     # text encoer
-    parser.add_argument("--text_pretrained_path", type=str, default="t5-v1_1-xxl")
+    parser.add_argument("--text_pretrained_path", type=str, default="DeepFloyd/t5-v1_1-xxl")
     parser.add_argument("--text_max_length", type=int, default=120)
     parser.add_argument("--text_speedup", action="store_true")
 

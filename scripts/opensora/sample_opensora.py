@@ -58,15 +58,18 @@ def main(args):
     )
     latent_size = vae.get_latent_size(input_size)
     text_encoder = T5Encoder(
-        from_pretrained="DeepFloyd/t5-v1_1-xxl", model_max_length=200, device=device
-    )  # T5 must be fp32
+        from_pretrained="DeepFloyd/t5-v1_1-xxl",
+        model_max_length=200,
+        device=device,
+        shardformer=args.enable_t5_speedup,
+    )
 
     model = STDiT2_XL_2(
         from_pretrained="hpcai-tech/OpenSora-STDiT-v2-stage3",
         input_sq_size=512,
         qk_norm=True,
-        enable_flash_attn=True,
-        enable_layernorm_kernel=True,
+        enable_flash_attn=args.enable_flashattn,
+        enable_layernorm_kernel=args.enable_layernorm_kernel,
         input_size=latent_size,
         in_channels=vae.out_channels,
         caption_channels=text_encoder.output_dim,
@@ -81,8 +84,8 @@ def main(args):
 
     # 3.3. build scheduler
     scheduler = IDDPM(
-        num_sampling_steps=100,
-        cfg_scale=7.0,
+        num_sampling_steps=args.scheduler_num_sampling_steps,
+        cfg_scale=args.scheduler_cfg_scale,
         cfg_channel=3,
     )
 
@@ -181,6 +184,7 @@ if __name__ == "__main__":
     # speedup
     parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
+    parser.add_argument("--enable_t5_speedup", action="store_true", help="Enable t5 speedup")
 
     args = parser.parse_args()
     main(args)

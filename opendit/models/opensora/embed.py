@@ -256,7 +256,7 @@ class T5Embedder:
 class T5Encoder:
     def __init__(
         self,
-        from_pretrained="t5-v1_1-xxl",
+        from_pretrained="DeepFloyd/t5-v1_1-xxl",
         model_max_length=120,
         device="cuda",
         dtype=torch.float,
