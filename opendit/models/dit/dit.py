@@ -14,10 +14,8 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from timm.models.vision_transformer import Mlp, PatchEmbed
 
-from opendit.embed.label_emb import LabelEmbedder
-from opendit.embed.pos_emb import get_2d_sincos_pos_embed
-from opendit.embed.time_emb import TimestepEmbedder
 from opendit.modules.attn import Attention
+from opendit.modules.embed import LabelEmbedder, TimestepEmbedder, get_2d_sincos_pos_embed
 from opendit.modules.layers import FinalLayer, get_layernorm, modulate
 
 
