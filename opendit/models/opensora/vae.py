@@ -57,10 +57,13 @@ class VideoAutoencoderKL(nn.Module):
         return x
 
     def get_latent_size(self, input_size):
+        latent_size = []
         for i in range(3):
-            assert input_size[i] % self.patch_size[i] == 0, "Input size must be divisible by patch size"
-        input_size = [input_size[i] // self.patch_size[i] for i in range(3)]
-        return input_size
+            # assert (
+            #     input_size[i] is None or input_size[i] % self.patch_size[i] == 0
+            # ), "Input size must be divisible by patch size"
+            latent_size.append(input_size[i] // self.patch_size[i] if input_size[i] is not None else None)
+        return latent_size
 
 
 def save_sample(x, fps=8, save_path=None, normalize=True, value_range=(-1, 1)):

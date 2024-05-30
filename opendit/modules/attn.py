@@ -12,6 +12,23 @@ from torch.distributed import ProcessGroup
 from opendit.core.comm import AllGather, AsyncAllGatherForTwo, all_to_all_comm
 
 
+class LlamaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        LlamaRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+
 class DistAttention(nn.Module):
     def __init__(
         self,
@@ -214,8 +231,9 @@ class Attention(nn.Module):
         qk_norm: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        norm_layer: nn.Module = nn.LayerNorm,
+        norm_layer: nn.Module = LlamaRMSNorm,
         enable_flashattn: bool = False,
+        rope=None,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -232,6 +250,11 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
+        self.rope = False
+        if rope is not None:
+            self.rope = True
+            self.rotary_emb = rope
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x)
@@ -242,6 +265,9 @@ class Attention(nn.Module):
             qkv_permute_shape = (2, 0, 3, 1, 4)
         qkv = qkv.view(qkv_shape).permute(qkv_permute_shape)
         q, k, v = qkv.unbind(0)
+        if self.rope:
+            q = self.rotary_emb(q)
+            k = self.rotary_emb(k)
         q, k = self.q_norm(q), self.k_norm(k)
         if self.enable_flashattn:
             from flash_attn import flash_attn_func

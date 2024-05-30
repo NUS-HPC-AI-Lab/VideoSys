@@ -9,9 +9,6 @@ from opendit.core.parallel_mgr import set_parallel_manager
 from opendit.models.opensora import IDDPM, STDiT2_XL_2, T5Encoder, VideoAutoencoderKL, save_sample, text_preprocessing
 from opendit.utils.utils import set_seed, str_to_dtype
 
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-
 
 def main(args):
     # ======================================================
@@ -57,7 +54,7 @@ def main(args):
     input_size = (args.num_frames, *args.image_size)
     vae = VideoAutoencoderKL(
         from_pretrained="stabilityai/sd-vae-ft-ema",
-        micro_batch_size=4,
+        split=4,
     )
     latent_size = vae.get_latent_size(input_size)
     text_encoder = T5Encoder(
@@ -129,7 +126,7 @@ def main(args):
         # 4.3. diffusion sampling
         old_sample_idx = sample_idx
         # generate multiple samples for each prompt
-        for k in range(len(prompts)):
+        for k in range(args.num_samples):
             sample_idx = old_sample_idx
 
             # Skip if the sample already exists
@@ -151,7 +148,7 @@ def main(args):
             if not use_dist or coordinator.is_master():
                 for idx, sample in enumerate(samples):
                     print(f"Prompt: {batch_prompts_raw[idx]}")
-                    sample_name_suffix = f"{sample_idx}_{batch_prompts_raw[idx]}"
+                    sample_name_suffix = f"_{sample_idx}_{batch_prompts_raw[idx][:30]}"
                     save_path = os.path.join(save_dir, f"{sample_name}{sample_name_suffix}")
                     save_path = f"{save_path}-{k}"
                     save_sample(sample, fps=args.fps // args.frame_interval, save_path=save_path)
@@ -163,8 +160,10 @@ if __name__ == "__main__":
 
     # sample
     parser.add_argument("--num_frames", type=int, default=64)
+    parser.add_argument("--frame_interval", type=int, default=3)
     parser.add_argument("--fps", type=int, default=24 // 2)
     parser.add_argument("--image_size", nargs="+", type=int, default=[512, 512])
+    parser.add_argument("--num_samples", type=int, default=1)
     parser.add_argument("--save_dir", type=str, default="./samples")
 
     # runtime

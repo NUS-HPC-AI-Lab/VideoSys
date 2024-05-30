@@ -175,7 +175,7 @@ class STDiT2Block(nn.Module):
             hidden_size,
             num_heads=num_heads,
             qkv_bias=True,
-            enable_flash_attn=enable_flash_attn,
+            enable_flashattn=enable_flash_attn,
             qk_norm=qk_norm,
         )
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
@@ -196,7 +196,7 @@ class STDiT2Block(nn.Module):
             hidden_size,
             num_heads=num_heads,
             qkv_bias=True,
-            enable_flash_attn=self.enable_flash_attn,
+            enable_flashattn=self.enable_flash_attn,
             rope=rope,
             qk_norm=qk_norm,
         )
