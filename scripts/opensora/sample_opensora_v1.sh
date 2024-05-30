@@ -6,7 +6,7 @@ torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
     --num_frames 16 \
     --fps 8 \
     --dtype fp16 \
-    --model_pretrained_path ckpt_path
+    --model_pretrained_path hpcai-tech/OpenSora-STDiT-v2-stage3
 
 # sequence parallel (DSP) infernece
 # torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
