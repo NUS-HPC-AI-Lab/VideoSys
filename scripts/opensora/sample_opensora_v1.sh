@@ -1,5 +1,5 @@
 # data parallel inference
-torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
+torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora_v1.py \
     --model_time_scale 1 \
     --model_space_scale 1 \
     --image_size 512 512 \
@@ -9,7 +9,7 @@ torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
     --model_pretrained_path hpcai-tech/OpenSora-STDiT-v2-stage3
 
 # sequence parallel (DSP) infernece
-# torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
+# torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora_v1.py \
 #     --model_time_scale 1 \
 #     --model_space_scale 1 \
 #     --image_size 512 512 \

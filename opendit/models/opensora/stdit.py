@@ -20,11 +20,11 @@ from opendit.models.opensora.ckpt_io import load_checkpoint
 from opendit.models.opensora.embed import (
     CaptionEmbedder,
     PatchEmbed3D,
+    TimestepEmbedder,
     get_1d_sincos_pos_embed,
     get_2d_sincos_pos_embed,
 )
 from opendit.modules.attn import Attention, MultiHeadCrossAttention
-from opendit.modules.embed import TimestepEmbedder
 from opendit.modules.layers import get_layernorm
 
 

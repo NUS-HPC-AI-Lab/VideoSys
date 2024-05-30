@@ -3,7 +3,7 @@ LR=2e-5
 DATA_PATH="./videos/demo.csv"
 MODEL_PRETRAINED_PATH="ckpt_path"
 
-torchrun --standalone --nproc_per_node=2 scripts/opensora/train_opensora.py \
+torchrun --standalone --nproc_per_node=2 scripts/opensora/train_opensora_v1.py \
     --batch_size $BATCH_SIZE \
     --mixed_precision bf16 \
     --lr $LR \
@@ -12,7 +12,7 @@ torchrun --standalone --nproc_per_node=2 scripts/opensora/train_opensora.py \
     --model_pretrained_path $MODEL_PRETRAINED_PATH
 
 # recommend
-# torchrun --standalone --nproc_per_node=8 scripts/opensora/train_opensora.py \
+# torchrun --standalone --nproc_per_node=8 scripts/opensora/train_opensora_v1.py \
 #     --batch_size $BATCH_SIZE \
 #     --mixed_precision bf16 \
 #     --lr $LR \
