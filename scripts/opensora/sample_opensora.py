@@ -17,12 +17,10 @@ import torch.distributed as dist
 from colossalai.utils import get_current_device
 
 from opendit.core.parallel_mgr import get_data_parallel_rank, get_sequence_parallel_rank, set_parallel_manager
-from opendit.models.opensora.embed import T5Encoder
+from opendit.models.opensora import IDDPM, STDiT_XL_2, T5Encoder, VideoAutoencoderKL, save_sample
 from opendit.models.opensora.scheduler import IDDPM
 from opendit.models.opensora.stdit import STDiT_XL_2
 from opendit.utils.utils import set_seed, str_to_dtype
-from opendit.vae.reconstruct import save_sample
-from opendit.vae.wrapper import VideoAutoencoderKL
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

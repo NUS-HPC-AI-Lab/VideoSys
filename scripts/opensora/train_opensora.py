@@ -17,14 +17,17 @@ from tqdm import tqdm
 from opendit.core.comm import model_sharding
 from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.datasets.dataloader import prepare_dataloader
-from opendit.models.opensora.datasets import DatasetFromCSV, get_transforms_video
-from opendit.models.opensora.embed import T5Encoder
-from opendit.models.opensora.scheduler import IDDPM
-from opendit.models.opensora.stdit import STDiT_XL_2
+from opendit.models.opensora import (
+    IDDPM,
+    DatasetFromCSV,
+    STDiT_XL_2,
+    T5Encoder,
+    VideoAutoencoderKL,
+    get_transforms_video,
+)
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 from opendit.utils.utils import str_to_dtype
-from opendit.vae.wrapper import VideoAutoencoderKL
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
