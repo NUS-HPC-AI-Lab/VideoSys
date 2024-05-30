@@ -17,8 +17,8 @@ from tqdm import tqdm
 from opendit.core.comm import model_sharding
 from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.datasets.dataloader import prepare_dataloader
-from opendit.embed.t5_text_emb import T5Encoder
 from opendit.models.opensora.datasets import DatasetFromCSV, get_transforms_video
+from opendit.models.opensora.embed import T5Encoder
 from opendit.models.opensora.scheduler import IDDPM
 from opendit.models.opensora.stdit import STDiT_XL_2
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save

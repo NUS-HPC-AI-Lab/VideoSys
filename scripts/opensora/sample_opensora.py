@@ -17,7 +17,7 @@ import torch.distributed as dist
 from colossalai.utils import get_current_device
 
 from opendit.core.parallel_mgr import get_data_parallel_rank, get_sequence_parallel_rank, set_parallel_manager
-from opendit.embed.t5_text_emb import T5Encoder
+from opendit.models.opensora.embed import T5Encoder
 from opendit.models.opensora.scheduler import IDDPM
 from opendit.models.opensora.stdit import STDiT_XL_2
 from opendit.utils.utils import set_seed, str_to_dtype

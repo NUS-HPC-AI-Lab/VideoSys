@@ -17,12 +17,15 @@ from timm.models.vision_transformer import Mlp
 
 from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
 from opendit.core.parallel_mgr import get_sequence_parallel_group, get_sequence_parallel_size, use_sequence_parallelism
-from opendit.embed.clip_text_emb import CaptionEmbedder
-from opendit.embed.patch_emb import PatchEmbed3D
-from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_embed
-from opendit.embed.time_emb import TimestepEmbedder
 from opendit.models.opensora.ckpt_io import load_checkpoint
+from opendit.models.opensora.embed import (
+    CaptionEmbedder,
+    PatchEmbed3D,
+    get_1d_sincos_pos_embed,
+    get_2d_sincos_pos_embed,
+)
 from opendit.modules.attn import Attention, MultiHeadCrossAttention
+from opendit.modules.embed import TimestepEmbedder
 from opendit.modules.layers import get_layernorm
 
 
