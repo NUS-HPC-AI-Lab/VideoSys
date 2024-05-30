@@ -65,7 +65,7 @@ def main(args):
     )
 
     model = STDiT2_XL_2(
-        from_pretrained="hpcai-tech/OpenSora-STDiT-v2-stage3",
+        from_pretrained=args.model_pretrained_path,
         input_sq_size=512,
         qk_norm=True,
         enable_flash_attn=args.enable_flashattn,
@@ -162,20 +162,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # sample
-    parser.add_argument("--num_frames", type=int, default=64)
+    parser.add_argument("--num_frames", type=int, default=16)
     parser.add_argument("--frame_interval", type=int, default=3)
-    parser.add_argument("--fps", type=int, default=24 // 2)
-    parser.add_argument("--image_size", nargs="+", type=int, default=[512, 512])
+    parser.add_argument("--fps", type=int, default=24)
+    parser.add_argument("--image_size", nargs="+", type=int, default=[240, 426])
     parser.add_argument("--num_samples", type=int, default=1)
-    parser.add_argument("--save_dir", type=str, default="./samples")
 
     # runtime
     parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--save_dir", type=str, default="./samples")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--dtype", type=str, default="fp32")
+    parser.add_argument("--dtype", type=str, default="bf16")
 
     # model
-    parser.add_argument("--model_pretrained_path", type=str, required=True)
+    parser.add_argument("--model_pretrained_path", type=str, default="hpcai-tech/OpenSora-STDiT-v2-stage3")
 
     # scheduler
     parser.add_argument("--scheduler_num_sampling_steps", type=int, default=100)
