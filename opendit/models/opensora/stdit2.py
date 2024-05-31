@@ -20,7 +20,11 @@ from timm.models.vision_transformer import Mlp
 from transformers import PretrainedConfig, PreTrainedModel
 
 from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
-from opendit.core.parallel_mgr import get_sequence_parallel_group, get_sequence_parallel_size, use_sequence_parallelism
+from opendit.core.parallel_mgr import (
+    get_sequence_parallel_group,
+    get_sequence_parallel_size,
+    is_sequence_parallelism_enable,
+)
 from opendit.models.opensora.ckpt_io import load_checkpoint
 from opendit.models.opensora.embed import CaptionEmbedder, PatchEmbed3D, TimestepEmbedder, get_2d_sincos_pos_embed
 from opendit.models.opensora.stdit import approx_gelu, t2i_modulate
@@ -256,14 +260,14 @@ class STDiT2Block(nn.Module):
             x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
         # temporal branch
-        if use_sequence_parallelism():
+        if is_sequence_parallelism_enable():
             x_m, S, T = self.dynamic_switch(x_m, S, T, temporal_to_spatial=True)
 
         x_t = rearrange(x_m, "B (T S) C -> (B S) T C", T=T, S=S)
         x_t = self.attn_temp(x_t)
         x_t = rearrange(x_t, "(B S) T C -> B (T S) C", T=T, S=S)
 
-        if use_sequence_parallelism():
+        if is_sequence_parallelism_enable():
             x_t, S, T = self.dynamic_switch(x_t, S, T, temporal_to_spatial=False)
 
         if x_mask is not None:
@@ -504,7 +508,7 @@ class STDiT2(PreTrainedModel):
         x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
         x = x + pos_emb
 
-        if use_sequence_parallelism():
+        if is_sequence_parallelism_enable():
             x = split_sequence(x, get_sequence_parallel_group(), dim=1)
             T = T // get_sequence_parallel_size()
 
@@ -573,7 +577,7 @@ class STDiT2(PreTrainedModel):
                 )
             # x.shape: [B, N, C]
 
-        if use_sequence_parallelism():
+        if is_sequence_parallelism_enable():
             x = gather_sequence(x, get_sequence_parallel_group(), dim=1)
             T = T * get_sequence_parallel_size()
 
