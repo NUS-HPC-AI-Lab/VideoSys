@@ -187,7 +187,7 @@ class STDiT2Block(nn.Module):
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
         # cross attn
-        self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads)
+        self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads, enable_flashattn=enable_flash_attn)
 
         # mlp branch
         self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
