@@ -1,3 +1,27 @@
+## Install
+pip install -e .
+
+## Run
+bash scripts/opensora/sample_opensora.sh
+
+## Description
+Main code modification is in opendit/modules/attn.py
+Control flag is also at the top this file.
+
+## Code format
+Recommend to commit code by PR.
+
+Need to install code formater
+```shell
+# these commands are executed under the Colossal-AI directory
+pip install pre-commit
+pre-commit install
+```
+
+
+
+
+
 <p align="center">
 <img width="200px" alt="OpenDiT" src="./figure/logo.png?raw=true">
 </p>
