@@ -694,7 +694,7 @@ def STDiT2_XL_2(from_pretrained=None, **kwargs):
             return model
         else:
             # otherwise, we load the model from hugging face hub
-            return STDiT2.from_pretrained(from_pretrained)
+            return STDiT2.from_pretrained(from_pretrained, **kwargs)
     else:
         # create a new model
         config = STDiT2Config(depth=28, hidden_size=1152, patch_size=(1, 2, 2), num_heads=16, **kwargs)
