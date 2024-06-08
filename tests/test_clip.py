@@ -1,6 +1,6 @@
 import torch
 
-from opendit.embed.clip_text_emb import TextEmbedder
+from opendit.models.opensora.embed import TextEmbedder
 
 if __name__ == "__main__":
     r"""

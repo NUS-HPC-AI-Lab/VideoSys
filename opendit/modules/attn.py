@@ -11,6 +11,37 @@ from torch.distributed import ProcessGroup
 
 from opendit.core.comm import AllGather, AsyncAllGatherForTwo, all_to_all_comm
 
+STEPS = 100
+
+CROSS_SKIP = True
+CROSS_THRESHOLD = 700
+CROSS_GAP = 5
+
+SPATIAL_SKIP = True
+SPTIAL_THRESHOLD = 700
+SPATIAL_GAP = 5
+
+TEMPORAL_SKIP = True
+TEMPROAL_THRESHOLD = 700
+TEMPORAL_GAP = 5
+
+
+class LlamaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        LlamaRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
 
 class DistAttention(nn.Module):
     def __init__(
@@ -214,8 +245,9 @@ class Attention(nn.Module):
         qk_norm: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        norm_layer: nn.Module = nn.LayerNorm,
+        norm_layer: nn.Module = LlamaRMSNorm,
         enable_flashattn: bool = False,
+        rope=None,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -232,6 +264,11 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
+        self.rope = False
+        if rope is not None:
+            self.rope = True
+            self.rotary_emb = rope
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x)
@@ -242,6 +279,9 @@ class Attention(nn.Module):
             qkv_permute_shape = (2, 0, 3, 1, 4)
         qkv = qkv.view(qkv_shape).permute(qkv_permute_shape)
         q, k, v = qkv.unbind(0)
+        if self.rope:
+            q = self.rotary_emb(q)
+            k = self.rotary_emb(k)
         q, k = self.q_norm(q), self.k_norm(k)
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
@@ -272,6 +312,189 @@ class Attention(nn.Module):
         return x
 
 
+class SpatialAttention(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int = 8,
+        qkv_bias: bool = False,
+        qk_norm: bool = False,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+        norm_layer: nn.Module = LlamaRMSNorm,
+        enable_flashattn: bool = False,
+        rope=None,
+    ) -> None:
+        super().__init__()
+        assert dim % num_heads == 0, "dim should be divisible by num_heads"
+        self.dim = dim
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim**-0.5
+        self.enable_flashattn = enable_flashattn
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        self.rope = False
+        if rope is not None:
+            self.rope = True
+            self.rotary_emb = rope
+
+        self.count = 0
+
+    def forward(self, x: torch.Tensor, timestep=None, H=None, W=None) -> torch.Tensor:
+        B, N, C = x.shape
+        qkv = self.qkv(x)
+        qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
+        qkv = qkv.view(qkv_shape).permute(2, 0, 1, 3, 4)
+        q, k, v = qkv.unbind(0)
+        if self.rope:
+            q = self.rotary_emb(q)
+            k = self.rotary_emb(k)
+        q, k = self.q_norm(q), self.k_norm(k)
+
+        from flash_attn import flash_attn_func
+
+        if self.if_skip(timestep):
+            # func = lambda x: rearrange(x, "b (hh h ww w) hd d -> (b hh ww) (h w) hd d", hh=2, ww=2, w=W // 2, h=H // 2)
+            func = lambda x: rearrange(x, "b (s ss) hd d -> (b s) ss hd d", s=2)  # will crash if s > 2
+            q, k, v = map(func, (q, k, v))
+            x = flash_attn_func(
+                q,
+                k,
+                v,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+                softmax_scale=self.scale,
+            )
+            # x = rearrange(x, "(b hh ww) (h w) hd d -> b (hh h ww w) hd d", hh=2, ww=2, w=W // 2, h=H // 2)
+            x = rearrange(x, "(b s) ss hd d -> b (s ss) hd d", s=2)
+        else:
+            x = flash_attn_func(
+                q,
+                k,
+                v,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+                softmax_scale=self.scale,
+            )
+
+        x_output_shape = (B, N, C)
+        x = x.reshape(x_output_shape)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+    @torch.compiler.disable
+    def if_skip(self, timestep):
+        if (
+            SPATIAL_SKIP
+            and (timestep is not None)
+            and (self.count % SPATIAL_GAP != 0)
+            and (timestep < SPTIAL_THRESHOLD)
+        ):
+            self.count = (self.count + 1) % STEPS
+            return True
+        else:
+            self.count = (self.count + 1) % STEPS
+            return False
+
+
+class TemporalAttention(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int = 8,
+        qkv_bias: bool = False,
+        qk_norm: bool = False,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+        norm_layer: nn.Module = LlamaRMSNorm,
+        enable_flashattn: bool = False,
+        rope=None,
+    ) -> None:
+        super().__init__()
+        assert dim % num_heads == 0, "dim should be divisible by num_heads"
+        self.dim = dim
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim**-0.5
+        self.enable_flashattn = enable_flashattn
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        self.rope = False
+        if rope is not None:
+            self.rope = True
+            self.rotary_emb = rope
+
+        self.last_qk = None
+        self.count = 0
+
+    def forward(self, x: torch.Tensor, timestep=None, H=None, W=None) -> torch.Tensor:
+        B, N, C = x.shape
+        skip_temporal = self.if_skip(timestep)
+
+        if skip_temporal:
+            v = F.linear(x, self.qkv.weight[-self.dim :], self.qkv.bias[-self.dim :])
+            v = v.view(B, N, self.num_heads, self.head_dim)
+            q, k = self.last_qk
+        else:
+            qkv = self.qkv(x)
+            qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
+            qkv = qkv.view(qkv_shape).permute(2, 0, 1, 3, 4)
+            q, k, v = qkv.unbind(0)
+            if self.rope:
+                q = self.rotary_emb(q)
+                k = self.rotary_emb(k)
+            q, k = self.q_norm(q), self.k_norm(k)
+
+        from flash_attn import flash_attn_func
+
+        x = flash_attn_func(
+            q,
+            k,
+            v,
+            dropout_p=self.attn_drop.p if self.training else 0.0,
+            softmax_scale=self.scale,
+        )
+
+        if not skip_temporal:
+            self.set_last_qk(q, k)
+
+        x_output_shape = (B, N, C)
+        x = x.reshape(x_output_shape)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+    @torch.compiler.disable
+    def set_last_qk(self, q, k):
+        self.last_qk = (q, k)
+
+    @torch.compiler.disable
+    def if_skip(self, timestep):
+        if (
+            TEMPORAL_SKIP
+            and (timestep is not None)
+            and (self.count % TEMPORAL_GAP != 0)
+            and (timestep < TEMPROAL_THRESHOLD)
+        ):
+            self.count = (self.count + 1) % STEPS
+            return True
+        else:
+            self.count = (self.count + 1) % STEPS
+            return False
+
+
 class MultiHeadCrossAttention(nn.Module):
     def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, enable_flashattn=False):
         super(MultiHeadCrossAttention, self).__init__()
@@ -287,23 +510,38 @@ class MultiHeadCrossAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(d_model, d_model)
         self.proj_drop = nn.Dropout(proj_drop)
+        self.last_out = None
+        self.count = 0
 
-    def forward(self, x, cond, mask=None):
+    def forward(self, x, cond, mask=None, timestep=None):
         # query/value: img tokens; key: condition; mask: if padding tokens
         B, N, C = x.shape
 
-        q = self.q_linear(x).view(1, -1, self.num_heads, self.head_dim)
-        kv = self.kv_linear(cond).view(1, -1, 2, self.num_heads, self.head_dim)
-        k, v = kv.unbind(2)
-
-        if self.enable_flashattn:
-            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
+        if self.if_skip(timestep):
+            x = self.last_out
         else:
-            x = self.torch_impl(q, k, v, mask, B, N, C)
+            q = self.q_linear(x).view(1, -1, self.num_heads, self.head_dim)
+            kv = self.kv_linear(cond).view(1, -1, 2, self.num_heads, self.head_dim)
+            k, v = kv.unbind(2)
+            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
+            self.set_last_out(x)
 
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+
+    @torch.compiler.disable
+    def if_skip(self, timestep):
+        if CROSS_SKIP and timestep is not None and timestep < CROSS_THRESHOLD and self.count % CROSS_GAP != 0:
+            self.count = (self.count + 1) % STEPS
+            return True
+        else:
+            self.count = (self.count + 1) % STEPS
+            return False
+
+    @torch.compiler.disable
+    def set_last_out(self, x):
+        self.last_out = x
 
     def flash_attn_impl(self, q, k, v, mask, B, N, C):
         from flash_attn import flash_attn_varlen_func
