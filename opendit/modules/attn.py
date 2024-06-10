@@ -13,15 +13,15 @@ from opendit.core.comm import AllGather, AsyncAllGatherForTwo, all_to_all_comm
 
 STEPS = 100
 
-CROSS_SKIP = True
+CROSS_SKIP = False
 CROSS_THRESHOLD = 700
 CROSS_GAP = 5
 
 SPATIAL_SKIP = False
 SPTIAL_THRESHOLD = 700
-SPATIAL_GAP = 5
+SPATIAL_GAP = 3
 
-TEMPORAL_SKIP = True
+TEMPORAL_SKIP = False
 TEMPROAL_THRESHOLD = 700
 TEMPORAL_GAP = 5
 
@@ -346,34 +346,26 @@ class SpatialAttention(nn.Module):
             self.rotary_emb = rope
 
         self.count = 0
+        self.last_out = None
 
-    def forward(self, x: torch.Tensor, timestep=None, H=None, W=None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, timestep=None, H=None, W=None, block_idx=None) -> torch.Tensor:
         B, N, C = x.shape
-        qkv = self.qkv(x)
-        qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
-        qkv = qkv.view(qkv_shape).permute(2, 0, 1, 3, 4)
-        q, k, v = qkv.unbind(0)
-        if self.rope:
-            q = self.rotary_emb(q)
-            k = self.rotary_emb(k)
-        q, k = self.q_norm(q), self.k_norm(k)
 
-        from flash_attn import flash_attn_func
+        if self.if_skip(timestep) and 5 < block_idx < 27:
+            x = self.last_out
 
-        if self.if_skip(timestep):
-            # func = lambda x: rearrange(x, "b (hh h ww w) hd d -> (b hh ww) (h w) hd d", hh=2, ww=2, w=W // 2, h=H // 2)
-            func = lambda x: rearrange(x, "b (s ss) hd d -> (b s) ss hd d", s=2)  # will crash if s > 2
-            q, k, v = map(func, (q, k, v))
-            x = flash_attn_func(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-                softmax_scale=self.scale,
-            )
-            # x = rearrange(x, "(b hh ww) (h w) hd d -> b (hh h ww w) hd d", hh=2, ww=2, w=W // 2, h=H // 2)
-            x = rearrange(x, "(b s) ss hd d -> b (s ss) hd d", s=2)
         else:
+            qkv = self.qkv(x)
+            qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
+            qkv = qkv.view(qkv_shape).permute(2, 0, 1, 3, 4)
+            q, k, v = qkv.unbind(0)
+            if self.rope:
+                q = self.rotary_emb(q)
+                k = self.rotary_emb(k)
+            q, k = self.q_norm(q), self.k_norm(k)
+
+            from flash_attn import flash_attn_func
+
             x = flash_attn_func(
                 q,
                 k,
@@ -381,6 +373,7 @@ class SpatialAttention(nn.Module):
                 dropout_p=self.attn_drop.p if self.training else 0.0,
                 softmax_scale=self.scale,
             )
+            self.last_out = x
 
         x_output_shape = (B, N, C)
         x = x.reshape(x_output_shape)

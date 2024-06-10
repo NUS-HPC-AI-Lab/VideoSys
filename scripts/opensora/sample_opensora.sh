@@ -1,7 +1,7 @@
-H=512
-W=512
-# H=360
-# W=640
+H=1024
+W=1024
+# H=512
+# W=512
 
 # inference
 torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py \

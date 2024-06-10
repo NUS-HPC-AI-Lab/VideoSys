@@ -233,6 +233,7 @@ class STDiT2Block(nn.Module):
         timestep=None,
         H=None,
         W=None,
+        block_idx=None,
     ):
         B, N, C = x.shape
 
@@ -258,7 +259,7 @@ class STDiT2Block(nn.Module):
 
         # spatial branch
         x_s = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
-        x_s = self.attn(x_s, timestep=timestep, H=H, W=W)
+        x_s = self.attn(x_s, timestep=timestep, H=H, W=W, block_idx=block_idx)
         x_s = rearrange(x_s, "(B T) S C -> B (T S) C", T=T, S=S)
         if x_mask is not None:
             x_s_zero = gate_msa_zero * x_s
@@ -562,7 +563,7 @@ class STDiT2(PreTrainedModel):
             y = y.squeeze(1).view(1, -1, x.shape[-1])
 
         # blocks
-        for _, block in enumerate(self.blocks):
+        for i, block in enumerate(self.blocks):
             if self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(
                     self.create_custom_forward(block),
@@ -579,7 +580,7 @@ class STDiT2(PreTrainedModel):
                 )
             else:
                 x = block(
-                    x, y, t_spc_mlp, t_tmp_mlp, y_lens, x_mask, t0_spc_mlp, t0_tmp_mlp, T, S, int(timestep[0]), H, W
+                    x, y, t_spc_mlp, t_tmp_mlp, y_lens, x_mask, t0_spc_mlp, t0_tmp_mlp, T, S, int(timestep[0]), H, W, i
                 )
             # x.shape: [B, N, C]
 
