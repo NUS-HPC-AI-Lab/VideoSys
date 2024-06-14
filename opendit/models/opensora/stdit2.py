@@ -398,7 +398,7 @@ class STDiT2(PreTrainedModel):
         drop_path = [x.item() for x in torch.linspace(0, config.drop_path, config.depth)]
         from rotary_embedding_torch import RotaryEmbedding
 
-        self.rope = RotaryEmbedding(dim=self.hidden_size // self.num_heads)  # new
+        self.rope = RotaryEmbedding(dim=self.hidden_size // self.num_heads, seq_before_head_dim=True)  # new
         self.blocks = nn.ModuleList(
             [
                 STDiT2Block(

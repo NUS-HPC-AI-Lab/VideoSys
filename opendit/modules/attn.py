@@ -6,22 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 
-
-class LlamaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        LlamaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+from opendit.modules.layers import LlamaRMSNorm
 
 
 class Attention(nn.Module):
@@ -59,20 +44,20 @@ class Attention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
+
         qkv = self.qkv(x)
-        qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
-        qkv_permute_shape = (2, 0, 3, 1, 4)
-        qkv = qkv.view(qkv_shape).permute(qkv_permute_shape)
+        qkv = qkv.view(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 1, 3, 4)
         q, k, v = qkv.unbind(0)
+
         if self.rope:
             q = self.rotary_emb(q)
             k = self.rotary_emb(k)
+
         q, k = self.q_norm(q), self.k_norm(k)
+
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
-            # TODO: optimize reshape
-            q, k, v = map(lambda t: t.permute(0, 2, 1, 3), (q, k, v))
             x = flash_attn_func(
                 q,
                 k,
@@ -81,6 +66,7 @@ class Attention(nn.Module):
                 softmax_scale=self.scale,
             )
         else:
+            q, k, v = map(lambda t: t.permute(0, 2, 1, 3), (q, k, v))
             x = F.scaled_dot_product_attention(
                 q, k, v, scale=self.scale, dropout_p=self.attn_drop.p if self.training else 0.0
             )
