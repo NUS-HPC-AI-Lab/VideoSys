@@ -163,3 +163,6 @@ coverage.xml
 # ignore testmon and coverage files
 .coverage
 .testmondata*
+
+pretrained
+samples

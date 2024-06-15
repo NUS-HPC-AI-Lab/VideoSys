@@ -1,0 +1,18 @@
+num_frames: 16
+frame_interval: 3
+fps: 24
+image_size: [240, 426]
+num_samples: 1
+
+# runtime
+batch_size: 1
+save_dir: "./samples/opensora"
+seed: 42
+dtype: "bf16"
+
+# model
+model_pretrained_path: "hpcai-tech/OpenSora-STDiT-v2-stage3"
+
+# scheduler
+scheduler_num_sampling_steps: 100
+scheduler_cfg_scale: 7.0

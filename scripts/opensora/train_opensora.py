@@ -17,14 +17,17 @@ from tqdm import tqdm
 from opendit.core.comm import model_sharding
 from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.datasets.dataloader import prepare_dataloader
-from opendit.embed.t5_text_emb import T5Encoder
-from opendit.models.opensora.datasets import DatasetFromCSV, get_transforms_video
-from opendit.models.opensora.scheduler import IDDPM
-from opendit.models.opensora.stdit import STDiT_XL_2
+from opendit.models.opensora import (
+    IDDPM,
+    DatasetFromCSV,
+    STDiT_XL_2,
+    T5Encoder,
+    VideoAutoencoderKL,
+    get_transforms_video,
+)
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 from opendit.utils.utils import str_to_dtype
-from opendit.vae.wrapper import VideoAutoencoderKL
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -315,7 +318,7 @@ if __name__ == "__main__":
     parser.add_argument("--vae_pretrained_path", type=str, default="stabilityai/sd-vae-ft-ema")
 
     # text encoer
-    parser.add_argument("--text_pretrained_path", type=str, default="t5-v1_1-xxl")
+    parser.add_argument("--text_pretrained_path", type=str, default="DeepFloyd/t5-v1_1-xxl")
     parser.add_argument("--text_max_length", type=int, default=120)
     parser.add_argument("--text_speedup", action="store_true")
 

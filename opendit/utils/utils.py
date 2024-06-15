@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 import torch
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 
 def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
@@ -30,3 +31,22 @@ def str_to_dtype(x: str):
         return torch.bfloat16
     else:
         raise RuntimeError(f"Only fp32, fp16 and bf16 are supported, but got {x}")
+
+
+def merge_args(args1, args2):
+    """
+    Merge two argparse Namespace objects.
+    """
+    if args2 is None:
+        return args1
+
+    for k in args2._content.keys():
+        if k in args1.__dict__:
+            v = getattr(args2, k)
+            if isinstance(v, ListConfig) or isinstance(v, DictConfig):
+                v = OmegaConf.to_object(v)
+            setattr(args1, k, v)
+        else:
+            raise RuntimeError(f"Unknown argument {k}")
+
+    return args1

@@ -21,7 +21,7 @@ from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
 from opendit.datasets.dataloader import prepare_dataloader
 from opendit.datasets.image_transform import get_transforms_image
 from opendit.diffusion import create_diffusion
-from opendit.models.dit.dit import DiT, DiT_models
+from opendit.models.dit import DiT, DiT_models
 from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 

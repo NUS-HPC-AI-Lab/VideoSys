@@ -1,10 +1,9 @@
-# Adapted from OpenSora and DiT
+# Adapted from OpenSora
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # --------------------------------------------------------
 # References:
-# DiT:      https://github.com/facebookresearch/DiT
 # OpenSora: https://github.com/hpcaitech/Open-Sora
 # --------------------------------------------------------
 
@@ -16,12 +15,19 @@ from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 
 from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
-from opendit.core.parallel_mgr import get_sequence_parallel_group, get_sequence_parallel_size, use_sequence_parallelism
-from opendit.embed.clip_text_emb import CaptionEmbedder
-from opendit.embed.patch_emb import PatchEmbed3D
-from opendit.embed.pos_emb import get_1d_sincos_pos_embed, get_2d_sincos_pos_embed
-from opendit.embed.time_emb import TimestepEmbedder
+from opendit.core.parallel_mgr import (
+    get_sequence_parallel_group,
+    get_sequence_parallel_size,
+    is_sequence_parallelism_enable,
+)
 from opendit.models.opensora.ckpt_io import load_checkpoint
+from opendit.models.opensora.embed import (
+    CaptionEmbedder,
+    PatchEmbed3D,
+    TimestepEmbedder,
+    get_1d_sincos_pos_embed,
+    get_2d_sincos_pos_embed,
+)
 from opendit.modules.attn import Attention, MultiHeadCrossAttention
 from opendit.modules.layers import get_layernorm
 
@@ -68,7 +74,6 @@ class STDiTBlock(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.enable_flashattn = enable_flashattn
-        self.enable_sequence_parallelism = use_sequence_parallelism()
 
         self.attn_cls = Attention
         self.mha_cls = MultiHeadCrossAttention
@@ -108,14 +113,14 @@ class STDiTBlock(nn.Module):
         x_m = t2i_modulate(self.norm1(x), shift_msa, scale_msa)
 
         # spatial branch
-        d_s, d_t = self.get_spatial_temporal_size(self.enable_sequence_parallelism, True)
+        d_s, d_t = self.get_spatial_temporal_size(is_sequence_parallelism_enable(), True)
         x_s = rearrange(x_m, "b (t s) d -> (b t) s d", t=d_t, s=d_s)
         x_s = self.attn(x_s)
         x_s = rearrange(x_s, "(b t) s d -> b (t s) d", t=d_t, s=d_s)
         x = x + self.drop_path(gate_msa * x_s)
 
         # temporal to spatial switch
-        if self.enable_sequence_parallelism:
+        if is_sequence_parallelism_enable():
             # b t/n s d -> b t s/n d
             x, d_s, d_t = self.dynamic_switch(x, d_s, d_t, temporal_to_spatial=True)
 
@@ -128,7 +133,7 @@ class STDiTBlock(nn.Module):
         x = x + self.drop_path(gate_msa * x_t)
 
         # spatial to temporal switch
-        if self.enable_sequence_parallelism:
+        if is_sequence_parallelism_enable():
             # b t s/n d -> b t/n s d
             x, d_s, d_t = self.dynamic_switch(x, d_s, d_t, temporal_to_spatial=False)
 
@@ -159,7 +164,7 @@ class STDiTBlock(nn.Module):
 
         x = rearrange(x, "b (t s) d -> b t s d", t=d_t, s=d_s)
         x = all_to_all_comm(x, get_sequence_parallel_group(), scatter_dim=scatter_dim, gather_dim=gather_dim)
-        d_s, d_t = self.get_spatial_temporal_size(self.enable_sequence_parallelism, split_temporal=split_temporal)
+        d_s, d_t = self.get_spatial_temporal_size(is_sequence_parallelism_enable(), split_temporal=split_temporal)
         x = rearrange(x, "b t s d -> b (t s) d", t=d_t, s=d_s)
         return x, d_s, d_t
 
@@ -250,9 +255,6 @@ class STDiT(nn.Module):
             elif freeze == "text":
                 self.freeze_text()
 
-        # sequence parallel related configs
-        self.enable_sequence_parallelism = use_sequence_parallelism()
-
         self.gradient_checkpointing = False
 
     def enable_gradient_checkpointing(self):
@@ -283,7 +285,7 @@ class STDiT(nn.Module):
         x = rearrange(x, "b t s d -> b (t s) d")
 
         # shard over the sequence dim if sp is enabled
-        if self.enable_sequence_parallelism:
+        if is_sequence_parallelism_enable():
             x = split_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="down")
 
         t = self.t_embedder(timestep, dtype=x.dtype)  # (N, D)
@@ -312,7 +314,7 @@ class STDiT(nn.Module):
             else:
                 x = block(x, y, t0, y_lens, tpe)
 
-        if self.enable_sequence_parallelism:
+        if is_sequence_parallelism_enable():
             x = gather_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="up")
 
         # final process

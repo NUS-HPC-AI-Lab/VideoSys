@@ -7,10 +7,10 @@
 </p>
 
 ### Latest News 🔥
-
-- [2024/03/20] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism.
-- [2024/03/18] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
-- [2024/02/27] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
+- [2024/06] Support OpenSora, Open-Sora-Plan and Latte.
+- [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism.
+- [2024/03] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
+- [2024/02] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
 # About
 
@@ -60,10 +60,7 @@ conda activate opendit
 Install ColossalAI:
 
 ```shell
-git clone https://github.com/hpcaitech/ColossalAI.git
-cd ColossalAI
-git checkout adae123df3badfb15d044bd416f0cf29f250bc86
-pip install -e .
+pip install colossalai==0.3.7
 ```
 
 Install OpenDiT:
@@ -77,28 +74,20 @@ pip install -e .
 (Optional but recommended) Install libraries for training & inference speed up (you can run our code without these libraries):
 
 ```shell
-# Install Triton for fused adaln kernel
-pip install triton
-
 # Install FlashAttention
 pip install flash-attn
-
-# Install apex for fused layernorm kernel
-git clone https://github.com/NVIDIA/apex.git
-cd apex
-git checkout 741bdf50825a97664db08574981962d66436d16a
-pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings "--build-option=--cpp_ext" --config-settings "--build-option=--cuda_ext" ./ --global-option="--cuda_ext" --global-option="--cpp_ext"
 ```
 
 ## Usage
 
 OpenDiT fully supports the following models, including training and inference, which align with the original methods. Through our novel techniques, we enable these models to run faster and consume less memory. Here's how you can use them:
 
-| Model | Source | Function | Usage | Optimize |
-| ------ | ------ | ------ | ------ | :------: |
-| DiT | https://github.com/facebookresearch/DiT | label-to-image | [Usage](./docs/dit.md) | ✅ |
-| OpenSora | https://github.com/hpcaitech/Open-Sora | text-to-video | [Usage](./docs/opensora.md) | ✅ |
-
+| Model | Train | Inference | Optimize | Usage |
+| ------ | :------: | :------: | :------: | :------: |
+| [DiT](https://github.com/facebookresearch/DiT)| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
+| [OpenSora](https://github.com/hpcaitech/Open-Sora)| ✅ | ✅ | ✅ | [Doc](./docs/opensora.md)
+| [Latte](https://github.com/Vchitect/Latte)| ❌ | ✅ | ❌ | [Doc](./docs/latte.md)
+| [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan)| ❌ | ✅ | ❌ | [Doc](./docs/opensora_plan.md)
 
 ## Technique Overview
 
