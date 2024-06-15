@@ -30,3 +30,20 @@ def str_to_dtype(x: str):
         return torch.bfloat16
     else:
         raise RuntimeError(f"Only fp32, fp16 and bf16 are supported, but got {x}")
+
+
+def merge_args(args1, args2):
+    """
+    Merge two argparse Namespace objects.
+    """
+    if args2 is None:
+        return args1
+
+    for k in args2._content.keys():
+        if k in args1.__dict__:
+            v = getattr(args2, k)
+            setattr(args1, k, v)
+        else:
+            raise RuntimeError(f"Unknown argument {k}")
+
+    return args1
