@@ -25,10 +25,17 @@ from opendit.core.parallel_mgr import (
     get_sequence_parallel_size,
     is_sequence_parallelism_enable,
 )
+from opendit.core.skip_mgr import is_skip_enabled
 from opendit.models.opensora.ckpt_io import load_checkpoint
 from opendit.models.opensora.embed import CaptionEmbedder, PatchEmbed3D, TimestepEmbedder, get_2d_sincos_pos_embed
 from opendit.models.opensora.stdit import approx_gelu, t2i_modulate
-from opendit.modules.attn import MultiHeadCrossAttention, SpatialAttention, TemporalAttention
+from opendit.modules.attn import (
+    Attention,
+    MultiHeadCrossAttention,
+    SkipMultiHeadCrossAttention,
+    SkipSpatialAttention,
+    SkipTemporalAttention,
+)
 from opendit.modules.layers import get_layernorm
 
 
@@ -166,18 +173,26 @@ class STDiT2Block(nn.Module):
         drop_path=0.0,
         enable_flash_attn=False,
         enable_layernorm_kernel=False,
-        enable_sequence_parallelism=False,
         rope=None,
         qk_norm=False,
     ):
         super().__init__()
         self.hidden_size = hidden_size
         self.enable_flash_attn = enable_flash_attn
-        self._enable_sequence_parallelism = enable_sequence_parallelism
+        self.enable_skip = is_skip_enabled()
+
+        if self.enable_skip:
+            spatial_attn_cls = SkipSpatialAttention
+            temporal_attn_cls = SkipTemporalAttention
+            cross_attn_cls = SkipMultiHeadCrossAttention
+        else:
+            spatial_attn_cls = Attention
+            temporal_attn_cls = Attention
+            cross_attn_cls = MultiHeadCrossAttention
 
         # spatial branch
         self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
-        self.attn = SpatialAttention(
+        self.attn = spatial_attn_cls(
             hidden_size,
             num_heads=num_heads,
             qkv_bias=True,
@@ -187,7 +202,7 @@ class STDiT2Block(nn.Module):
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
         # cross attn
-        self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads, enable_flashattn=enable_flash_attn)
+        self.cross_attn = cross_attn_cls(hidden_size, num_heads, enable_flashattn=enable_flash_attn)
 
         # mlp branch
         self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
@@ -198,7 +213,7 @@ class STDiT2Block(nn.Module):
 
         # temporal branch
         self.norm_temp = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)  # new
-        self.attn_temp = TemporalAttention(
+        self.attn_temp = temporal_attn_cls(
             hidden_size,
             num_heads=num_heads,
             qkv_bias=True,
@@ -231,11 +246,15 @@ class STDiT2Block(nn.Module):
         T=None,
         S=None,
         timestep=None,
-        H=None,
-        W=None,
         block_idx=None,
     ):
         B, N, C = x.shape
+
+        spatial_kwargs, temporal_kwargs, cross_kwargs = {}, {}, {}
+        if self.enable_skip:
+            spatial_kwargs.update(timestep=timestep, block_idx=block_idx)
+            temporal_kwargs.update(timestep=timestep)
+            cross_kwargs.update(timestep=timestep)
 
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.scale_shift_table[None] + t.reshape(B, 6, -1)
@@ -259,7 +278,7 @@ class STDiT2Block(nn.Module):
 
         # spatial branch
         x_s = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
-        x_s = self.attn(x_s, timestep=timestep, H=H, W=W, block_idx=block_idx)
+        x_s = self.attn(x_s, **spatial_kwargs)
         x_s = rearrange(x_s, "(B T) S C -> B (T S) C", T=T, S=S)
         if x_mask is not None:
             x_s_zero = gate_msa_zero * x_s
@@ -280,7 +299,7 @@ class STDiT2Block(nn.Module):
             x_m, S, T = self.dynamic_switch(x_m, S, T, temporal_to_spatial=True)
 
         x_t = rearrange(x_m, "B (T S) C -> (B S) T C", T=T, S=S)
-        x_t = self.attn_temp(x_t, timestep=timestep)
+        x_t = self.attn_temp(x_t, **temporal_kwargs)
         x_t = rearrange(x_t, "(B S) T C -> B (T S) C", T=T, S=S)
 
         if is_sequence_parallelism_enable():
@@ -295,7 +314,7 @@ class STDiT2Block(nn.Module):
         x = x + self.drop_path(x_t)
 
         # cross attn
-        x = x + self.cross_attn(x, y, mask, timestep=timestep)
+        x = x + self.cross_attn(x, y, mask, **cross_kwargs)
 
         # modulate
         x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
@@ -577,11 +596,11 @@ class STDiT2(PreTrainedModel):
                     t0_tmp_mlp,
                     T,
                     S,
+                    int(timestep[0]),
+                    i,
                 )
             else:
-                x = block(
-                    x, y, t_spc_mlp, t_tmp_mlp, y_lens, x_mask, t0_spc_mlp, t0_tmp_mlp, T, S, int(timestep[0]), H, W, i
-                )
+                x = block(x, y, t_spc_mlp, t_tmp_mlp, y_lens, x_mask, t0_spc_mlp, t0_tmp_mlp, T, S, int(timestep[0]), i)
             # x.shape: [B, N, C]
 
         if is_sequence_parallelism_enable():

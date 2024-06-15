@@ -9,6 +9,7 @@ import torch._dynamo.config
 from colossalai.cluster import DistCoordinator
 
 from opendit.core.parallel_mgr import set_parallel_manager
+from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora import IDDPM, STDiT2_XL_2, T5Encoder, VideoAutoencoderKL, save_sample, text_preprocessing
 from opendit.utils.utils import set_seed, str_to_dtype
 
@@ -33,6 +34,19 @@ def main(args):
     else:
         use_dist = False
         enable_sequence_parallelism = False
+
+    set_skip_manager(
+        steps=args.scheduler_num_sampling_steps,
+        cross_skip=True,
+        cross_threshold=700,
+        cross_gap=5,
+        spatial_skip=True,
+        spatial_threshold=700,
+        spatial_gap=3,
+        temporal_skip=True,
+        temporal_threshold=700,
+        temporal_gap=5,
+    )
 
     # ======================================================
     # 2. runtime variables

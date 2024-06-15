@@ -10,20 +10,18 @@ from einops import rearrange
 from torch.distributed import ProcessGroup
 
 from opendit.core.comm import AllGather, AsyncAllGatherForTwo, all_to_all_comm
-
-STEPS = 100
-
-CROSS_SKIP = False
-CROSS_THRESHOLD = 700
-CROSS_GAP = 5
-
-SPATIAL_SKIP = False
-SPTIAL_THRESHOLD = 700
-SPATIAL_GAP = 3
-
-TEMPORAL_SKIP = False
-TEMPROAL_THRESHOLD = 700
-TEMPORAL_GAP = 5
+from opendit.core.skip_mgr import (
+    get_cross_gap,
+    get_cross_skip,
+    get_cross_threshold,
+    get_spatial_gap,
+    get_spatial_skip,
+    get_spatial_threshold,
+    get_steps,
+    get_temporal_gap,
+    get_temporal_skip,
+    get_temporal_threshold,
+)
 
 
 class LlamaRMSNorm(nn.Module):
@@ -312,7 +310,7 @@ class Attention(nn.Module):
         return x
 
 
-class SpatialAttention(nn.Module):
+class SkipSpatialAttention(nn.Module):
     def __init__(
         self,
         dim: int,
@@ -347,6 +345,11 @@ class SpatialAttention(nn.Module):
 
         self.count = 0
         self.last_out = None
+
+        self.enable_skip = get_spatial_skip()
+        self.skip_gap = get_spatial_gap()
+        self.skip_threshold = get_spatial_threshold()
+        self.steps = get_steps()
 
     def forward(self, x: torch.Tensor, timestep=None, H=None, W=None, block_idx=None) -> torch.Tensor:
         B, N, C = x.shape
@@ -384,19 +387,19 @@ class SpatialAttention(nn.Module):
     @torch.compiler.disable
     def if_skip(self, timestep):
         if (
-            SPATIAL_SKIP
+            self.enable_skip
             and (timestep is not None)
-            and (self.count % SPATIAL_GAP != 0)
-            and (timestep < SPTIAL_THRESHOLD)
+            and (self.count % self.skip_gap != 0)
+            and (timestep < self.skip_threshold)
         ):
-            self.count = (self.count + 1) % STEPS
+            self.count = (self.count + 1) % self.steps
             return True
         else:
-            self.count = (self.count + 1) % STEPS
+            self.count = (self.count + 1) % self.steps
             return False
 
 
-class TemporalAttention(nn.Module):
+class SkipTemporalAttention(nn.Module):
     def __init__(
         self,
         dim: int,
@@ -431,6 +434,11 @@ class TemporalAttention(nn.Module):
 
         self.last_qk = None
         self.count = 0
+
+        self.enable_skip = get_temporal_skip()
+        self.skip_gap = get_temporal_gap()
+        self.skip_threshold = get_temporal_threshold()
+        self.steps = get_steps()
 
     def forward(self, x: torch.Tensor, timestep=None, H=None, W=None) -> torch.Tensor:
         B, N, C = x.shape
@@ -476,16 +484,117 @@ class TemporalAttention(nn.Module):
     @torch.compiler.disable
     def if_skip(self, timestep):
         if (
-            TEMPORAL_SKIP
+            self.enable_skip
             and (timestep is not None)
-            and (self.count % TEMPORAL_GAP != 0)
-            and (timestep < TEMPROAL_THRESHOLD)
+            and (self.count % self.skip_gap != 0)
+            and (timestep < self.skip_threshold)
         ):
-            self.count = (self.count + 1) % STEPS
+            self.count = (self.count + 1) % self.steps
             return True
         else:
-            self.count = (self.count + 1) % STEPS
+            self.count = (self.count + 1) % self.steps
             return False
+
+
+class SkipMultiHeadCrossAttention(nn.Module):
+    def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, enable_flashattn=False):
+        super(SkipMultiHeadCrossAttention, self).__init__()
+        assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        self.enable_flashattn = enable_flashattn
+
+        self.q_linear = nn.Linear(d_model, d_model)
+        self.kv_linear = nn.Linear(d_model, d_model * 2)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(d_model, d_model)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        self.last_out = None
+        self.count = 0
+
+        self.enable_skip = get_cross_skip()
+        self.skip_gap = get_cross_gap()
+        self.skip_threshold = get_cross_threshold()
+        self.steps = get_steps()
+
+    def forward(self, x, cond, mask=None, timestep=None):
+        # query/value: img tokens; key: condition; mask: if padding tokens
+        B, N, C = x.shape
+
+        if self.if_skip(timestep):
+            x = self.last_out
+        else:
+            q = self.q_linear(x).view(1, -1, self.num_heads, self.head_dim)
+            kv = self.kv_linear(cond).view(1, -1, 2, self.num_heads, self.head_dim)
+            k, v = kv.unbind(2)
+            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
+            self.set_last_out(x)
+
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+    @torch.compiler.disable
+    def if_skip(self, timestep):
+        if (
+            self.enable_skip
+            and (timestep is not None)
+            and (self.count % self.skip_gap != 0)
+            and (timestep < self.skip_threshold)
+        ):
+            self.count = (self.count + 1) % self.steps
+            return True
+        else:
+            self.count = (self.count + 1) % self.steps
+            return False
+
+    @torch.compiler.disable
+    def set_last_out(self, x):
+        self.last_out = x
+
+    def flash_attn_impl(self, q, k, v, mask, B, N, C):
+        from flash_attn import flash_attn_varlen_func
+
+        q_seqinfo = _SeqLenInfo.from_seqlens([N] * B)
+        k_seqinfo = _SeqLenInfo.from_seqlens(mask)
+
+        x = flash_attn_varlen_func(
+            q.view(-1, self.num_heads, self.head_dim),
+            k.view(-1, self.num_heads, self.head_dim),
+            v.view(-1, self.num_heads, self.head_dim),
+            cu_seqlens_q=q_seqinfo.seqstart.cuda(),
+            cu_seqlens_k=k_seqinfo.seqstart.cuda(),
+            max_seqlen_q=q_seqinfo.max_seqlen,
+            max_seqlen_k=k_seqinfo.max_seqlen,
+            dropout_p=self.attn_drop.p if self.training else 0.0,
+        )
+        x = x.view(B, N, C)
+        return x
+
+    def torch_impl(self, q, k, v, mask, B, N, C):
+        q = q.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_mask = torch.zeros(B, N, k.shape[2], dtype=torch.float32, device=q.device)
+        for i, m in enumerate(mask):
+            attn_mask[i, :, m:] = -1e8
+
+        scale = 1 / q.shape[-1] ** 0.5
+        q = q * scale
+        attn = q @ k.transpose(-2, -1)
+        attn = attn.to(torch.float32)
+        if mask is not None:
+            attn = attn + attn_mask.unsqueeze(1)
+        attn = attn.softmax(-1)
+        attn = attn.to(v.dtype)
+        out = attn @ v
+
+        x = out.transpose(1, 2).contiguous().view(B, N, C)
+        return x
 
 
 class MultiHeadCrossAttention(nn.Module):
@@ -510,31 +619,14 @@ class MultiHeadCrossAttention(nn.Module):
         # query/value: img tokens; key: condition; mask: if padding tokens
         B, N, C = x.shape
 
-        if self.if_skip(timestep):
-            x = self.last_out
-        else:
-            q = self.q_linear(x).view(1, -1, self.num_heads, self.head_dim)
-            kv = self.kv_linear(cond).view(1, -1, 2, self.num_heads, self.head_dim)
-            k, v = kv.unbind(2)
-            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
-            self.set_last_out(x)
+        q = self.q_linear(x).view(1, -1, self.num_heads, self.head_dim)
+        kv = self.kv_linear(cond).view(1, -1, 2, self.num_heads, self.head_dim)
+        k, v = kv.unbind(2)
+        x = self.flash_attn_impl(q, k, v, mask, B, N, C)
 
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
-
-    @torch.compiler.disable
-    def if_skip(self, timestep):
-        if CROSS_SKIP and timestep is not None and timestep < CROSS_THRESHOLD and self.count % CROSS_GAP != 0:
-            self.count = (self.count + 1) % STEPS
-            return True
-        else:
-            self.count = (self.count + 1) % STEPS
-            return False
-
-    @torch.compiler.disable
-    def set_last_out(self, x):
-        self.last_out = x
 
     def flash_attn_impl(self, q, k, v, mask, B, N, C):
         from flash_attn import flash_attn_varlen_func
