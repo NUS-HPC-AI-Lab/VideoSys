@@ -183,7 +183,6 @@ if __name__ == "__main__":
     parser.add_argument("--scheduler_cfg_scale", type=int, default=7.0)
 
     # speedup
-    parser.add_argument("--enable_layernorm_kernel", action="store_true", help="Enable apex layernorm kernel")
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
     parser.add_argument("--enable_t5_speedup", action="store_true", help="Enable t5 speedup")
 
