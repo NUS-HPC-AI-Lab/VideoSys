@@ -1,7 +1,5 @@
 # OpenSora
 
-https://github.com/hpcaitech/Open-Sora
-
 We support text-to-video generation for OpenSora. Open-Sora is an open-source initiative dedicated to efficiently reproducing OpenAI's Sora which uses `DiT` model with `Spatial-Temporal Attention`.
 
 
