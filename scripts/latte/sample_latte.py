@@ -175,7 +175,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="./configs/wbv10m_train.yaml")
+    parser.add_argument("--config", type=str, required=True)
     args = parser.parse_args()
 
     main(OmegaConf.load(args.config))
