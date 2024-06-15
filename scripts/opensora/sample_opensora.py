@@ -7,11 +7,12 @@ import colossalai
 import torch
 import torch._dynamo.config
 from colossalai.cluster import DistCoordinator
+from omegaconf import OmegaConf
 
 from opendit.core.parallel_mgr import set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora import IDDPM, STDiT2_XL_2, T5Encoder, VideoAutoencoderKL, save_sample, text_preprocessing
-from opendit.utils.utils import set_seed, str_to_dtype
+from opendit.utils.utils import merge_args, set_seed, str_to_dtype
 
 
 def main(args):
@@ -28,24 +29,20 @@ def main(args):
 
         if coordinator.world_size > 1:
             set_parallel_manager(1, coordinator.world_size, dp_axis=0, sp_axis=1)
-            enable_sequence_parallelism = True
-        else:
-            enable_sequence_parallelism = False
     else:
         use_dist = False
-        enable_sequence_parallelism = False
 
     set_skip_manager(
         steps=args.scheduler_num_sampling_steps,
-        cross_skip=True,
-        cross_threshold=700,
-        cross_gap=5,
-        spatial_skip=True,
-        spatial_threshold=700,
-        spatial_gap=3,
-        temporal_skip=True,
-        temporal_threshold=700,
-        temporal_gap=5,
+        cross_skip=args.cross_skip,
+        cross_threshold=args.cross_threshold,
+        cross_gap=args.cross_gap,
+        spatial_skip=args.spatial_skip,
+        spatial_threshold=args.spatial_threshold,
+        spatial_gap=args.spatial_gap,
+        temporal_skip=args.temporal_skip,
+        temporal_threshold=args.temporal_threshold,
+        temporal_gap=args.temporal_gap,
     )
 
     # ======================================================
@@ -93,7 +90,6 @@ def main(args):
         in_channels=vae.out_channels,
         caption_channels=text_encoder.output_dim,
         model_max_length=text_encoder.model_max_length,
-        enable_sequence_parallelism=enable_sequence_parallelism,
     )
     # torch.compiler.reset()
     # torch._dynamo.config.accumulated_cache_size_limit = 256
@@ -154,9 +150,6 @@ def main(args):
         for k in range(args.num_samples):
             sample_idx = old_sample_idx
 
-            # Skip if the sample already exists
-            # This is useful for resuming sampling VBench
-
             # sampling
             z = torch.randn(len(batch_prompts), vae.out_channels, *latent_size, device=device, dtype=dtype)
             samples = scheduler.sample(
@@ -182,6 +175,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, default=None)
 
     # sample
     parser.add_argument("--num_frames", type=int, default=16)
@@ -207,5 +201,19 @@ if __name__ == "__main__":
     parser.add_argument("--enable_flashattn", action="store_true", help="Enable flashattn kernel")
     parser.add_argument("--enable_t5_speedup", action="store_true", help="Enable t5 speedup")
 
+    # skip
+    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
+    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
+    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
+    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
+    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
+
     args = parser.parse_args()
+    config_args = OmegaConf.load(args.config)
+    args = merge_args(args, config_args)
+
     main(args)

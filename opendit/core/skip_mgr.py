@@ -29,6 +29,15 @@ class SkipManager:
         self.temporal_threshold = temporal_threshold
         self.temporal_gap = temporal_gap
 
+        print(
+            f"Init SkipManager:\n\
+            steps={steps}\n\
+            \cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
+            spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}\n\
+            temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n",
+            end="",
+        )
+
 
 def set_skip_manager(
     steps: int = 100,
