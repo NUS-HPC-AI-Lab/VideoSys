@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 import torch
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 
 def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
@@ -42,6 +43,8 @@ def merge_args(args1, args2):
     for k in args2._content.keys():
         if k in args1.__dict__:
             v = getattr(args2, k)
+            if isinstance(v, ListConfig) or isinstance(v, DictConfig):
+                v = OmegaConf.to_object(v)
             setattr(args1, k, v)
         else:
             raise RuntimeError(f"Unknown argument {k}")

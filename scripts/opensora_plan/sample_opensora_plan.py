@@ -25,12 +25,14 @@ from diffusers.schedulers import (
     PNDMScheduler,
 )
 from diffusers.schedulers.scheduling_dpmsolver_singlestep import DPMSolverSinglestepScheduler
+from omegaconf import OmegaConf
 from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
 from opendit.models.opensora_plan import VideoGenPipeline
 from opendit.models.opensora_plan.ae import ae_stride_config, getae_wrapper
 from opendit.models.opensora_plan.latte import LatteT2V
+from opendit.utils.utils import merge_args
 
 
 def save_video_grid(video, nrow=None):
@@ -186,6 +188,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--model_path", type=str, default="LanguageBind/Open-Sora-Plan-v1.0.0")
     parser.add_argument("--version", type=str, default=None, choices=[None, "65x512x512", "221x512x512", "513x512x512"])
     parser.add_argument("--num_frames", type=int, default=1)
@@ -206,5 +209,8 @@ if __name__ == "__main__":
     parser.add_argument("--tile_overlap_factor", type=float, default=0.25)
     parser.add_argument("--enable_tiling", action="store_true")
     args = parser.parse_args()
+
+    config_args = OmegaConf.load(args.config)
+    args = merge_args(args, config_args)
 
     main(args)
