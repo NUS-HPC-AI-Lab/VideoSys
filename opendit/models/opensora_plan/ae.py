@@ -13,7 +13,6 @@ import os
 from typing import Optional, Tuple, Union
 
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from diffusers import ConfigMixin, ModelMixin
 from diffusers.configuration_utils import ConfigMixin, register_to_config
@@ -90,7 +89,7 @@ def resolve_str_to_obj(str_val, append=True):
     return getattr(module, class_name)
 
 
-class VideoBaseAE_PL(pl.LightningModule, ModelMixin, ConfigMixin):
+class VideoBaseAE_PL(ModelMixin, ConfigMixin):
     config_name = "config.json"
 
     def __init__(self, *args, **kwargs) -> None:
