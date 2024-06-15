@@ -6,7 +6,7 @@ num_samples: 1
 
 # runtime
 batch_size: 1
-save_dir: "./samples"
+save_dir: "./samples/opensora"
 seed: 42
 dtype: "bf16"
 
