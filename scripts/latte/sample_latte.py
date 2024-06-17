@@ -31,6 +31,7 @@ from transformers import T5EncoderModel, T5Tokenizer
 
 from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.latte import LattePipeline, LatteT2V
+from opendit.utils.utils import merge_args
 
 
 def main(args):
@@ -199,6 +200,25 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--save_img_path", type=str, default="./samples/latte/")
+    parser.add_argument("--pretrained_model_path", type=str, default="maxin-cn/Latte-1")
+    parser.add_argument("--model", type=str, default="LatteT2V")
+    parser.add_argument("--video_length", type=int, default=16)
+    parser.add_argument("--image_size", nargs="+")
+    parser.add_argument("--beta_start", type=float, default=0.0001)
+    parser.add_argument("--beta_end", type=float, default=0.02)
+    parser.add_argument("--beta_schedule", type=str, default="linear")
+    parser.add_argument("--variance_type", type=str, default="learned_range")
+    parser.add_argument("--use_compile", action="store_true")
+    parser.add_argument("--use_fp16", action="store_true")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--run_time", type=int, default=0)
+    parser.add_argument("--guidance_scale", type=float, default=7.5)
+    parser.add_argument("--sample_method", type=str, default="DDIM")
+    parser.add_argument("--num_sampling_steps", type=int, default=50)
+    parser.add_argument("--enable_temporal_attentions", action="store_true")
+    parser.add_argument("--enable_vae_temporal_decoder", action="store_true")
+    parser.add_argument("--text_prompt", nargs="+")
     # skip
     parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
     parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
@@ -211,4 +231,7 @@ if __name__ == "__main__":
     parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
     args = parser.parse_args()
 
-    main(OmegaConf.load(args.config))
+    config_args = OmegaConf.load(args.config)
+    args = merge_args(args, config_args)
+
+    main(args)
