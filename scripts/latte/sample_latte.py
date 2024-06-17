@@ -199,6 +199,16 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
+    # skip
+    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
+    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
+    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
+    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
+    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
     args = parser.parse_args()
 
     main(OmegaConf.load(args.config))
