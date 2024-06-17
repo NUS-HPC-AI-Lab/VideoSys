@@ -47,6 +47,20 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import nn
 
+from opendit.core.skip_mgr import (
+    get_cross_gap,
+    get_cross_skip,
+    get_cross_threshold,
+    get_spatial_gap,
+    get_spatial_layer_range,
+    get_spatial_skip,
+    get_spatial_threshold,
+    get_steps,
+    get_temporal_gap,
+    get_temporal_skip,
+    get_temporal_threshold,
+)
+
 if is_xformers_available():
     import xformers
     import xformers.ops
@@ -1515,6 +1529,29 @@ class BasicTransformerBlock_(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
+        self.last_out = None
+        self.count = 0
+        self.enable_skip = get_temporal_skip()
+        self.skip_gap = get_temporal_gap()
+        self.skip_threshold = get_temporal_threshold()
+        self.steps = get_steps()
+
+    def set_last_out(self, last_out: torch.Tensor):
+        self.last_out = last_out
+
+    def if_skip(self, timestep):
+        if (
+            self.enable_skip
+            and (timestep is not None)
+            and (self.count % self.skip_gap != 0)
+            and (timestep < self.skip_threshold)
+        ):
+            self.count = (self.count + 1) % self.steps
+            return True
+        else:
+            self.count = (self.count + 1) % self.steps
+            return False
+
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int):
         # Sets chunk feed-forward
         self._chunk_size = chunk_size
@@ -1532,32 +1569,11 @@ class BasicTransformerBlock_(nn.Module):
         position_q: Optional[torch.LongTensor] = None,
         position_k: Optional[torch.LongTensor] = None,
         frame: int = None,
+        org_timestep: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
         batch_size = hidden_states.shape[0]
-
-        if self.use_ada_layer_norm:
-            norm_hidden_states = self.norm1(hidden_states, timestep)
-        elif self.use_ada_layer_norm_zero:
-            norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
-                hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
-            )
-        elif self.use_layer_norm:
-            norm_hidden_states = self.norm1(hidden_states)
-        elif self.use_ada_layer_norm_single:
-            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
-            ).chunk(6, dim=1)
-            norm_hidden_states = self.norm1(hidden_states)
-            norm_hidden_states = norm_hidden_states * (1 + scale_msa) + shift_msa
-            norm_hidden_states = norm_hidden_states.squeeze(1)
-        else:
-            raise ValueError("Incorrect norm used")
-
-        if self.pos_embed is not None:
-            norm_hidden_states = self.pos_embed(norm_hidden_states)
-
         # 1. Retrieve lora scale.
         lora_scale = cross_attention_kwargs.get("scale", 1.0) if cross_attention_kwargs is not None else 1.0
 
@@ -1565,19 +1581,48 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        attn_output = self.attn1(
-            norm_hidden_states,
-            encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
-            attention_mask=attention_mask,
-            position_q=position_q,
-            position_k=position_k,
-            last_shape=frame,
-            **cross_attention_kwargs,
-        )
-        if self.use_ada_layer_norm_zero:
-            attn_output = gate_msa.unsqueeze(1) * attn_output
-        elif self.use_ada_layer_norm_single:
-            attn_output = gate_msa * attn_output
+        if self.if_skip(int(org_timestep[0])):
+            attn_output = self.last_out
+            assert self.use_ada_layer_norm_single
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+                self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
+            ).chunk(6, dim=1)
+        else:
+            if self.use_ada_layer_norm:
+                norm_hidden_states = self.norm1(hidden_states, timestep)
+            elif self.use_ada_layer_norm_zero:
+                norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
+                    hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
+                )
+            elif self.use_layer_norm:
+                norm_hidden_states = self.norm1(hidden_states)
+            elif self.use_ada_layer_norm_single:
+                shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+                    self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
+                ).chunk(6, dim=1)
+                norm_hidden_states = self.norm1(hidden_states)
+                norm_hidden_states = norm_hidden_states * (1 + scale_msa) + shift_msa
+                norm_hidden_states = norm_hidden_states.squeeze(1)
+            else:
+                raise ValueError("Incorrect norm used")
+
+            if self.pos_embed is not None:
+                norm_hidden_states = self.pos_embed(norm_hidden_states)
+
+            attn_output = self.attn1(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
+                attention_mask=attention_mask,
+                position_q=position_q,
+                position_k=position_k,
+                last_shape=frame,
+                **cross_attention_kwargs,
+            )
+            if self.use_ada_layer_norm_zero:
+                attn_output = gate_msa.unsqueeze(1) * attn_output
+            elif self.use_ada_layer_norm_single:
+                attn_output = gate_msa * attn_output
+            self.set_last_out(attn_output)
 
         hidden_states = attn_output + hidden_states
         if hidden_states.ndim == 4:
@@ -1713,6 +1758,7 @@ class BasicTransformerBlock(nn.Module):
         use_rope: bool = False,
         rope_scaling: Optional[Dict] = None,
         compress_kv_factor: Optional[Tuple] = None,
+        block_idx: Optional[int] = None,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -1810,6 +1856,53 @@ class BasicTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
+        self.cross_last = None
+        self.cross_count = 0
+        self.cross_skip = get_cross_skip()
+        self.cross_gap = get_cross_gap()
+        self.cross_threshold = get_cross_threshold()
+        self.sptial_last = None
+        self.spatial_count = 0
+        self.spatial_skip = get_spatial_skip()
+        self.spatial_gap = get_spatial_gap()
+        self.spatial_threshold = get_spatial_threshold()
+        self.spatial_layer_range = get_spatial_layer_range()
+        self.block_idx = block_idx
+        self.steps = get_steps()
+
+    def set_cross_last(self, last_out: torch.Tensor):
+        self.cross_last = last_out
+
+    def if_skip_cross(self, timestep):
+        if (
+            self.cross_skip
+            and (timestep is not None)
+            and (self.cross_count % self.cross_gap != 0)
+            and (timestep < self.cross_threshold)
+        ):
+            self.cross_count = (self.cross_count + 1) % self.steps
+            return True
+        else:
+            self.cross_count = (self.cross_count + 1) % self.steps
+            return False
+
+    def set_spatial_last(self, last_out: torch.Tensor):
+        self.spatial_last = last_out
+
+    def if_skip_spatial(self, timestep):
+        if (
+            self.spatial_layer_range[0] < self.block_idx < self.spatial_layer_range[1]
+            and self.spatial_skip
+            and (timestep is not None)
+            and (self.spatial_count % self.spatial_gap != 0)
+            and (timestep < self.spatial_threshold)
+        ):
+            self.spatial_count = (self.spatial_count + 1) % self.steps
+            return True
+        else:
+            self.spatial_count = (self.spatial_count + 1) % self.steps
+            return False
+
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
         self._chunk_size = chunk_size
@@ -1827,31 +1920,11 @@ class BasicTransformerBlock(nn.Module):
         position_q: Optional[torch.LongTensor] = None,
         position_k: Optional[torch.LongTensor] = None,
         hw: Tuple[int, int] = None,
+        org_timestep: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
         batch_size = hidden_states.shape[0]
-
-        if self.use_ada_layer_norm:
-            norm_hidden_states = self.norm1(hidden_states, timestep)
-        elif self.use_ada_layer_norm_zero:
-            norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
-                hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
-            )
-        elif self.use_layer_norm:
-            norm_hidden_states = self.norm1(hidden_states)
-        elif self.use_ada_layer_norm_single:
-            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
-            ).chunk(6, dim=1)
-            norm_hidden_states = self.norm1(hidden_states)
-            norm_hidden_states = norm_hidden_states * (1 + scale_msa) + shift_msa
-            norm_hidden_states = norm_hidden_states.squeeze(1)
-        else:
-            raise ValueError("Incorrect norm used")
-
-        if self.pos_embed is not None:
-            norm_hidden_states = self.pos_embed(norm_hidden_states)
 
         # 1. Retrieve lora scale.
         lora_scale = cross_attention_kwargs.get("scale", 1.0) if cross_attention_kwargs is not None else 1.0
@@ -1860,19 +1933,48 @@ class BasicTransformerBlock(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        attn_output = self.attn1(
-            norm_hidden_states,
-            encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
-            attention_mask=attention_mask,
-            position_q=position_q,
-            position_k=position_k,
-            last_shape=hw,
-            **cross_attention_kwargs,
-        )
-        if self.use_ada_layer_norm_zero:
-            attn_output = gate_msa.unsqueeze(1) * attn_output
-        elif self.use_ada_layer_norm_single:
-            attn_output = gate_msa * attn_output
+        if self.if_skip_spatial(int(org_timestep[0])):
+            attn_output = self.spatial_last
+            assert self.use_ada_layer_norm_single
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+                self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
+            ).chunk(6, dim=1)
+        else:
+            if self.use_ada_layer_norm:
+                norm_hidden_states = self.norm1(hidden_states, timestep)
+            elif self.use_ada_layer_norm_zero:
+                norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
+                    hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
+                )
+            elif self.use_layer_norm:
+                norm_hidden_states = self.norm1(hidden_states)
+            elif self.use_ada_layer_norm_single:
+                shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+                    self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
+                ).chunk(6, dim=1)
+                norm_hidden_states = self.norm1(hidden_states)
+                norm_hidden_states = norm_hidden_states * (1 + scale_msa) + shift_msa
+                norm_hidden_states = norm_hidden_states.squeeze(1)
+            else:
+                raise ValueError("Incorrect norm used")
+
+            if self.pos_embed is not None:
+                norm_hidden_states = self.pos_embed(norm_hidden_states)
+
+            attn_output = self.attn1(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
+                attention_mask=attention_mask,
+                position_q=position_q,
+                position_k=position_k,
+                last_shape=hw,
+                **cross_attention_kwargs,
+            )
+            if self.use_ada_layer_norm_zero:
+                attn_output = gate_msa.unsqueeze(1) * attn_output
+            elif self.use_ada_layer_norm_single:
+                attn_output = gate_msa * attn_output
+            self.set_spatial_last(attn_output)
 
         hidden_states = attn_output + hidden_states
         if hidden_states.ndim == 4:
@@ -1884,30 +1986,34 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Cross-Attention
         if self.attn2 is not None:
-            if self.use_ada_layer_norm:
-                norm_hidden_states = self.norm2(hidden_states, timestep)
-            elif self.use_ada_layer_norm_zero or self.use_layer_norm:
-                norm_hidden_states = self.norm2(hidden_states)
-            elif self.use_ada_layer_norm_single:
-                # For PixArt norm2 isn't applied here:
-                # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
-                norm_hidden_states = hidden_states
+            if self.if_skip_cross(int(org_timestep[0])):
+                hidden_states = hidden_states + self.cross_last
             else:
-                raise ValueError("Incorrect norm")
+                if self.use_ada_layer_norm:
+                    norm_hidden_states = self.norm2(hidden_states, timestep)
+                elif self.use_ada_layer_norm_zero or self.use_layer_norm:
+                    norm_hidden_states = self.norm2(hidden_states)
+                elif self.use_ada_layer_norm_single:
+                    # For PixArt norm2 isn't applied here:
+                    # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
+                    norm_hidden_states = hidden_states
+                else:
+                    raise ValueError("Incorrect norm")
 
-            if self.pos_embed is not None and self.use_ada_layer_norm_single is False:
-                norm_hidden_states = self.pos_embed(norm_hidden_states)
+                if self.pos_embed is not None and self.use_ada_layer_norm_single is False:
+                    norm_hidden_states = self.pos_embed(norm_hidden_states)
 
-            attn_output = self.attn2(
-                norm_hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                position_q=None,  # cross attn do not need relative position
-                position_k=None,
-                last_shape=None,
-                **cross_attention_kwargs,
-            )
-            hidden_states = attn_output + hidden_states
+                attn_output = self.attn2(
+                    norm_hidden_states,
+                    encoder_hidden_states=encoder_hidden_states,
+                    attention_mask=encoder_attention_mask,
+                    position_q=None,  # cross attn do not need relative position
+                    position_k=None,
+                    last_shape=None,
+                    **cross_attention_kwargs,
+                )
+                self.set_cross_last(attn_output)
+                hidden_states = attn_output + hidden_states
 
         # 4. Feed-forward
         if not self.use_ada_layer_norm_single:
@@ -1920,13 +2026,7 @@ class BasicTransformerBlock(nn.Module):
             norm_hidden_states = self.norm2(hidden_states)
             norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
 
-        if self._chunk_size is not None:
-            # "feed_forward_chunk_size" can be used to save memory
-            ff_output = _chunked_feed_forward(
-                self.ff, norm_hidden_states, self._chunk_dim, self._chunk_size, lora_scale=lora_scale
-            )
-        else:
-            ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+        ff_output = self.ff(norm_hidden_states, scale=lora_scale)
 
         if self.use_ada_layer_norm_zero:
             ff_output = gate_mlp.unsqueeze(1) * ff_output
@@ -2155,6 +2255,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     compress_kv_factor=(compress_kv_factor, compress_kv_factor)
                     if d >= num_layers // 2 and compress_kv_factor != 1
                     else None,  # follow pixart-sigma, apply in second-half layers
+                    block_idx=d,
                 )
                 for d in range(num_layers)
             ]
@@ -2308,6 +2409,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
         input_batch_size, c, frame, h, w = hidden_states.shape
         frame = frame - use_image_num  # 20-4=16
         hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w").contiguous()
+        org_timestep = timestep
         # ensure attention_mask is a bias, and give it a singleton query_tokens dimension.
         #   we may have done this conversion already, e.g. if we came here via UNet2DConditionModel#forward.
         #   we can tell by counting dims; if ndim == 2: it's a mask rather than a bias.
@@ -2483,6 +2585,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     pos_hw,
                     pos_hw,
                     hw,
+                    org_timestep,
                 )
 
                 if enable_temporal_attentions:
@@ -2507,6 +2610,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             pos_t,
                             pos_t,
                             (frame,),
+                            org_timestep,
                         )
 
                         hidden_states = torch.cat([hidden_states_video, hidden_states_image], dim=1)
@@ -2530,6 +2634,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             pos_t,
                             pos_t,
                             (frame,),
+                            org_timestep,
                         )
 
                         hidden_states = rearrange(

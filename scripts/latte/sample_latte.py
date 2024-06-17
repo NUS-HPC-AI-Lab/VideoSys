@@ -29,6 +29,7 @@ from omegaconf import OmegaConf
 from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
+from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.latte import LattePipeline, LatteT2V
 
 
@@ -36,6 +37,19 @@ def main(args):
     torch.manual_seed(args.seed)
     torch.set_grad_enabled(False)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    set_skip_manager(
+        steps=args.num_sampling_steps,
+        cross_skip=args.cross_skip,
+        cross_threshold=args.cross_threshold,
+        cross_gap=args.cross_gap,
+        spatial_skip=args.spatial_skip,
+        spatial_threshold=args.spatial_threshold,
+        spatial_gap=args.spatial_gap,
+        temporal_skip=args.temporal_skip,
+        temporal_threshold=args.temporal_threshold,
+        temporal_gap=args.temporal_gap,
+    )
 
     transformer_model = LatteT2V.from_pretrained(
         args.pretrained_model_path, subfolder="transformer", video_length=args.video_length

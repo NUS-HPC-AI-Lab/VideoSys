@@ -11,6 +11,7 @@ class SkipManager:
         spatial_skip: bool = False,
         spatial_threshold: int = 700,
         spatial_gap: int = 3,
+        spatial_layer_range: list = [5, 27],
         temporal_skip: bool = False,
         temporal_threshold: int = 700,
         temporal_gap: int = 5,
@@ -24,6 +25,7 @@ class SkipManager:
         self.spatial_skip = spatial_skip
         self.spatial_threshold = spatial_threshold
         self.spatial_gap = spatial_gap
+        self.spatial_layer_range = spatial_layer_range
 
         self.temporal_skip = temporal_skip
         self.temporal_threshold = temporal_threshold
@@ -32,8 +34,8 @@ class SkipManager:
         print(
             f"Init SkipManager:\n\
             steps={steps}\n\
-            \cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
-            spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}\n\
+            cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
+            spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}, spatial_layer_range={spatial_layer_range}\n\
             temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n",
             end="",
         )
@@ -47,6 +49,7 @@ def set_skip_manager(
     spatial_skip: bool = False,
     spatial_threshold: int = 700,
     spatial_gap: int = 3,
+    spatial_layer_range: list = [8, 27],
     temporal_skip: bool = False,
     temporal_threshold: int = 700,
     temporal_gap: int = 5,
@@ -60,6 +63,7 @@ def set_skip_manager(
         spatial_skip,
         spatial_threshold,
         spatial_gap,
+        spatial_layer_range,
         temporal_skip,
         temporal_threshold,
         temporal_gap,
@@ -98,6 +102,10 @@ def get_spatial_threshold():
 
 def get_spatial_gap():
     return SKIP_MANAGER.spatial_gap
+
+
+def get_spatial_layer_range():
+    return SKIP_MANAGER.spatial_layer_range
 
 
 def get_temporal_skip():

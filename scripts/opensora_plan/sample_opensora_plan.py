@@ -29,6 +29,7 @@ from omegaconf import OmegaConf
 from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
+from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora_plan import VideoGenPipeline
 from opendit.models.opensora_plan.ae import ae_stride_config, getae_wrapper
 from opendit.models.opensora_plan.latte import LatteT2V
@@ -59,6 +60,19 @@ def main(args):
     # torch.manual_seed(args.seed)
     torch.set_grad_enabled(False)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    set_skip_manager(
+        steps=args.num_sampling_steps,
+        cross_skip=args.cross_skip,
+        cross_threshold=args.cross_threshold,
+        cross_gap=args.cross_gap,
+        spatial_skip=args.spatial_skip,
+        spatial_threshold=args.spatial_threshold,
+        spatial_gap=args.spatial_gap,
+        temporal_skip=args.temporal_skip,
+        temporal_threshold=args.temporal_threshold,
+        temporal_gap=args.temporal_gap,
+    )
 
     vae = getae_wrapper(args.ae)(args.model_path, subfolder="vae", cache_dir=args.cache_dir).to(
         device, dtype=torch.float16
@@ -208,6 +222,18 @@ if __name__ == "__main__":
     parser.add_argument("--force_images", action="store_true")
     parser.add_argument("--tile_overlap_factor", type=float, default=0.25)
     parser.add_argument("--enable_tiling", action="store_true")
+
+    # skip
+    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
+    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
+    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
+    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
+    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
+
     args = parser.parse_args()
 
     config_args = OmegaConf.load(args.config)
