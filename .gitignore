@@ -166,3 +166,6 @@ coverage.xml
 
 pretrained
 samples
+datasets
+taming
+cache_dir
