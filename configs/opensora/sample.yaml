@@ -1,19 +1,24 @@
-# video
-num_frames: 16
-frame_interval: 3
+resolution: "720p"
+aspect_ratio: "9:16"
+num_frames: 48
 fps: 24
-image_size: [240, 426]
-num_samples: 1
+frame_interval: 1
 
-# runtime
-batch_size: 1
-save_dir: "./samples/opensora"
 seed: 42
+multi_resolution: "STDiT2"
 dtype: "bf16"
+condition_frame_length: 5
+align: 5
+num_sampling_steps: 30
+cfg_scale: 7.0
+aes: 6.5
 
-# model
-model_pretrained_path: "hpcai-tech/OpenSora-STDiT-v2-stage3"
-
-# scheduler
-scheduler_num_sampling_steps: 100
-scheduler_cfg_scale: 7.0
+prompt_as_path: true
+prompt: [
+  'Yellow and black tropical fish dart through the sea.',
+  'An epic tornado attacking above aglowing city at night.',
+  'Slow pan upward of blazing oak fire in an indoor fireplace.',
+  'a cat wearing sunglasses and working as a lifeguard at pool.',
+  'Sunset over the sea.',
+  'A dog in astronaut suit and sunglasses floating in space.',
+]
