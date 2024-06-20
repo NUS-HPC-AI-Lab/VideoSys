@@ -31,6 +31,23 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
+from opendit.core.skip_mgr import (
+    get_cross_gap,
+    get_cross_skip,
+    get_cross_threshold,
+    get_spatial_gap,
+    get_spatial_layer_range,
+    get_spatial_skip,
+    get_spatial_threshold,
+    get_steps,
+    get_temporal_gap,
+    get_temporal_skip,
+    get_temporal_threshold,
+    get_diffusion_skip,
+    get_diffusion_timestep_respacing
+)
+from opendit.utils.utils import space_timesteps
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -649,8 +666,31 @@ class LattePipeline(DiffusionPipeline):
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
+        # timesteps = self.scheduler.timesteps # TODO change timestep_respacing here
 
+        if get_diffusion_skip() and get_diffusion_timestep_respacing() is not None:
+            # TODO add assertion for timestep_respacing
+            timestep_respacing = get_diffusion_timestep_respacing()
+            timesteps = space_timesteps(1000, timestep_respacing)
+            num_inference_steps = len(timesteps)
+            
+            orignal_timesteps = self.scheduler.set_timesteps(num_inference_steps, device=device)
+            
+            print('============================')
+            print(f'orignal sample timesteps: {orignal_timesteps}')
+            print('============================')
+            print(f'skip diffusion steps: {get_diffusion_timestep_respacing()}') 
+            print(f'sample timesteps: {timesteps}')
+            print(f'num_inference_steps: {num_inference_steps}')           
+            print('============================')
+        else:
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
+            timesteps = self.scheduler.timesteps
+            print('============================')
+            print(f'sample timesteps: {timesteps}')
+            print(f'num_inference_steps: {num_inference_steps}')           
+            print('============================')
+            
         # 5. Prepare latents.
         latent_channels = self.transformer.config.in_channels
         latents = self.prepare_latents(

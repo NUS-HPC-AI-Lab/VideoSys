@@ -84,3 +84,49 @@ def create_logger(logging_dir=None):
         logger = logging.getLogger(__name__)
         logger.addHandler(logging.NullHandler())
     return logger
+
+
+
+def space_timesteps(time_steps, time_bins):
+    num_bins = len(time_bins)
+    bin_size = time_steps // num_bins
+    
+    result = []
+    
+    for i, bin_count in enumerate(time_bins):
+        start = i * bin_size
+        end = start + bin_size
+        
+        bin_steps = np.linspace(start, end, bin_count, endpoint=False, dtype=int).tolist()
+        result.extend(bin_steps)
+    
+    result_tensor = torch.tensor(result, dtype=torch.int32)
+    sorted_tensor = torch.sort(result_tensor, descending=True).values
+    
+    return sorted_tensor
+
+
+
+def skip_diffusion_timestep(timesteps, diffusion_skip_timestep):
+    timesteps_np = timesteps.cpu().numpy()
+    
+    num_bins = len(diffusion_skip_timestep)
+    bin_size = len(timesteps_np) // num_bins
+    
+    new_timesteps = []
+    
+    for i in range(num_bins):
+        bin_start = i * bin_size
+        bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
+        bin_timesteps = timesteps_np[bin_start:bin_end]
+        
+        if diffusion_skip_timestep[i] == 0:
+            # If the bin is marked with 0, keep all timesteps
+            new_timesteps.extend(bin_timesteps)
+        elif diffusion_skip_timestep[i] == 1:
+            # If the bin is marked with 1, omit the last timestep in the bin
+            new_timesteps.extend(bin_timesteps[1:])
+    
+    new_timesteps_tensor = torch.tensor(new_timesteps, device=timesteps.device)
+    
+    return new_timesteps_tensor

@@ -15,6 +15,9 @@ class SkipManager:
         temporal_skip: bool = False,
         temporal_threshold: int = 700,
         temporal_gap: int = 5,
+        diffusion_skip: bool = False,
+        diffusion_timestep_respacing: list = [5,5,5,5,5, 5,5,4,4,4],
+        diffusion_skip_timestep: list = None,
     ):
         self.steps = steps
 
@@ -31,12 +34,16 @@ class SkipManager:
         self.temporal_threshold = temporal_threshold
         self.temporal_gap = temporal_gap
 
+        self.diffusion_skip = diffusion_skip
+        self.diffusion_timestep_respacing = diffusion_timestep_respacing
+        self.diffusion_skip_timestep = diffusion_skip_timestep
         print(
             f"Init SkipManager:\n\
             steps={steps}\n\
             cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
             spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}, spatial_layer_range={spatial_layer_range}\n\
-            temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n",
+            temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n\
+            diffusion_skip={diffusion_skip}, diffusion_timestep_respacing={diffusion_timestep_respacing}\n",
             end="",
         )
 
@@ -93,6 +100,9 @@ def set_skip_manager(
     temporal_skip: bool = False,
     temporal_threshold: int = 700,
     temporal_gap: int = 5,
+    diffusion_skip: bool = False,
+    diffusion_timestep_respacing: list = [5,5,5,5,5, 5,5,4,4,4],
+    diffusion_skip_timestep: list = None,
 ):
     global SKIP_MANAGER
     SKIP_MANAGER = SkipManager(
@@ -107,6 +117,9 @@ def set_skip_manager(
         temporal_skip,
         temporal_threshold,
         temporal_gap,
+        diffusion_skip,
+        diffusion_timestep_respacing,
+        diffusion_skip_timestep
     )
 
 
@@ -170,3 +183,15 @@ def if_skip_temporal(timestep: int, count: int):
 
 def if_skip_spatial(timestep: int, count: int, block_idx: int):
     return SKIP_MANAGER.if_skip_spatial(timestep, count, block_idx)
+
+
+def get_diffusion_skip():
+    return SKIP_MANAGER.diffusion_skip
+
+
+def get_diffusion_timestep_respacing():
+    return SKIP_MANAGER.diffusion_timestep_respacing
+
+
+def get_diffusion_skip_timestep():
+    return SKIP_MANAGER.diffusion_skip_timestep
