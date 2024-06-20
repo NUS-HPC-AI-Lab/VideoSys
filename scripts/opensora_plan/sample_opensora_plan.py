@@ -33,7 +33,7 @@ from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora_plan import VideoGenPipeline
 from opendit.models.opensora_plan.ae import ae_stride_config, getae_wrapper
 from opendit.models.opensora_plan.latte import LatteT2V
-from opendit.utils.utils import merge_args
+from opendit.utils.utils import merge_args, set_seed
 
 
 def save_video_grid(video, nrow=None):
@@ -57,7 +57,7 @@ def save_video_grid(video, nrow=None):
 
 
 def main(args):
-    # torch.manual_seed(args.seed)
+    set_seed(42)
     torch.set_grad_enabled(False)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -152,7 +152,6 @@ def main(args):
             num_images_per_prompt=1,
             mask_feature=True,
         ).video
-        print(videos.shape)
         try:
             if args.force_images:
                 videos = videos[:, 0].permute(0, 3, 1, 2)  # b t h w c -> b c h w
