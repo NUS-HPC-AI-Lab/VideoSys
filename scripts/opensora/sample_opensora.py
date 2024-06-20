@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
+from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
     add_watermark,
@@ -38,10 +39,6 @@ from opendit.models.opensora.inference_utils import (
     refine_prompts_by_openai,
     split_prompt,
 )
-from opendit.models.opensora.rflow import RFLOW
-from opendit.models.opensora.stdit3 import STDiT3_XL_2
-from opendit.models.opensora.text_encoder import T5Encoder, text_preprocessing
-from opendit.models.opensora.vae import OpenSoraVAE_V1_2
 from opendit.utils.utils import all_exists, create_logger, merge_args, set_seed, str_to_dtype
 
 
@@ -50,8 +47,7 @@ def main(args):
     # ======================================================
     # configs & runtime variables
     # ======================================================
-    # == device and dtype ==
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # == dtype ==
     dtype = str_to_dtype(args.dtype)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
@@ -61,6 +57,7 @@ def main(args):
     coordinator = DistCoordinator()
     set_parallel_manager(1, coordinator.world_size)
     enable_sequence_parallelism = enable_sequence_parallel()
+    device = f"cuda:{torch.cuda.current_device()}"
     set_seed(seed=args.seed)
 
     # == init fastvideodiffusion ==
