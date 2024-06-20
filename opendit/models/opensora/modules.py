@@ -41,7 +41,7 @@ class LlamaRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
+def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool):
     return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
 
 

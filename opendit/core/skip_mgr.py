@@ -40,6 +40,46 @@ class SkipManager:
             end="",
         )
 
+    def if_skip_cross(self, timestep: int, count: int):
+        if (
+            self.cross_skip
+            and (timestep is not None)
+            and (count % self.cross_gap != 0)
+            and (timestep < self.cross_threshold)
+        ):
+            flag = True
+        else:
+            flag = False
+        count = (count + 1) % self.steps
+        return flag, count
+
+    def if_skip_temporal(self, timestep: int, count: int):
+        if (
+            self.temporal_skip
+            and (timestep is not None)
+            and (count % self.temporal_gap != 0)
+            and (timestep < self.temporal_threshold)
+        ):
+            flag = True
+        else:
+            flag = False
+        count = (count + 1) % self.steps
+        return flag, count
+
+    def if_skip_spatial(self, timestep: int, count: int, block_idx: int):
+        if (
+            self.spatial_skip
+            and (timestep is not None)
+            and (count % self.spatial_gap != 0)
+            and (timestep < self.spatial_threshold)
+            and (self.spatial_layer_range[0] <= block_idx <= self.spatial_layer_range[1])
+        ):
+            flag = True
+        else:
+            flag = False
+        count = (count + 1) % self.steps
+        return flag, count
+
 
 def set_skip_manager(
     steps: int = 100,
@@ -49,7 +89,7 @@ def set_skip_manager(
     spatial_skip: bool = False,
     spatial_threshold: int = 700,
     spatial_gap: int = 3,
-    spatial_layer_range: list = [8, 27],
+    spatial_block: list = [8, 27],
     temporal_skip: bool = False,
     temporal_threshold: int = 700,
     temporal_gap: int = 5,
@@ -63,14 +103,14 @@ def set_skip_manager(
         spatial_skip,
         spatial_threshold,
         spatial_gap,
-        spatial_layer_range,
+        spatial_block,
         temporal_skip,
         temporal_threshold,
         temporal_gap,
     )
 
 
-def is_skip_enabled():
+def enable_skip():
     if SKIP_MANAGER is None:
         return False
     return SKIP_MANAGER.cross_skip or SKIP_MANAGER.spatial_skip or SKIP_MANAGER.temporal_skip
@@ -118,3 +158,15 @@ def get_temporal_threshold():
 
 def get_temporal_gap():
     return SKIP_MANAGER.temporal_gap
+
+
+def if_skip_cross(timestep: int, count: int):
+    return SKIP_MANAGER.if_skip_cross(timestep, count)
+
+
+def if_skip_temporal(timestep: int, count: int):
+    return SKIP_MANAGER.if_skip_temporal(timestep, count)
+
+
+def if_skip_spatial(timestep: int, count: int, block_idx: int):
+    return SKIP_MANAGER.if_skip_spatial(timestep, count, block_idx)

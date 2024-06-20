@@ -19,7 +19,8 @@ from colossalai.cluster import DistCoordinator
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from opendit.core.parallel_mgr import set_parallel_manager
+from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
+from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
     add_watermark,
@@ -41,15 +42,7 @@ from opendit.models.opensora.rflow import RFLOW
 from opendit.models.opensora.stdit3 import STDiT3_XL_2
 from opendit.models.opensora.text_encoder import T5Encoder, text_preprocessing
 from opendit.models.opensora.vae import OpenSoraVAE_V1_2
-from opendit.utils.utils import (
-    all_exists,
-    create_logger,
-    is_distributed,
-    is_main_process,
-    merge_args,
-    set_seed,
-    str_to_dtype,
-)
+from opendit.utils.utils import all_exists, create_logger, merge_args, set_seed, str_to_dtype
 
 
 def main(args):
@@ -64,16 +57,26 @@ def main(args):
     torch.backends.cudnn.allow_tf32 = True
 
     # == init distributed env ==
-    if is_distributed():
-        colossalai.launch_from_torch({})
-        coordinator = DistCoordinator()
-        enable_sequence_parallelism = coordinator.world_size > 1
-        if enable_sequence_parallelism:
-            set_parallel_manager(1, dist.group.WORLD)
-    else:
-        coordinator = None
-        enable_sequence_parallelism = False
+    colossalai.launch_from_torch({})
+    coordinator = DistCoordinator()
+    set_parallel_manager(1, coordinator.world_size)
+    enable_sequence_parallelism = enable_sequence_parallel()
     set_seed(seed=args.seed)
+
+    # == init fastvideodiffusion ==
+    set_skip_manager(
+        steps=args.num_sampling_steps,
+        cross_skip=args.cross_skip,
+        cross_threshold=args.cross_threshold,
+        cross_gap=args.cross_gap,
+        spatial_skip=args.spatial_skip,
+        spatial_threshold=args.spatial_threshold,
+        spatial_gap=args.spatial_gap,
+        spatial_block=args.spatial_block,
+        temporal_skip=args.temporal_skip,
+        temporal_threshold=args.temporal_threshold,
+        temporal_gap=args.temporal_gap,
+    )
 
     # == init logger ==
     logger = create_logger()
@@ -121,7 +124,6 @@ def main(args):
             in_channels=vae.out_channels,
             caption_channels=text_encoder.output_dim,
             model_max_length=text_encoder.model_max_length,
-            enable_sequence_parallelism=enable_sequence_parallelism,
         )
         .to(device, dtype)
         .eval()
@@ -215,7 +217,7 @@ def main(args):
                 # only call openai API when
                 # 1. seq parallel is not enabled
                 # 2. seq parallel is enabled and the process is rank 0
-                if not enable_sequence_parallelism or (enable_sequence_parallelism and is_main_process()):
+                if not enable_sequence_parallelism or (enable_sequence_parallelism and coordinator.is_master()):
                     for idx, prompt_segment_list in enumerate(batched_prompt_segment_list):
                         batched_prompt_segment_list[idx] = refine_prompts_by_openai(prompt_segment_list)
 
@@ -294,7 +296,7 @@ def main(args):
                 video_clips.append(samples)
 
             # == save samples ==
-            if is_main_process():
+            if coordinator.is_master():
                 for idx, batch_prompt in enumerate(batch_prompts):
                     if verbose >= 2:
                         logger.info("Prompt: %s", batch_prompt)
@@ -366,6 +368,7 @@ if __name__ == "__main__":
     parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
     parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
     parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
+    parser.add_argument("--spatial_block", type=int, nargs=2, default=[8, 25], help="Spatial attention block size")
     parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
     parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
     parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")

@@ -22,3 +22,6 @@ prompt: [
   'Sunset over the sea.',
   'A dog in astronaut suit and sunglasses floating in space.',
 ]
+
+# speedup
+# flash_attn: True

@@ -54,14 +54,6 @@ def merge_args(args1, args2):
     return args1
 
 
-def is_distributed():
-    return os.environ.get("WORLD_SIZE", None) is not None
-
-
-def is_main_process():
-    return not is_distributed() or dist.get_rank() == 0
-
-
 def all_exists(paths):
     return all(os.path.exists(path) for path in paths)
 
@@ -74,7 +66,7 @@ def create_logger(logging_dir=None):
     """
     Create a logger that writes to a log file and stdout.
     """
-    if is_main_process():  # real logger
+    if dist.get_rank() == 0:  # real logger
         additional_args = dict()
         if logging_dir is not None:
             additional_args["handlers"] = [

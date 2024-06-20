@@ -44,7 +44,7 @@ def get_sequence_parallel_rank():
     return PARALLEL_MANAGER.sp_rank
 
 
-def is_sequence_parallelism_enable():
+def enable_sequence_parallel():
     if PARALLEL_MANAGER is None:
         return False
     return PARALLEL_MANAGER.enable_sp
