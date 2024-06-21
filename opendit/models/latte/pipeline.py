@@ -544,6 +544,7 @@ class LattePipeline(DiffusionPipeline):
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
         enable_vae_temporal_decoder: bool = False,
+        verbose: bool = False,
     ) -> Union[VideoPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -654,9 +655,6 @@ class LattePipeline(DiffusionPipeline):
         # timesteps = self.scheduler.timesteps # NOTE change timestep_respacing here
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            print("============================")
-            print("skip diffusion steps!!!")
-
             # TODO add assertion for timestep_respacing
             # timestep_respacing = get_diffusion_skip_timestep()
             # timesteps = space_timesteps(1000, timestep_respacing)
@@ -667,7 +665,9 @@ class LattePipeline(DiffusionPipeline):
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             orignal_timesteps = self.scheduler.timesteps
 
-            if dist.get_rank() == 0:
+            if verbose and dist.get_rank() == 0:
+                print("============================")
+                print("skip diffusion steps!!!")
                 print("============================")
                 print(f"orignal sample timesteps: {orignal_timesteps}")
                 print(f"orignal diffusion steps: {len(orignal_timesteps)}")
@@ -679,11 +679,6 @@ class LattePipeline(DiffusionPipeline):
         else:
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             timesteps = self.scheduler.timesteps
-            if dist.get_rank() == 0:
-                print("============================")
-                print(f"sample timesteps: {timesteps}")
-                print(f"len(timesteps): {len(timesteps)}")
-                print("============================")
 
         # 5. Prepare latents.
         latent_channels = self.transformer.config.in_channels

@@ -543,6 +543,7 @@ class VideoGenPipeline(DiffusionPipeline):
         clean_caption: bool = True,
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
+        verbose: bool = False,
     ) -> Union[VideoPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -693,7 +694,7 @@ class VideoGenPipeline(DiffusionPipeline):
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             orignal_timesteps = self.scheduler.timesteps
 
-            if dist.get_rank() == 0:
+            if verbose and dist.get_rank() == 0:
                 print("============================")
                 print(f"orignal sample timesteps: {orignal_timesteps}")
                 print(f"orignal diffusion steps: {len(orignal_timesteps)}")
@@ -701,12 +702,6 @@ class VideoGenPipeline(DiffusionPipeline):
                 print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
                 print(f"sample timesteps: {timesteps}")
                 print(f"num_inference_steps: {len(timesteps)}")
-                print("============================")
-        else:
-            if dist.get_rank() == 0:
-                print("============================")
-                print(f"sample timesteps: {timesteps}")
-                print(f"len(timesteps): {len(timesteps)}")
                 print("============================")
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:

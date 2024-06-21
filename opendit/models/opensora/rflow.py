@@ -184,6 +184,7 @@ class RFLOW:
         mask=None,
         guidance_scale=None,
         progress=True,
+        verbose=False,
     ):
         # if no specific guidance scale is provided, use the default scale when initializing the scheduler
         if guidance_scale is None:
@@ -212,7 +213,7 @@ class RFLOW:
             diffusion_skip_timestep = get_diffusion_skip_timestep()
             timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
 
-            if dist.get_rank() == 0:
+            if verbose and dist.get_rank() == 0:
                 print("============================")
                 print("skip diffusion steps!!!")
                 print("============================")
@@ -222,12 +223,6 @@ class RFLOW:
                 print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
                 print(f"sample timesteps: {timesteps}")
                 print(f"num_inference_steps: {len(timesteps)}")
-                print("============================")
-        else:
-            if dist.get_rank() == 0:
-                print("============================")
-                print(f"sample timesteps: {timesteps}")
-                print(f"len(timesteps): {len(timesteps)}")
                 print("============================")
 
         if mask is not None:
