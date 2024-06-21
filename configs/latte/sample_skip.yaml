@@ -48,4 +48,4 @@ cross_gap: 8
 
 # skip diffusion
 diffusion_skip: True
-diffusion_skip_timestep: [0,0,0,0,0,0,0,1,1,1]
+diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]

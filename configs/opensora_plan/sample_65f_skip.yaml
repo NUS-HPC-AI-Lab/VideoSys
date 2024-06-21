@@ -30,4 +30,4 @@ cross_threshold: 700
 cross_gap: 5
 # skip diffusion
 diffusion_skip: True
-diffusion_skip_timestep: [0,0,0,0,0,0,0,1,1,1]
+diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
