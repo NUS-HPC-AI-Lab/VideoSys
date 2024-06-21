@@ -1,3 +1,8 @@
+import random
+
+import numpy as np
+import torch
+
 SKIP_MANAGER = None
 
 
@@ -195,3 +200,85 @@ def get_diffusion_timestep_respacing():
 
 def get_diffusion_skip_timestep():
     return SKIP_MANAGER.diffusion_skip_timestep
+
+
+def space_timesteps(time_steps, time_bins):
+    num_bins = len(time_bins)
+    bin_size = time_steps // num_bins
+
+    result = []
+
+    for i, bin_count in enumerate(time_bins):
+        start = i * bin_size
+        end = start + bin_size
+
+        bin_steps = np.linspace(start, end, bin_count, endpoint=False, dtype=int).tolist()
+        result.extend(bin_steps)
+
+    result_tensor = torch.tensor(result, dtype=torch.int32)
+    sorted_tensor = torch.sort(result_tensor, descending=True).values
+
+    return sorted_tensor
+
+
+def skip_diffusion_timestep(timesteps, diffusion_skip_timestep):
+    if isinstance(timesteps, list):
+        # If timesteps is a list, we assume each element is a tensor
+        timesteps_np = [t.cpu().numpy() for t in timesteps]
+        device = timesteps[0].device
+    else:
+        # If timesteps is a tensor
+        timesteps_np = timesteps.cpu().numpy()
+        device = timesteps.device
+
+    num_bins = len(diffusion_skip_timestep)
+
+    if isinstance(timesteps_np, list):
+        bin_size = len(timesteps_np) // num_bins
+        new_timesteps = []
+
+        for i in range(num_bins):
+            bin_start = i * bin_size
+            bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
+            bin_timesteps = timesteps_np[bin_start:bin_end]
+
+            if diffusion_skip_timestep[i] == 0:
+                # If the bin is marked with 0, keep all timesteps
+                new_timesteps.extend(bin_timesteps)
+            elif diffusion_skip_timestep[i] == 1:
+                # If the bin is marked with 1, omit the last timestep in the bin
+                new_timesteps.extend(bin_timesteps[1:])
+
+        new_timesteps_tensor = [torch.tensor(t, device=device) for t in new_timesteps]
+    else:
+        bin_size = len(timesteps_np) // num_bins
+        new_timesteps = []
+
+        for i in range(num_bins):
+            bin_start = i * bin_size
+            bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
+            bin_timesteps = timesteps_np[bin_start:bin_end]
+
+            if diffusion_skip_timestep[i] == 0:
+                # If the bin is marked with 0, keep all timesteps
+                new_timesteps.extend(bin_timesteps)
+            elif diffusion_skip_timestep[i] == 1:
+                # If the bin is marked with 1, omit the last timestep in the bin
+                new_timesteps.extend(bin_timesteps[1:])
+            elif diffusion_skip_timestep[i] != 0:
+                # If the bin is marked with a non-zero value, randomly omit n timesteps
+                if len(bin_timesteps) > diffusion_skip_timestep[i]:
+                    indices_to_remove = set(random.sample(range(len(bin_timesteps)), diffusion_skip_timestep[i]))
+                    timesteps_to_keep = [
+                        timestep for idx, timestep in enumerate(bin_timesteps) if idx not in indices_to_remove
+                    ]
+                else:
+                    timesteps_to_keep = bin_timesteps  # 如果bin_timesteps的长度小于等于n，则不删除任何元素
+                new_timesteps.extend(timesteps_to_keep)
+
+        new_timesteps_tensor = torch.tensor(new_timesteps, device=device)
+
+    if isinstance(timesteps, list):
+        return new_timesteps_tensor
+    else:
+        return new_timesteps_tensor

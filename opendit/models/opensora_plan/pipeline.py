@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.schedulers import DPMSolverMultistepScheduler
@@ -29,24 +30,8 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
-from opendit.utils.utils import skip_diffusion_timestep
-from opendit.core.skip_mgr import (
-    get_cross_gap,
-    get_cross_skip,
-    get_cross_threshold,
-    get_spatial_gap,
-    get_spatial_layer_range,
-    get_spatial_skip,
-    get_spatial_threshold,
-    get_steps,
-    get_temporal_gap,
-    get_temporal_skip,
-    get_temporal_threshold,
-    get_diffusion_skip,
-    get_diffusion_timestep_respacing,
-    get_diffusion_skip_timestep
-)
 
+from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -698,34 +683,34 @@ class VideoGenPipeline(DiffusionPipeline):
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
             diffusion_skip_timestep = get_diffusion_skip_timestep()
-            
+
             # warmup_timesteps = timesteps[:num_warmup_steps]
             # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
             # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
-            
+
             timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
 
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             orignal_timesteps = self.scheduler.timesteps
-            
-            print('============================')
-            print(f'orignal sample timesteps: {orignal_timesteps}')
-            print(f'orignal diffusion steps: {len(orignal_timesteps)}')
-            print('============================')
-            print(f'skip diffusion steps: {get_diffusion_skip_timestep()}') 
-            print(f'sample timesteps: {timesteps}')
-            print(f'num_inference_steps: {len(timesteps)}')           
-            print('============================')
+
+            if dist.get_rank() == 0:
+                print("============================")
+                print(f"orignal sample timesteps: {orignal_timesteps}")
+                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
+                print("============================")
+                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
+                print(f"sample timesteps: {timesteps}")
+                print(f"num_inference_steps: {len(timesteps)}")
+                print("============================")
         else:
-            print('============================')
-            print(f'sample timesteps: {timesteps}')
-            print(f'len(timesteps): {len(timesteps)}')           
-            print('============================')
-            
-            
+            if dist.get_rank() == 0:
+                print("============================")
+                print(f"sample timesteps: {timesteps}")
+                print(f"len(timesteps): {len(timesteps)}")
+                print("============================")
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
-                # print(f'i: {i} / t: {t} / len: {len(timesteps)}')
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 

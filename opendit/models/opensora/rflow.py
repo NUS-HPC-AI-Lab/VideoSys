@@ -8,13 +8,13 @@
 # --------------------------------------------------------
 
 import torch
+import torch.distributed as dist
 from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
-from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep
+from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 from opendit.diffusion.gaussian_diffusion import _extract_into_tensor
-from opendit.utils.utils import skip_diffusion_timestep
 
 
 def mean_flat(tensor: torch.Tensor, mask=None):
@@ -208,26 +208,27 @@ class RFLOW:
         # TODO: jump diffusion steps
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            print("============================")
-            print("skip diffusion steps!!!")
-
             orignal_timesteps = timesteps
             diffusion_skip_timestep = get_diffusion_skip_timestep()
             timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
 
-            print("============================")
-            print(f"orignal sample timesteps: {orignal_timesteps}")
-            print(f"orignal diffusion steps: {len(orignal_timesteps)}")
-            print("============================")
-            print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
-            print(f"sample timesteps: {timesteps}")
-            print(f"num_inference_steps: {len(timesteps)}")
-            print("============================")
+            if dist.get_rank() == 0:
+                print("============================")
+                print("skip diffusion steps!!!")
+                print("============================")
+                print(f"orignal sample timesteps: {orignal_timesteps}")
+                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
+                print("============================")
+                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
+                print(f"sample timesteps: {timesteps}")
+                print(f"num_inference_steps: {len(timesteps)}")
+                print("============================")
         else:
-            print("============================")
-            print(f"sample timesteps: {timesteps}")
-            print(f"len(timesteps): {len(timesteps)}")
-            print("============================")
+            if dist.get_rank() == 0:
+                print("============================")
+                print(f"sample timesteps: {timesteps}")
+                print(f"len(timesteps): {len(timesteps)}")
+                print("============================")
 
         if mask is not None:
             noise_added = torch.zeros_like(mask, dtype=torch.bool)

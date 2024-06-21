@@ -1,5 +1,4 @@
-resolution: "480p"
-# resolution: "720p"
+resolution: "720p"
 aspect_ratio: "9:16"
 num_frames: 48
 fps: 24
