@@ -16,7 +16,7 @@ class SkipManager:
         temporal_threshold: int = 700,
         temporal_gap: int = 5,
         diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = [5,5,5,5,5, 5,5,4,4,4],
+        diffusion_timestep_respacing: list = None,
         diffusion_skip_timestep: list = None,
     ):
         self.steps = steps
@@ -101,7 +101,7 @@ def set_skip_manager(
     temporal_threshold: int = 700,
     temporal_gap: int = 5,
     diffusion_skip: bool = False,
-    diffusion_timestep_respacing: list = [5,5,5,5,5, 5,5,4,4,4],
+    diffusion_timestep_respacing: list = None,
     diffusion_skip_timestep: list = None,
 ):
     global SKIP_MANAGER

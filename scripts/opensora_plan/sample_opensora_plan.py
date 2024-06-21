@@ -73,7 +73,6 @@ def main(args):
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
-        diffusion_timestep_respacing=args.diffusion_timestep_respacing,
         diffusion_skip_timestep=args.diffusion_skip_timestep
     )
 

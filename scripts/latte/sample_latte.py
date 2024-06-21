@@ -51,7 +51,7 @@ def main(args):
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
-        diffusion_timestep_respacing=args.diffusion_timestep_respacing
+        diffusion_skip_timestep=args.diffusion_skip_timestep
     )
 
     transformer_model = LatteT2V.from_pretrained(
@@ -232,8 +232,9 @@ if __name__ == "__main__":
     parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
     parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
     
+    # skip diffusion
     parser.add_argument("--diffusion_skip", action="store_true",)
-    parser.add_argument("--diffusion_timestep_respacing", nargs="+")
+    parser.add_argument("--diffusion_skip_timestep", nargs="+")
     args = parser.parse_args()
 
     config_args = OmegaConf.load(args.config)

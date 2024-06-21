@@ -699,11 +699,11 @@ class VideoGenPipeline(DiffusionPipeline):
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
             diffusion_skip_timestep = get_diffusion_skip_timestep()
             
-            warmup_timesteps = timesteps[:num_warmup_steps]
-            after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
-            timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
+            # warmup_timesteps = timesteps[:num_warmup_steps]
+            # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
+            # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
             
-            # timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
+            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
 
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             orignal_timesteps = self.scheduler.timesteps
@@ -712,7 +712,7 @@ class VideoGenPipeline(DiffusionPipeline):
             print(f'orignal sample timesteps: {orignal_timesteps}')
             print(f'orignal diffusion steps: {len(orignal_timesteps)}')
             print('============================')
-            print(f'skip diffusion steps: {get_diffusion_timestep_respacing()}') 
+            print(f'skip diffusion steps: {get_diffusion_skip_timestep()}') 
             print(f'sample timesteps: {timesteps}')
             print(f'num_inference_steps: {len(timesteps)}')           
             print('============================')

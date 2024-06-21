@@ -44,9 +44,9 @@ from opendit.core.skip_mgr import (
     get_temporal_skip,
     get_temporal_threshold,
     get_diffusion_skip,
-    get_diffusion_timestep_respacing
+    get_diffusion_skip_timestep
 )
-from opendit.utils.utils import space_timesteps
+from opendit.utils.utils import space_timesteps, skip_diffusion_timestep
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -666,29 +666,36 @@ class LattePipeline(DiffusionPipeline):
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
-        # timesteps = self.scheduler.timesteps # TODO change timestep_respacing here
+        # timesteps = self.scheduler.timesteps # NOTE change timestep_respacing here
 
-        if get_diffusion_skip() and get_diffusion_timestep_respacing() is not None:
-            # TODO add assertion for timestep_respacing
-            timestep_respacing = get_diffusion_timestep_respacing()
-            timesteps = space_timesteps(1000, timestep_respacing)
-            num_inference_steps = len(timesteps)
+        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
+            print('============================')
+            print('skip diffusion steps!!!')
             
-            orignal_timesteps = self.scheduler.set_timesteps(num_inference_steps, device=device)
+            # TODO add assertion for timestep_respacing
+            # timestep_respacing = get_diffusion_skip_timestep()
+            # timesteps = space_timesteps(1000, timestep_respacing)
+            
+            diffusion_skip_timestep = get_diffusion_skip_timestep()
+            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
+            
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
+            orignal_timesteps = self.scheduler.timesteps
             
             print('============================')
             print(f'orignal sample timesteps: {orignal_timesteps}')
+            print(f'orignal diffusion steps: {len(orignal_timesteps)}')
             print('============================')
-            print(f'skip diffusion steps: {get_diffusion_timestep_respacing()}') 
+            print(f'skip diffusion steps: {get_diffusion_skip_timestep()}') 
             print(f'sample timesteps: {timesteps}')
-            print(f'num_inference_steps: {num_inference_steps}')           
+            print(f'num_inference_steps: {len(timesteps)}')           
             print('============================')
         else:
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             timesteps = self.scheduler.timesteps
             print('============================')
             print(f'sample timesteps: {timesteps}')
-            print(f'num_inference_steps: {num_inference_steps}')           
+            print(f'len(timesteps): {len(timesteps)}')           
             print('============================')
             
         # 5. Prepare latents.
