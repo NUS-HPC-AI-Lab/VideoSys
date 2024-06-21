@@ -1,3 +1,13 @@
+# Adapted from OpenSora
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+# --------------------------------------------------------
+# References:
+# OpenSora: https://github.com/hpcaitech/Open-Sora
+# --------------------------------------------------------
+
+
 import os
 
 import numpy as np
@@ -8,8 +18,16 @@ from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 from transformers import PretrainedConfig, PreTrainedModel
 
-from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_sequence_parallel_size
+from opendit.core.comm import (
+    all_to_all_with_pad,
+    gather_sequence,
+    get_spatial_pad,
+    get_temporal_pad,
+    set_spatial_pad,
+    set_temporal_pad,
+    split_sequence,
+)
+from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 from opendit.core.skip_mgr import enable_skip, if_skip_cross, if_skip_spatial, if_skip_temporal
 
 from .modules import (
@@ -122,12 +140,12 @@ class STDiT3Block(nn.Module):
             # attention
             if self.temporal:
                 if enable_sequence_parallel():
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, temporal_to_spatial=True)
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True)
                 x_m = rearrange(x_m, "B (T S) C -> (B S) T C", T=T, S=S)
                 x_m = self.attn(x_m)
                 x_m = rearrange(x_m, "(B S) T C -> B (T S) C", T=T, S=S)
                 if enable_sequence_parallel():
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, temporal_to_spatial=False)
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False)
             else:
                 x_m = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
                 x_m = self.attn(x_m)
@@ -175,17 +193,27 @@ class STDiT3Block(nn.Module):
 
         return x
 
-    def dynamic_switch(self, x, s, t, temporal_to_spatial: bool):
-        if temporal_to_spatial:
+    def dynamic_switch(self, x, s, t, to_spatial_shard: bool):
+        if to_spatial_shard:
             scatter_dim, gather_dim = 2, 1
-            new_s, new_t = s // get_sequence_parallel_size(), t * get_sequence_parallel_size()
+            scatter_pad = get_spatial_pad()
+            gather_pad = get_temporal_pad()
         else:
             scatter_dim, gather_dim = 1, 2
-            new_s, new_t = s * get_sequence_parallel_size(), t // get_sequence_parallel_size()
+            scatter_pad = get_temporal_pad()
+            gather_pad = get_spatial_pad()
 
         x = rearrange(x, "b (t s) d -> b t s d", t=t, s=s)
-        x = all_to_all_comm(x, get_sequence_parallel_group(), scatter_dim=scatter_dim, gather_dim=gather_dim)
-        x = rearrange(x, "b t s d -> b (t s) d", t=new_t, s=new_s)
+        x = all_to_all_with_pad(
+            x,
+            get_sequence_parallel_group(),
+            scatter_dim=scatter_dim,
+            gather_dim=gather_dim,
+            scatter_pad=scatter_pad,
+            gather_pad=gather_pad,
+        )
+        new_s, new_t = x.shape[2], x.shape[1]
+        x = rearrange(x, "b t s d -> b (t s) d")
         return x, new_s, new_t
 
 
@@ -422,10 +450,14 @@ class STDiT3(PreTrainedModel):
 
         # shard over the sequence dim if sp is enabled
         if enable_sequence_parallel():
-            x = split_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="down")
-            T = T // get_sequence_parallel_size()
+            set_temporal_pad(T)
+            set_spatial_pad(S)
+            x = split_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad())
+            T = x.shape[1]
             x_mask_org = x_mask
-            x_mask = split_sequence(x_mask, get_sequence_parallel_group(), dim=1, grad_scale="down")
+            x_mask = split_sequence(
+                x_mask, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad()
+            )
 
         x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
 
@@ -435,8 +467,10 @@ class STDiT3(PreTrainedModel):
             x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         if enable_sequence_parallel():
-            x = gather_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="up")
-            T = T * get_sequence_parallel_size()
+            x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
+            x = gather_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="up", pad=get_temporal_pad())
+            T, S = x.shape[1], x.shape[2]
+            x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
             x_mask = x_mask_org
 
         # === final layer ===

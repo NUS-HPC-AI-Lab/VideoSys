@@ -52,7 +52,7 @@ class SkipManager:
             self.cross_skip
             and (timestep is not None)
             and (count % self.cross_gap != 0)
-            and (timestep < self.cross_threshold)
+            and (self.cross_threshold[0] < timestep < self.cross_threshold[1])
         ):
             flag = True
         else:
@@ -65,7 +65,7 @@ class SkipManager:
             self.temporal_skip
             and (timestep is not None)
             and (count % self.temporal_gap != 0)
-            and (timestep < self.temporal_threshold)
+            and (self.temporal_threshold[0] < timestep < self.temporal_threshold[1])
         ):
             flag = True
         else:
@@ -78,7 +78,7 @@ class SkipManager:
             self.spatial_skip
             and (timestep is not None)
             and (count % self.spatial_gap != 0)
-            and (timestep < self.spatial_threshold)
+            and (self.spatial_threshold[0] < timestep < self.spatial_threshold[1])
             and (self.spatial_layer_range[0] <= block_idx <= self.spatial_layer_range[1])
         ):
             flag = True
@@ -119,7 +119,7 @@ def set_skip_manager(
         temporal_gap,
         diffusion_skip,
         diffusion_timestep_respacing,
-        diffusion_skip_timestep
+        diffusion_skip_timestep,
     )
 
 

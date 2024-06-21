@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
+from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
     add_watermark,
@@ -38,10 +39,6 @@ from opendit.models.opensora.inference_utils import (
     refine_prompts_by_openai,
     split_prompt,
 )
-from opendit.models.opensora.rflow import RFLOW
-from opendit.models.opensora.stdit3 import STDiT3_XL_2
-from opendit.models.opensora.text_encoder import T5Encoder, text_preprocessing
-from opendit.models.opensora.vae import OpenSoraVAE_V1_2
 from opendit.utils.utils import all_exists, create_logger, merge_args, set_seed, str_to_dtype
 
 
@@ -50,8 +47,7 @@ def main(args):
     # ======================================================
     # configs & runtime variables
     # ======================================================
-    # == device and dtype ==
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # == dtype ==
     dtype = str_to_dtype(args.dtype)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
@@ -61,22 +57,7 @@ def main(args):
     coordinator = DistCoordinator()
     set_parallel_manager(1, coordinator.world_size)
     enable_sequence_parallelism = enable_sequence_parallel()
-    
-    # NOTE for debug
-    # if os.environ.get("WORLD_SIZE", None):
-    #     use_dist = True
-    #     colossalai.launch_from_torch({})
-    #     coordinator = DistCoordinator()
-
-    #     if coordinator.world_size > 1:
-    #         set_parallel_manager(1, coordinator.world_size, dp_axis=0, sp_axis=1)
-    #         enable_sequence_parallelism = True
-    #     else:
-    #         enable_sequence_parallelism = False
-    # else:
-    #     use_dist = False
-    #     enable_sequence_parallelism = False
-
+    device = f"cuda:{torch.cuda.current_device()}"
     set_seed(seed=args.seed)
 
     # == init fastvideodiffusion ==
@@ -93,7 +74,7 @@ def main(args):
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
-        diffusion_skip_timestep=args.diffusion_skip_timestep
+        diffusion_skip_timestep=args.diffusion_skip_timestep,
     )
 
     # == init logger ==
@@ -384,20 +365,27 @@ if __name__ == "__main__":
 
     # skip
     parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
-    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
-    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
-    parser.add_argument("--spatial_block", type=int, nargs=2, default=[8, 25], help="Spatial attention block size")
+    parser.add_argument(
+        "--spatial_threshold", type=int, nargs=2, default=[540, 920], help="Spatial attention threshold"
+    )
+    parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
+    parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
     parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
-    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
-    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
+    parser.add_argument(
+        "--temporal_threshold", type=int, nargs=2, default=[540, 960], help="Temporal attention threshold"
+    )
+    parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
     parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
-    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
-    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
+    parser.add_argument("--cross_threshold", type=int, nargs=2, default=[540, 960], help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
 
     # skip diffusion
-    parser.add_argument("--diffusion_skip", action="store_true",)
+    parser.add_argument(
+        "--diffusion_skip",
+        action="store_true",
+    )
     parser.add_argument("--diffusion_skip_timestep", nargs="+")
-    
+
     args = parser.parse_args()
 
     config_args = OmegaConf.load(args.config)

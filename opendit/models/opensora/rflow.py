@@ -1,27 +1,21 @@
+# Adapted from OpenSora
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+# --------------------------------------------------------
+# References:
+# OpenSora: https://github.com/hpcaitech/Open-Sora
+# --------------------------------------------------------
+
 import torch
 from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
+from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep
 from opendit.diffusion.gaussian_diffusion import _extract_into_tensor
-
 from opendit.utils.utils import skip_diffusion_timestep
-from opendit.core.skip_mgr import (
-    get_cross_gap,
-    get_cross_skip,
-    get_cross_threshold,
-    get_spatial_gap,
-    get_spatial_layer_range,
-    get_spatial_skip,
-    get_spatial_threshold,
-    get_steps,
-    get_temporal_gap,
-    get_temporal_skip,
-    get_temporal_threshold,
-    get_diffusion_skip,
-    get_diffusion_timestep_respacing,
-    get_diffusion_skip_timestep
-)
+
 
 def mean_flat(tensor: torch.Tensor, mask=None):
     """
@@ -210,32 +204,31 @@ class RFLOW:
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
             timesteps = [timestep_transform(t, additional_args, num_timesteps=self.num_timesteps) for t in timesteps]
-        # print(f'timesteps: {timesteps}')  
+        # print(f'timesteps: {timesteps}')
         # TODO: jump diffusion steps
-        
+
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            print('============================')
-            print('skip diffusion steps!!!')
-            
+            print("============================")
+            print("skip diffusion steps!!!")
+
             orignal_timesteps = timesteps
             diffusion_skip_timestep = get_diffusion_skip_timestep()
             timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
-            
-            print('============================')
-            print(f'orignal sample timesteps: {orignal_timesteps}')
-            print(f'orignal diffusion steps: {len(orignal_timesteps)}')
-            print('============================')
-            print(f'skip diffusion steps: {get_diffusion_skip_timestep()}') 
-            print(f'sample timesteps: {timesteps}')
-            print(f'num_inference_steps: {len(timesteps)}')           
-            print('============================')
+
+            print("============================")
+            print(f"orignal sample timesteps: {orignal_timesteps}")
+            print(f"orignal diffusion steps: {len(orignal_timesteps)}")
+            print("============================")
+            print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
+            print(f"sample timesteps: {timesteps}")
+            print(f"num_inference_steps: {len(timesteps)}")
+            print("============================")
         else:
-            print('============================')
-            print(f'sample timesteps: {timesteps}')
-            print(f'len(timesteps): {len(timesteps)}')           
-            print('============================')
-            
-            
+            print("============================")
+            print(f"sample timesteps: {timesteps}")
+            print(f"len(timesteps): {len(timesteps)}")
+            print("============================")
+
         if mask is not None:
             noise_added = torch.zeros_like(mask, dtype=torch.bool)
             noise_added = noise_added | (mask == 1)

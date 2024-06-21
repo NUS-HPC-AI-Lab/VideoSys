@@ -32,19 +32,17 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import nn
 
-from opendit.core.skip_mgr import (
-    get_cross_gap,
-    get_cross_skip,
-    get_cross_threshold,
-    get_spatial_gap,
-    get_spatial_layer_range,
-    get_spatial_skip,
-    get_spatial_threshold,
-    get_steps,
-    get_temporal_gap,
-    get_temporal_skip,
-    get_temporal_threshold,
+from opendit.core.comm import (
+    all_to_all_with_pad,
+    gather_sequence,
+    get_spatial_pad,
+    get_temporal_pad,
+    set_spatial_pad,
+    set_temporal_pad,
+    split_sequence,
 )
+from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
+from opendit.core.skip_mgr import enable_skip, if_skip_cross, if_skip_spatial, if_skip_temporal
 
 
 @maybe_allow_in_graph
@@ -335,19 +333,12 @@ class BasicTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
+        # fvd
         self.cross_last = None
         self.cross_count = 0
-        self.cross_skip = get_cross_skip()
-        self.cross_gap = get_cross_gap()
-        self.cross_threshold = get_cross_threshold()
-        self.sptial_last = None
+        self.spatial_last = None
         self.spatial_count = 0
-        self.spatial_skip = get_spatial_skip()
-        self.spatial_gap = get_spatial_gap()
-        self.spatial_threshold = get_spatial_threshold()
-        self.spatial_layer_range = get_spatial_layer_range()
         self.block_idx = block_idx
-        self.steps = get_steps()
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
@@ -357,35 +348,8 @@ class BasicTransformerBlock(nn.Module):
     def set_cross_last(self, last_out: torch.Tensor):
         self.cross_last = last_out
 
-    def if_skip_cross(self, timestep):
-        if (
-            self.cross_skip
-            and (timestep is not None)
-            and (self.cross_count % self.cross_gap != 0)
-            and (timestep < self.cross_threshold)
-        ):
-            self.cross_count = (self.cross_count + 1) % self.steps
-            return True
-        else:
-            self.cross_count = (self.cross_count + 1) % self.steps
-            return False
-
     def set_spatial_last(self, last_out: torch.Tensor):
         self.spatial_last = last_out
-
-    def if_skip_spatial(self, timestep):
-        if (
-            self.spatial_layer_range[0] < self.block_idx < self.spatial_layer_range[1]
-            and self.spatial_skip
-            and (timestep is not None)
-            and (self.spatial_count % self.spatial_gap != 0)
-            and (timestep < self.spatial_threshold)
-        ):
-            self.spatial_count = (self.spatial_count + 1) % self.steps
-            return True
-        else:
-            self.spatial_count = (self.spatial_count + 1) % self.steps
-            return False
 
     def forward(
         self,
@@ -406,7 +370,8 @@ class BasicTransformerBlock(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        if self.if_skip_spatial(int(org_timestep[0])):
+        skip_spatial, self.spatial_count = if_skip_spatial(int(org_timestep[0]), self.spatial_count, self.block_idx)
+        if skip_spatial:
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -447,7 +412,8 @@ class BasicTransformerBlock(nn.Module):
             elif self.norm_type == "ada_norm_single":
                 attn_output = gate_msa * attn_output
 
-            self.set_spatial_last(attn_output)
+            if enable_skip():
+                self.set_spatial_last(attn_output)
 
         hidden_states = attn_output + hidden_states
         if hidden_states.ndim == 4:
@@ -459,7 +425,8 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Cross-Attention
         if self.attn2 is not None:
-            if self.if_skip_cross(int(org_timestep[0])):
+            skip_cross, self.cross_count = if_skip_cross(int(org_timestep[0]), self.cross_count)
+            if skip_cross:
                 hidden_states = hidden_states + self.cross_last
             else:
                 if self.norm_type == "ada_norm":
@@ -485,7 +452,8 @@ class BasicTransformerBlock(nn.Module):
                     **cross_attention_kwargs,
                 )
 
-                self.set_cross_last(attn_output)
+                if enable_skip():
+                    self.set_cross_last(attn_output)
 
                 hidden_states = attn_output + hidden_states
 
@@ -659,29 +627,12 @@ class BasicTransformerBlock_(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
+        # fvd
         self.last_out = None
         self.count = 0
 
-        self.enable_skip = get_temporal_skip()
-        self.skip_gap = get_temporal_gap()
-        self.skip_threshold = get_temporal_threshold()
-        self.steps = get_steps()
-
     def set_last_out(self, last_out: torch.Tensor):
         self.last_out = last_out
-
-    def if_skip(self, timestep):
-        if (
-            self.enable_skip
-            and (timestep is not None)
-            and (self.count % self.skip_gap != 0)
-            and (timestep < self.skip_threshold)
-        ):
-            self.count = (self.count + 1) % self.steps
-            return True
-        else:
-            self.count = (self.count + 1) % self.steps
-            return False
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int):
         # Sets chunk feed-forward
@@ -710,7 +661,7 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        skip_temporal = self.if_skip(int(org_timestep[0]))
+        skip_temporal, self.count = if_skip_temporal(int(org_timestep[0]), self.count)
         if skip_temporal:
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
@@ -739,17 +690,26 @@ class BasicTransformerBlock_(nn.Module):
             if self.pos_embed is not None:
                 norm_hidden_states = self.pos_embed(norm_hidden_states)
 
+            if enable_sequence_parallel():
+                norm_hidden_states = self.dynamic_switch(norm_hidden_states, to_spatial_shard=True)
+
             attn_output = self.attn1(
                 norm_hidden_states,
                 encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
                 attention_mask=attention_mask,
                 **cross_attention_kwargs,
             )
+
+            if enable_sequence_parallel():
+                attn_output = self.dynamic_switch(attn_output, to_spatial_shard=False)
+
             if self.use_ada_layer_norm_zero:
                 attn_output = gate_msa.unsqueeze(1) * attn_output
             elif self.use_ada_layer_norm_single:
                 attn_output = gate_msa * attn_output
-            self.last_out = attn_output
+
+            if enable_skip():
+                self.last_out = attn_output
 
         hidden_states = attn_output + hidden_states
         if hidden_states.ndim == 4:
@@ -823,6 +783,25 @@ class BasicTransformerBlock_(nn.Module):
             hidden_states = hidden_states.squeeze(1)
 
         return hidden_states
+
+    def dynamic_switch(self, x, to_spatial_shard: bool):
+        if to_spatial_shard:
+            scatter_dim, gather_dim = 0, 1
+            scatter_pad = get_spatial_pad()
+            gather_pad = get_temporal_pad()
+        else:
+            scatter_dim, gather_dim = 1, 0
+            scatter_pad = get_temporal_pad()
+            gather_pad = get_spatial_pad()
+        x = all_to_all_with_pad(
+            x,
+            get_sequence_parallel_group(),
+            scatter_dim=scatter_dim,
+            gather_dim=gather_dim,
+            scatter_pad=scatter_pad,
+            gather_pad=gather_pad,
+        )
+        return x
 
 
 class AdaLayerNormSingle(nn.Module):
@@ -1238,6 +1217,18 @@ class LatteT2V(ModelMixin, ConfigMixin):
         timestep_spatial = repeat(timestep, "b d -> (b f) d", f=frame + use_image_num).contiguous()
         timestep_temp = repeat(timestep, "b d -> (b p) d", p=num_patches).contiguous()
 
+        if enable_sequence_parallel():
+            set_temporal_pad(frame + use_image_num)
+            set_spatial_pad(num_patches)
+            hidden_states = self.split_from_second_dim(hidden_states, input_batch_size)
+            encoder_hidden_states_spatial = self.split_from_second_dim(encoder_hidden_states_spatial, input_batch_size)
+            timestep_spatial = self.split_from_second_dim(timestep_spatial, input_batch_size)
+            temp_pos_embed = split_sequence(
+                self.temp_pos_embed, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad()
+            )
+        else:
+            temp_pos_embed = self.temp_pos_embed
+
         for i, (spatial_block, temp_block) in enumerate(zip(self.transformer_blocks, self.temporal_transformer_blocks)):
             if self.training and self.gradient_checkpointing:
                 hidden_states = torch.utils.checkpoint.checkpoint(
@@ -1260,7 +1251,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                         hidden_states_image = hidden_states[:, frame:, ...]
 
                         if i == 0:
-                            hidden_states_video = hidden_states_video + self.temp_pos_embed
+                            hidden_states_video = hidden_states_video + temp_pos_embed
 
                         hidden_states_video = torch.utils.checkpoint.checkpoint(
                             temp_block,
@@ -1281,7 +1272,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
                     else:
                         if i == 0:
-                            hidden_states = hidden_states + self.temp_pos_embed
+                            hidden_states = hidden_states + temp_pos_embed
 
                         hidden_states = torch.utils.checkpoint.checkpoint(
                             temp_block,
@@ -1336,7 +1327,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
                     else:
                         if i == 0 and frame > 1:
-                            hidden_states = hidden_states + self.temp_pos_embed
+                            hidden_states = hidden_states + temp_pos_embed
 
                         hidden_states = temp_block(
                             hidden_states,
@@ -1352,6 +1343,9 @@ class LatteT2V(ModelMixin, ConfigMixin):
                         hidden_states = rearrange(
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
+
+        if enable_sequence_parallel():
+            hidden_states = self.gather_from_second_dim(hidden_states, input_batch_size)
 
         if self.is_input_patches:
             if self.config.norm_type != "ada_norm_single":
@@ -1389,3 +1383,15 @@ class LatteT2V(ModelMixin, ConfigMixin):
     def get_1d_sincos_temp_embed(self, embed_dim, length):
         pos = torch.arange(0, length).unsqueeze(1)
         return get_1d_sincos_pos_embed_from_grid(embed_dim, pos)
+
+    def split_from_second_dim(self, x, batch_size):
+        x = x.view(batch_size, -1, *x.shape[1:])
+        x = split_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad())
+        x = x.reshape(-1, *x.shape[2:])
+        return x
+
+    def gather_from_second_dim(self, x, batch_size):
+        x = x.view(batch_size, -1, *x.shape[1:])
+        x = gather_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="up", pad=get_temporal_pad())
+        x = x.reshape(-1, *x.shape[2:])
+        return x

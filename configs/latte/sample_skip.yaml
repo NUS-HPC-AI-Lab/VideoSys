@@ -34,17 +34,17 @@ text_prompt: [
               'A dog in astronaut suit and sunglasses floating in space.',
               ]
 
-# skip
+# fvd
 spatial_skip: True
-spatial_threshold: 700
-spatial_gap: 3
-# spatial_block: [10, 25]
+spatial_threshold: [100, 800]
+spatial_gap: 2
+spatial_block: [0, 28]
 temporal_skip: True
-temporal_threshold: 700
-temporal_gap: 6
+temporal_threshold: [100, 800]
+temporal_gap: 4
 cross_skip: True
-cross_threshold: 700
-cross_gap: 8
+cross_threshold: [80, 900]
+cross_gap: 7
 
 # skip diffusion
 diffusion_skip: True
