@@ -236,7 +236,6 @@ if __name__ == "__main__":
     parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
     # skip diffusion
     parser.add_argument("--diffusion_skip", action="store_true",)
-    parser.add_argument("--diffusion_timestep_respacing", nargs="+")
     parser.add_argument("--diffusion_skip_timestep", nargs="+")
     args = parser.parse_args()
 

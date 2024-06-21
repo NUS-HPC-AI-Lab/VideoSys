@@ -677,7 +677,7 @@ class LattePipeline(DiffusionPipeline):
             # timesteps = space_timesteps(1000, timestep_respacing)
             
             diffusion_skip_timestep = get_diffusion_skip_timestep()
-            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
+            timesteps = skip_diffusion_timestep(self.scheduler.timesteps, diffusion_skip_timestep)
             
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             orignal_timesteps = self.scheduler.timesteps

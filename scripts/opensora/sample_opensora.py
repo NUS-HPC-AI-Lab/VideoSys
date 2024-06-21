@@ -63,19 +63,19 @@ def main(args):
     enable_sequence_parallelism = enable_sequence_parallel()
     
     # NOTE for debug
-    if os.environ.get("WORLD_SIZE", None):
-        use_dist = True
-        colossalai.launch_from_torch({})
-        coordinator = DistCoordinator()
+    # if os.environ.get("WORLD_SIZE", None):
+    #     use_dist = True
+    #     colossalai.launch_from_torch({})
+    #     coordinator = DistCoordinator()
 
-        if coordinator.world_size > 1:
-            set_parallel_manager(1, coordinator.world_size, dp_axis=0, sp_axis=1)
-            enable_sequence_parallelism = True
-        else:
-            enable_sequence_parallelism = False
-    else:
-        use_dist = False
-        enable_sequence_parallelism = False
+    #     if coordinator.world_size > 1:
+    #         set_parallel_manager(1, coordinator.world_size, dp_axis=0, sp_axis=1)
+    #         enable_sequence_parallelism = True
+    #     else:
+    #         enable_sequence_parallelism = False
+    # else:
+    #     use_dist = False
+    #     enable_sequence_parallelism = False
 
     set_seed(seed=args.seed)
 

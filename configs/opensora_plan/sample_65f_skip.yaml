@@ -21,7 +21,7 @@ enable_tiling: True
 spatial_skip: True
 spatial_threshold: 700
 spatial_gap: 3
-spatial_block: [10, 25]
+# spatial_block: [10, 25]
 temporal_skip: True
 temporal_threshold: 700
 temporal_gap: 6
