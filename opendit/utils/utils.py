@@ -152,6 +152,14 @@ def skip_diffusion_timestep(timesteps, diffusion_skip_timestep):
             elif diffusion_skip_timestep[i] == 1:
                 # If the bin is marked with 1, omit the last timestep in the bin
                 new_timesteps.extend(bin_timesteps[1:])
+            elif diffusion_skip_timestep[i] != 0:
+                # If the bin is marked with a non-zero value, randomly omit n timesteps
+                if len(bin_timesteps) > diffusion_skip_timestep[i]:
+                    indices_to_remove = set(random.sample(range(len(bin_timesteps)), diffusion_skip_timestep[i]))
+                    timesteps_to_keep = [timestep for idx, timestep in enumerate(bin_timesteps) if idx not in indices_to_remove]
+                else:
+                    timesteps_to_keep = bin_timesteps  # 如果bin_timesteps的长度小于等于n，则不删除任何元素
+                new_timesteps.extend(timesteps_to_keep)
         
         new_timesteps_tensor = torch.tensor(new_timesteps, device=device)
     
