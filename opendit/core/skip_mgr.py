@@ -134,50 +134,6 @@ def enable_skip():
     return SKIP_MANAGER.cross_skip or SKIP_MANAGER.spatial_skip or SKIP_MANAGER.temporal_skip
 
 
-def get_steps():
-    return SKIP_MANAGER.steps
-
-
-def get_cross_skip():
-    return SKIP_MANAGER.cross_skip
-
-
-def get_cross_threshold():
-    return SKIP_MANAGER.cross_threshold
-
-
-def get_cross_gap():
-    return SKIP_MANAGER.cross_gap
-
-
-def get_spatial_skip():
-    return SKIP_MANAGER.spatial_skip
-
-
-def get_spatial_threshold():
-    return SKIP_MANAGER.spatial_threshold
-
-
-def get_spatial_gap():
-    return SKIP_MANAGER.spatial_gap
-
-
-def get_spatial_layer_range():
-    return SKIP_MANAGER.spatial_layer_range
-
-
-def get_temporal_skip():
-    return SKIP_MANAGER.temporal_skip
-
-
-def get_temporal_threshold():
-    return SKIP_MANAGER.temporal_threshold
-
-
-def get_temporal_gap():
-    return SKIP_MANAGER.temporal_gap
-
-
 def if_skip_cross(timestep: int, count: int):
     return SKIP_MANAGER.if_skip_cross(timestep, count)
 
