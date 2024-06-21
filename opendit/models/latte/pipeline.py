@@ -7,7 +7,6 @@
 # Latte: https://github.com/Vchitect/Latte
 # --------------------------------------------------------
 
-
 import html
 import inspect
 import re
@@ -17,6 +16,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import einops
 import torch
+import torch.distributed as dist
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
@@ -667,21 +667,23 @@ class LattePipeline(DiffusionPipeline):
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             orignal_timesteps = self.scheduler.timesteps
 
-            print("============================")
-            print(f"orignal sample timesteps: {orignal_timesteps}")
-            print(f"orignal diffusion steps: {len(orignal_timesteps)}")
-            print("============================")
-            print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
-            print(f"sample timesteps: {timesteps}")
-            print(f"num_inference_steps: {len(timesteps)}")
-            print("============================")
+            if dist.get_rank() == 0:
+                print("============================")
+                print(f"orignal sample timesteps: {orignal_timesteps}")
+                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
+                print("============================")
+                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
+                print(f"sample timesteps: {timesteps}")
+                print(f"num_inference_steps: {len(timesteps)}")
+                print("============================")
         else:
             self.scheduler.set_timesteps(num_inference_steps, device=device)
             timesteps = self.scheduler.timesteps
-            print("============================")
-            print(f"sample timesteps: {timesteps}")
-            print(f"len(timesteps): {len(timesteps)}")
-            print("============================")
+            if dist.get_rank() == 0:
+                print("============================")
+                print(f"sample timesteps: {timesteps}")
+                print(f"len(timesteps): {len(timesteps)}")
+                print("============================")
 
         # 5. Prepare latents.
         latent_channels = self.transformer.config.in_channels

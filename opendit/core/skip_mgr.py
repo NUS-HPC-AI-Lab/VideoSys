@@ -2,6 +2,7 @@ import random
 
 import numpy as np
 import torch
+import torch.distributed as dist
 
 SKIP_MANAGER = None
 
@@ -42,15 +43,16 @@ class SkipManager:
         self.diffusion_skip = diffusion_skip
         self.diffusion_timestep_respacing = diffusion_timestep_respacing
         self.diffusion_skip_timestep = diffusion_skip_timestep
-        print(
-            f"Init SkipManager:\n\
-            steps={steps}\n\
-            cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
-            spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}, spatial_layer_range={spatial_layer_range}\n\
-            temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n\
-            diffusion_skip={diffusion_skip}, diffusion_timestep_respacing={diffusion_timestep_respacing}\n",
-            end="",
-        )
+        if dist.get_rank() == 0:
+            print(
+                f"\nInit SkipManager:\n\
+                steps={steps}\n\
+                cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
+                spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}, spatial_layer_range={spatial_layer_range}\n\
+                temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n\
+                diffusion_skip={diffusion_skip}, diffusion_timestep_respacing={diffusion_timestep_respacing}\n\n",
+                end="",
+            )
 
     def if_skip_cross(self, timestep: int, count: int):
         if (
