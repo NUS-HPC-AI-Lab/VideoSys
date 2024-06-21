@@ -132,14 +132,13 @@ def main(args):
         scheduler = DEISMultistepScheduler()
     elif args.sample_method == "KDPM2AncestralDiscrete":  #########
         scheduler = KDPM2AncestralDiscreteScheduler()
-    print("videogen_pipeline", device)
+
     videogen_pipeline = VideoGenPipeline(
         vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, scheduler=scheduler, transformer=transformer_model
     ).to(device=device)
     # videogen_pipeline.enable_xformers_memory_efficient_attention()
 
-    if not os.path.exists(args.save_img_path):
-        os.makedirs(args.save_img_path)
+    os.makedirs(args.save_img_path, exist_ok=True)
 
     video_grids = []
     if not isinstance(args.text_prompt, list):
@@ -231,20 +230,23 @@ if __name__ == "__main__":
     parser.add_argument("--tile_overlap_factor", type=float, default=0.25)
     parser.add_argument("--enable_tiling", action="store_true")
 
-    # skip
+    # fvd
     parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
-    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
-    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
-    parser.add_argument("--spatial_block", type=int, nargs=2, default=[8, 25], help="Spatial attention block size")
+    parser.add_argument(
+        "--spatial_threshold", type=int, nargs=2, default=[100, 800], help="Spatial attention threshold"
+    )
+    parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
+    parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
     parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
-    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
-    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
+    parser.add_argument(
+        "--temporal_threshold", type=int, nargs=2, default=[100, 800], help="Temporal attention threshold"
+    )
+    parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
     parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
-    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
-    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
+    parser.add_argument("--cross_threshold", type=int, nargs=2, default=[100, 850], help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
 
     args = parser.parse_args()
-
     config_args = OmegaConf.load(args.config)
     args = merge_args(args, config_args)
 

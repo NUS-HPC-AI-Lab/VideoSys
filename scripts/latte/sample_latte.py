@@ -231,19 +231,24 @@ if __name__ == "__main__":
     parser.add_argument("--enable_temporal_attentions", action="store_true")
     parser.add_argument("--enable_vae_temporal_decoder", action="store_true")
     parser.add_argument("--text_prompt", nargs="+")
-    # skip
-    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
-    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
-    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
-    parser.add_argument("--spatial_block", type=int, nargs=2, default=[8, 25], help="Spatial attention block size")
-    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
-    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
-    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
-    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
-    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
-    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
-    args = parser.parse_args()
 
+    # fvd
+    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    parser.add_argument(
+        "--spatial_threshold", type=int, nargs=2, default=[100, 800], help="Spatial attention threshold"
+    )
+    parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
+    parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
+    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument(
+        "--temporal_threshold", type=int, nargs=2, default=[100, 800], help="Temporal attention threshold"
+    )
+    parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
+    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_threshold", type=int, nargs=2, default=[80, 900], help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=7, help="Cross attention gap")
+
+    args = parser.parse_args()
     config_args = OmegaConf.load(args.config)
     args = merge_args(args, config_args)
 
