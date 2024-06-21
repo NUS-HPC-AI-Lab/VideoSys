@@ -66,7 +66,8 @@ def create_logger(logging_dir=None):
     """
     Create a logger that writes to a log file and stdout.
     """
-    if dist.get_rank() == 0:  # real logger
+    if dist.get_rank() == 0:  # real logger # BUG 
+    # if True:  # real logger
         additional_args = dict()
         if logging_dir is not None:
             additional_args["handlers"] = [
@@ -108,25 +109,53 @@ def space_timesteps(time_steps, time_bins):
 
 
 def skip_diffusion_timestep(timesteps, diffusion_skip_timestep):
-    timesteps_np = timesteps.cpu().numpy()
-    
+    if isinstance(timesteps, list):
+        # If timesteps is a list, we assume each element is a tensor
+        timesteps_np = [t.cpu().numpy() for t in timesteps]
+        device = timesteps[0].device
+    else:
+        # If timesteps is a tensor
+        timesteps_np = timesteps.cpu().numpy()
+        device = timesteps.device
+
     num_bins = len(diffusion_skip_timestep)
-    bin_size = len(timesteps_np) // num_bins
     
-    new_timesteps = []
-    
-    for i in range(num_bins):
-        bin_start = i * bin_size
-        bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
-        bin_timesteps = timesteps_np[bin_start:bin_end]
+    if isinstance(timesteps_np, list):
+        bin_size = len(timesteps_np) // num_bins
+        new_timesteps = []
         
-        if diffusion_skip_timestep[i] == 0:
-            # If the bin is marked with 0, keep all timesteps
-            new_timesteps.extend(bin_timesteps)
-        elif diffusion_skip_timestep[i] == 1:
-            # If the bin is marked with 1, omit the last timestep in the bin
-            new_timesteps.extend(bin_timesteps[1:])
+        for i in range(num_bins):
+            bin_start = i * bin_size
+            bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
+            bin_timesteps = timesteps_np[bin_start:bin_end]
+            
+            if diffusion_skip_timestep[i] == 0:
+                # If the bin is marked with 0, keep all timesteps
+                new_timesteps.extend(bin_timesteps)
+            elif diffusion_skip_timestep[i] == 1:
+                # If the bin is marked with 1, omit the last timestep in the bin
+                new_timesteps.extend(bin_timesteps[1:])
+        
+        new_timesteps_tensor = [torch.tensor(t, device=device) for t in new_timesteps]
+    else:
+        bin_size = len(timesteps_np) // num_bins
+        new_timesteps = []
+        
+        for i in range(num_bins):
+            bin_start = i * bin_size
+            bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
+            bin_timesteps = timesteps_np[bin_start:bin_end]
+            
+            if diffusion_skip_timestep[i] == 0:
+                # If the bin is marked with 0, keep all timesteps
+                new_timesteps.extend(bin_timesteps)
+            elif diffusion_skip_timestep[i] == 1:
+                # If the bin is marked with 1, omit the last timestep in the bin
+                new_timesteps.extend(bin_timesteps[1:])
+        
+        new_timesteps_tensor = torch.tensor(new_timesteps, device=device)
     
-    new_timesteps_tensor = torch.tensor(new_timesteps, device=timesteps.device)
-    
-    return new_timesteps_tensor
+    if isinstance(timesteps, list):
+        return new_timesteps_tensor
+    else:
+        return new_timesteps_tensor

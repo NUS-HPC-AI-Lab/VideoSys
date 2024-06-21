@@ -48,4 +48,4 @@ cross_gap: 8
 
 # skip diffusion
 diffusion_skip: True
-diffusion_timestep_respacing: [5,5,5,5,5, 5,5,4,4,3]
+# diffusion_timestep_respacing: [5,5,5,5,5, 5,5,4,4,3]

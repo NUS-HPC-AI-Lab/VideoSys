@@ -61,6 +61,22 @@ def main(args):
     coordinator = DistCoordinator()
     set_parallel_manager(1, coordinator.world_size)
     enable_sequence_parallelism = enable_sequence_parallel()
+    
+    # NOTE for debug
+    if os.environ.get("WORLD_SIZE", None):
+        use_dist = True
+        colossalai.launch_from_torch({})
+        coordinator = DistCoordinator()
+
+        if coordinator.world_size > 1:
+            set_parallel_manager(1, coordinator.world_size, dp_axis=0, sp_axis=1)
+            enable_sequence_parallelism = True
+        else:
+            enable_sequence_parallelism = False
+    else:
+        use_dist = False
+        enable_sequence_parallelism = False
+
     set_seed(seed=args.seed)
 
     # == init fastvideodiffusion ==
@@ -76,6 +92,8 @@ def main(args):
         temporal_skip=args.temporal_skip,
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
+        diffusion_skip=args.diffusion_skip,
+        diffusion_skip_timestep=args.diffusion_skip_timestep
     )
 
     # == init logger ==
@@ -376,6 +394,10 @@ if __name__ == "__main__":
     parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
     parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
 
+    # skip diffusion
+    parser.add_argument("--diffusion_skip", action="store_true",)
+    parser.add_argument("--diffusion_skip_timestep", nargs="+")
+    
     args = parser.parse_args()
 
     config_args = OmegaConf.load(args.config)
