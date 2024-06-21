@@ -1,3 +1,9 @@
+import random
+
+import numpy as np
+import torch
+import torch.distributed as dist
+
 SKIP_MANAGER = None
 
 
@@ -6,15 +12,18 @@ class SkipManager:
         self,
         steps: int = 100,
         cross_skip: bool = False,
-        cross_threshold: int = 700,
+        cross_threshold: list = [100, 900],
         cross_gap: int = 5,
         spatial_skip: bool = False,
-        spatial_threshold: int = 700,
-        spatial_gap: int = 3,
-        spatial_layer_range: list = [5, 27],
+        spatial_threshold: list = [100, 900],
+        spatial_gap: int = 2,
+        spatial_layer_range: list = [0, 28],
         temporal_skip: bool = False,
-        temporal_threshold: int = 700,
-        temporal_gap: int = 5,
+        temporal_threshold: list = [100, 900],
+        temporal_gap: int = 3,
+        diffusion_skip: bool = False,
+        diffusion_timestep_respacing: list = None,
+        diffusion_skip_timestep: list = None,
     ):
         self.steps = steps
 
@@ -31,14 +40,19 @@ class SkipManager:
         self.temporal_threshold = temporal_threshold
         self.temporal_gap = temporal_gap
 
-        print(
-            f"Init SkipManager:\n\
-            steps={steps}\n\
-            cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
-            spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}, spatial_layer_range={spatial_layer_range}\n\
-            temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n",
-            end="",
-        )
+        self.diffusion_skip = diffusion_skip
+        self.diffusion_timestep_respacing = diffusion_timestep_respacing
+        self.diffusion_skip_timestep = diffusion_skip_timestep
+        if dist.get_rank() == 0:
+            print(
+                f"\nInit SkipManager:\n\
+                steps={steps}\n\
+                cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
+                spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}, spatial_layer_range={spatial_layer_range}\n\
+                temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n\
+                diffusion_skip={diffusion_skip}, diffusion_timestep_respacing={diffusion_timestep_respacing}\n\n",
+                end="",
+            )
 
     def if_skip_cross(self, timestep: int, count: int):
         if (
@@ -84,15 +98,18 @@ class SkipManager:
 def set_skip_manager(
     steps: int = 100,
     cross_skip: bool = False,
-    cross_threshold: int = 700,
+    cross_threshold: list = [100, 900],
     cross_gap: int = 5,
     spatial_skip: bool = False,
-    spatial_threshold: int = 700,
-    spatial_gap: int = 3,
-    spatial_block: list = [8, 27],
+    spatial_threshold: list = [100, 900],
+    spatial_gap: int = 2,
+    spatial_block: list = [0, 28],
     temporal_skip: bool = False,
-    temporal_threshold: int = 700,
-    temporal_gap: int = 5,
+    temporal_threshold: list = [100, 900],
+    temporal_gap: int = 3,
+    diffusion_skip: bool = False,
+    diffusion_timestep_respacing: list = None,
+    diffusion_skip_timestep: list = None,
 ):
     global SKIP_MANAGER
     SKIP_MANAGER = SkipManager(
@@ -107,6 +124,9 @@ def set_skip_manager(
         temporal_skip,
         temporal_threshold,
         temporal_gap,
+        diffusion_skip,
+        diffusion_timestep_respacing,
+        diffusion_skip_timestep,
     )
 
 
@@ -114,50 +134,6 @@ def enable_skip():
     if SKIP_MANAGER is None:
         return False
     return SKIP_MANAGER.cross_skip or SKIP_MANAGER.spatial_skip or SKIP_MANAGER.temporal_skip
-
-
-def get_steps():
-    return SKIP_MANAGER.steps
-
-
-def get_cross_skip():
-    return SKIP_MANAGER.cross_skip
-
-
-def get_cross_threshold():
-    return SKIP_MANAGER.cross_threshold
-
-
-def get_cross_gap():
-    return SKIP_MANAGER.cross_gap
-
-
-def get_spatial_skip():
-    return SKIP_MANAGER.spatial_skip
-
-
-def get_spatial_threshold():
-    return SKIP_MANAGER.spatial_threshold
-
-
-def get_spatial_gap():
-    return SKIP_MANAGER.spatial_gap
-
-
-def get_spatial_layer_range():
-    return SKIP_MANAGER.spatial_layer_range
-
-
-def get_temporal_skip():
-    return SKIP_MANAGER.temporal_skip
-
-
-def get_temporal_threshold():
-    return SKIP_MANAGER.temporal_threshold
-
-
-def get_temporal_gap():
-    return SKIP_MANAGER.temporal_gap
 
 
 def if_skip_cross(timestep: int, count: int):
@@ -170,3 +146,97 @@ def if_skip_temporal(timestep: int, count: int):
 
 def if_skip_spatial(timestep: int, count: int, block_idx: int):
     return SKIP_MANAGER.if_skip_spatial(timestep, count, block_idx)
+
+
+def get_diffusion_skip():
+    return SKIP_MANAGER.diffusion_skip
+
+
+def get_diffusion_timestep_respacing():
+    return SKIP_MANAGER.diffusion_timestep_respacing
+
+
+def get_diffusion_skip_timestep():
+    return SKIP_MANAGER.diffusion_skip_timestep
+
+
+def space_timesteps(time_steps, time_bins):
+    num_bins = len(time_bins)
+    bin_size = time_steps // num_bins
+
+    result = []
+
+    for i, bin_count in enumerate(time_bins):
+        start = i * bin_size
+        end = start + bin_size
+
+        bin_steps = np.linspace(start, end, bin_count, endpoint=False, dtype=int).tolist()
+        result.extend(bin_steps)
+
+    result_tensor = torch.tensor(result, dtype=torch.int32)
+    sorted_tensor = torch.sort(result_tensor, descending=True).values
+
+    return sorted_tensor
+
+
+def skip_diffusion_timestep(timesteps, diffusion_skip_timestep):
+    if isinstance(timesteps, list):
+        # If timesteps is a list, we assume each element is a tensor
+        timesteps_np = [t.cpu().numpy() for t in timesteps]
+        device = timesteps[0].device
+    else:
+        # If timesteps is a tensor
+        timesteps_np = timesteps.cpu().numpy()
+        device = timesteps.device
+
+    num_bins = len(diffusion_skip_timestep)
+
+    if isinstance(timesteps_np, list):
+        bin_size = len(timesteps_np) // num_bins
+        new_timesteps = []
+
+        for i in range(num_bins):
+            bin_start = i * bin_size
+            bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
+            bin_timesteps = timesteps_np[bin_start:bin_end]
+
+            if diffusion_skip_timestep[i] == 0:
+                # If the bin is marked with 0, keep all timesteps
+                new_timesteps.extend(bin_timesteps)
+            elif diffusion_skip_timestep[i] == 1:
+                # If the bin is marked with 1, omit the last timestep in the bin
+                new_timesteps.extend(bin_timesteps[1:])
+
+        new_timesteps_tensor = [torch.tensor(t, device=device) for t in new_timesteps]
+    else:
+        bin_size = len(timesteps_np) // num_bins
+        new_timesteps = []
+
+        for i in range(num_bins):
+            bin_start = i * bin_size
+            bin_end = (i + 1) * bin_size if i != num_bins - 1 else len(timesteps_np)
+            bin_timesteps = timesteps_np[bin_start:bin_end]
+
+            if diffusion_skip_timestep[i] == 0:
+                # If the bin is marked with 0, keep all timesteps
+                new_timesteps.extend(bin_timesteps)
+            elif diffusion_skip_timestep[i] == 1:
+                # If the bin is marked with 1, omit the last timestep in the bin
+                new_timesteps.extend(bin_timesteps[1:])
+            elif diffusion_skip_timestep[i] != 0:
+                # If the bin is marked with a non-zero value, randomly omit n timesteps
+                if len(bin_timesteps) > diffusion_skip_timestep[i]:
+                    indices_to_remove = set(random.sample(range(len(bin_timesteps)), diffusion_skip_timestep[i]))
+                    timesteps_to_keep = [
+                        timestep for idx, timestep in enumerate(bin_timesteps) if idx not in indices_to_remove
+                    ]
+                else:
+                    timesteps_to_keep = bin_timesteps  # 如果bin_timesteps的长度小于等于n，则不删除任何元素
+                new_timesteps.extend(timesteps_to_keep)
+
+        new_timesteps_tensor = torch.tensor(new_timesteps, device=device)
+
+    if isinstance(timesteps, list):
+        return new_timesteps_tensor
+    else:
+        return new_timesteps_tensor

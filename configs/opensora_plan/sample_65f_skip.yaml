@@ -32,3 +32,8 @@ temporal_gap: 4
 cross_skip: True
 cross_threshold: [100, 850]
 cross_gap: 6
+
+# skip diffusion
+diffusion_skip: True
+diffusion_skip_timestep: [3,3,3,0,0,0,0,0,0,0]
+# open-sora plan 150 steps, so we can skip more

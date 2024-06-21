@@ -66,7 +66,7 @@ def create_logger(logging_dir=None):
     """
     Create a logger that writes to a log file and stdout.
     """
-    if dist.get_rank() == 0:  # real logger
+    if dist.get_rank() == 0:
         additional_args = dict()
         if logging_dir is not None:
             additional_args["handlers"] = [

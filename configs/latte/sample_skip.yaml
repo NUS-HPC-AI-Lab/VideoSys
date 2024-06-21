@@ -45,3 +45,5 @@ temporal_gap: 4
 cross_skip: True
 cross_threshold: [80, 900]
 cross_gap: 7
+diffusion_skip: True
+diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]

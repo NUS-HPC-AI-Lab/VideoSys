@@ -8,10 +8,12 @@
 # --------------------------------------------------------
 
 import torch
+import torch.distributed as dist
 from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
+from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 from opendit.diffusion.gaussian_diffusion import _extract_into_tensor
 
 
@@ -182,6 +184,7 @@ class RFLOW:
         mask=None,
         guidance_scale=None,
         progress=True,
+        verbose=False,
     ):
         # if no specific guidance scale is provided, use the default scale when initializing the scheduler
         if guidance_scale is None:
@@ -202,6 +205,25 @@ class RFLOW:
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
             timesteps = [timestep_transform(t, additional_args, num_timesteps=self.num_timesteps) for t in timesteps]
+        # print(f'timesteps: {timesteps}')
+        # TODO: jump diffusion steps
+
+        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
+            orignal_timesteps = timesteps
+            diffusion_skip_timestep = get_diffusion_skip_timestep()
+            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
+
+            if verbose and dist.get_rank() == 0:
+                print("============================")
+                print("skip diffusion steps!!!")
+                print("============================")
+                print(f"orignal sample timesteps: {orignal_timesteps}")
+                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
+                print("============================")
+                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
+                print(f"sample timesteps: {timesteps}")
+                print(f"num_inference_steps: {len(timesteps)}")
+                print("============================")
 
         if mask is not None:
             noise_added = torch.zeros_like(mask, dtype=torch.bool)
