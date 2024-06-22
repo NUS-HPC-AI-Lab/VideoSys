@@ -168,3 +168,4 @@ pretrained
 samples
 cache_dir
 taming
+evaluations/fastvideodiffusion/datasets
