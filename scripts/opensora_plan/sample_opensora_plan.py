@@ -11,8 +11,10 @@ import argparse
 import math
 import os
 
+import colossalai
 import imageio
 import torch
+from colossalai.cluster import DistCoordinator
 from diffusers.schedulers import (
     DDIMScheduler,
     DDPMScheduler,
@@ -29,11 +31,10 @@ from omegaconf import OmegaConf
 from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
+from opendit.core.parallel_mgr import set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
-from opendit.models.opensora_plan import VideoGenPipeline
-from opendit.models.opensora_plan.ae import ae_stride_config, getae_wrapper
-from opendit.models.opensora_plan.latte import LatteT2V
-from opendit.utils.utils import merge_args
+from opendit.models.opensora_plan import LatteT2V, VideoGenPipeline, ae_stride_config, getae_wrapper
+from opendit.utils.utils import merge_args, set_seed
 
 
 def save_video_grid(video, nrow=None):
@@ -45,7 +46,6 @@ def save_video_grid(video, nrow=None):
     padding = 1
     video_grid = torch.zeros((t, (padding + h) * nrow + padding, (padding + w) * ncol + padding, c), dtype=torch.uint8)
 
-    print(video_grid.shape)
     for i in range(b):
         r = i // ncol
         c = i % ncol
@@ -57,9 +57,16 @@ def save_video_grid(video, nrow=None):
 
 
 def main(args):
-    # torch.manual_seed(args.seed)
+    set_seed(42)
     torch.set_grad_enabled(False)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    # == init distributed env ==
+    colossalai.launch_from_torch({})
+    coordinator = DistCoordinator()
+    set_parallel_manager(1, coordinator.world_size)
+    device = f"cuda:{torch.cuda.current_device()}"
 
     set_skip_manager(
         steps=args.num_sampling_steps,
@@ -69,9 +76,12 @@ def main(args):
         spatial_skip=args.spatial_skip,
         spatial_threshold=args.spatial_threshold,
         spatial_gap=args.spatial_gap,
+        spatial_block=args.spatial_block,
         temporal_skip=args.temporal_skip,
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
+        diffusion_skip=args.diffusion_skip,
+        diffusion_skip_timestep=args.diffusion_skip_timestep,
     )
 
     vae = getae_wrapper(args.ae)(args.model_path, subfolder="vae", cache_dir=args.cache_dir).to(
@@ -124,14 +134,13 @@ def main(args):
         scheduler = DEISMultistepScheduler()
     elif args.sample_method == "KDPM2AncestralDiscrete":  #########
         scheduler = KDPM2AncestralDiscreteScheduler()
-    print("videogen_pipeline", device)
+
     videogen_pipeline = VideoGenPipeline(
         vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, scheduler=scheduler, transformer=transformer_model
     ).to(device=device)
     # videogen_pipeline.enable_xformers_memory_efficient_attention()
 
-    if not os.path.exists(args.save_img_path):
-        os.makedirs(args.save_img_path)
+    os.makedirs(args.save_img_path, exist_ok=True)
 
     video_grids = []
     if not isinstance(args.text_prompt, list):
@@ -152,7 +161,6 @@ def main(args):
             num_images_per_prompt=1,
             mask_feature=True,
         ).video
-        print(videos.shape)
         try:
             if args.force_images:
                 videos = videos[:, 0].permute(0, 3, 1, 2)  # b t h w c -> b c h w
@@ -174,26 +182,27 @@ def main(args):
     video_grids = torch.cat(video_grids, dim=0)
 
     # torchvision.io.write_video(args.save_img_path + '_%04d' % args.run_time + '-.mp4', video_grids, fps=6)
-    if args.force_images:
-        save_image(
-            video_grids / 255.0,
-            os.path.join(
-                args.save_img_path, f"{args.sample_method}_gs{args.guidance_scale}_s{args.num_sampling_steps}.{ext}"
-            ),
-            nrow=math.ceil(math.sqrt(len(video_grids))),
-            normalize=True,
-            value_range=(0, 1),
-        )
-    else:
-        video_grids = save_video_grid(video_grids)
-        imageio.mimwrite(
-            os.path.join(
-                args.save_img_path, f"{args.sample_method}_gs{args.guidance_scale}_s{args.num_sampling_steps}.{ext}"
-            ),
-            video_grids,
-            fps=args.fps,
-            quality=9,
-        )
+    if coordinator.is_master():
+        if args.force_images:
+            save_image(
+                video_grids / 255.0,
+                os.path.join(
+                    args.save_img_path, f"{args.sample_method}_gs{args.guidance_scale}_s{args.num_sampling_steps}.{ext}"
+                ),
+                nrow=math.ceil(math.sqrt(len(video_grids))),
+                normalize=True,
+                value_range=(0, 1),
+            )
+        else:
+            video_grids = save_video_grid(video_grids)
+            imageio.mimwrite(
+                os.path.join(
+                    args.save_img_path, f"{args.sample_method}_gs{args.guidance_scale}_s{args.num_sampling_steps}.{ext}"
+                ),
+                video_grids,
+                fps=args.fps,
+                quality=9,
+            )
 
     print("save path {}".format(args.save_img_path))
 
@@ -223,19 +232,29 @@ if __name__ == "__main__":
     parser.add_argument("--tile_overlap_factor", type=float, default=0.25)
     parser.add_argument("--enable_tiling", action="store_true")
 
-    # skip
+    # fvd
     parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
-    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
-    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
+    parser.add_argument(
+        "--spatial_threshold", type=int, nargs=2, default=[100, 800], help="Spatial attention threshold"
+    )
+    parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
+    parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
     parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
-    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
-    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
+    parser.add_argument(
+        "--temporal_threshold", type=int, nargs=2, default=[100, 800], help="Temporal attention threshold"
+    )
+    parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
     parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
-    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
-    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
+    parser.add_argument("--cross_threshold", type=int, nargs=2, default=[100, 850], help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
+    # skip diffusion
+    parser.add_argument(
+        "--diffusion_skip",
+        action="store_true",
+    )
+    parser.add_argument("--diffusion_skip_timestep", nargs="+")
 
     args = parser.parse_args()
-
     config_args = OmegaConf.load(args.config)
     args = merge_args(args, config_args)
 

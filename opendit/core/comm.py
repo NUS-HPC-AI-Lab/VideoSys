@@ -7,6 +7,8 @@ from einops import rearrange
 from torch import Tensor
 from torch.distributed import ProcessGroup
 
+from opendit.core.parallel_mgr import get_sequence_parallel_size
+
 # ======================================================
 # Model
 # ======================================================
@@ -249,36 +251,47 @@ def all_to_all_comm(input_, process_group=None, scatter_dim=2, gather_dim=1):
 # ======================================================
 
 
-def _split_sequence_func(inputs, pg: dist.ProcessGroup, dim=-1):
+def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
+    # skip if only one rank involved
     world_size = dist.get_world_size(pg)
-    if world_size == 1:
-        return inputs
-
-    # Split along last dimension.
     rank = dist.get_rank(pg)
-    dim_size = inputs.size(dim)
-    assert dim_size % world_size == 0, (
-        f"The dimension to split ({dim_size}) is not a multiple of world size ({world_size}), "
-        f"cannot split tensor evenly"
-    )
-
-    outputs = torch.split(inputs, dim_size // world_size, dim=dim)[rank]
-    return outputs
-
-
-def _gather_sequence_func(inputs, pg: dist.ProcessGroup, dim=-1):
-    world_size = dist.get_world_size(pg)
     if world_size == 1:
-        return inputs
+        return input_
+
+    if pad > 0:
+        pad_size = list(input_.shape)
+        pad_size[dim] = pad
+        input_ = torch.cat([input_, torch.zeros(pad_size, dtype=input_.dtype, device=input_.device)], dim=dim)
+
+    dim_size = input_.size(dim)
+    assert dim_size % world_size == 0, f"dim_size ({dim_size}) is not divisible by world_size ({world_size})"
+
+    tensor_list = torch.split(input_, dim_size // world_size, dim=dim)
+    output = tensor_list[rank].contiguous()
+    return output
+
+
+def _gather_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
+    # skip if only one rank involved
+    input_ = input_.contiguous()
+    world_size = dist.get_world_size(pg)
+    dist.get_rank(pg)
+
+    if world_size == 1:
+        return input_
 
     # all gather
-    inputs = inputs.contiguous()
-    outputs = [torch.empty_like(inputs) for _ in range(world_size)]
-    dist.all_gather(outputs, inputs, group=pg)
+    tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
+    assert input_.device.type == "cuda"
+    torch.distributed.all_gather(tensor_list, input_, group=pg)
 
     # concat
-    outputs = torch.cat(outputs, dim=dim)
-    return outputs
+    output = torch.cat(tensor_list, dim=dim)
+
+    if pad > 0:
+        output = output.narrow(dim, 0, output.size(dim) - pad)
+
+    return output
 
 
 class _GatherForwardSplitBackward(torch.autograd.Function):
@@ -296,11 +309,12 @@ class _GatherForwardSplitBackward(torch.autograd.Function):
         return _gather_sequence_func(input_)
 
     @staticmethod
-    def forward(ctx, input_, process_group, dim, grad_scale):
+    def forward(ctx, input_, process_group, dim, grad_scale, pad):
         ctx.process_group = process_group
         ctx.dim = dim
         ctx.grad_scale = grad_scale
-        return _gather_sequence_func(input_, process_group, dim)
+        ctx.pad = pad
+        return _gather_sequence_func(input_, process_group, dim, pad)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -309,7 +323,7 @@ class _GatherForwardSplitBackward(torch.autograd.Function):
         elif ctx.grad_scale == "down":
             grad_output = grad_output / dist.get_world_size(ctx.process_group)
 
-        return _split_sequence_func(grad_output, ctx.process_group, ctx.dim), None, None, None
+        return _split_sequence_func(grad_output, ctx.process_group, ctx.dim, ctx.pad), None, None, None, None
 
 
 class _SplitForwardGatherBackward(torch.autograd.Function):
@@ -327,11 +341,12 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
         return _split_sequence_func(input_)
 
     @staticmethod
-    def forward(ctx, input_, process_group, dim, grad_scale):
+    def forward(ctx, input_, process_group, dim, grad_scale, pad):
         ctx.process_group = process_group
         ctx.dim = dim
         ctx.grad_scale = grad_scale
-        return _split_sequence_func(input_, process_group, dim)
+        ctx.pad = pad
+        return _split_sequence_func(input_, process_group, dim, pad)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -339,12 +354,67 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
             grad_output = grad_output * dist.get_world_size(ctx.process_group)
         elif ctx.grad_scale == "down":
             grad_output = grad_output / dist.get_world_size(ctx.process_group)
-        return _gather_sequence_func(grad_output, ctx.process_group, ctx.dim), None, None, None
+        return _gather_sequence_func(grad_output, ctx.process_group, ctx.pad), None, None, None, None
 
 
-def split_sequence(input_, process_group, dim, grad_scale=1.0):
-    return _SplitForwardGatherBackward.apply(input_, process_group, dim, grad_scale)
+def split_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):
+    return _SplitForwardGatherBackward.apply(input_, process_group, dim, grad_scale, pad)
 
 
-def gather_sequence(input_, process_group, dim, grad_scale=None):
-    return _GatherForwardSplitBackward.apply(input_, process_group, dim, grad_scale)
+def gather_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):
+    return _GatherForwardSplitBackward.apply(input_, process_group, dim, grad_scale, pad)
+
+
+# ==============================
+# Pad
+# ==============================
+
+SPTIAL_PAD = 0
+TEMPORAL_PAD = 0
+
+
+def set_spatial_pad(dim_size: int):
+    sp_size = get_sequence_parallel_size()
+    pad = (sp_size - (dim_size % sp_size)) % sp_size
+    global SPTIAL_PAD
+    SPTIAL_PAD = pad
+
+
+def get_spatial_pad() -> int:
+    return SPTIAL_PAD
+
+
+def set_temporal_pad(dim_size: int):
+    sp_size = get_sequence_parallel_size()
+    pad = (sp_size - (dim_size % sp_size)) % sp_size
+    global TEMPORAL_PAD
+    TEMPORAL_PAD = pad
+
+
+def get_temporal_pad() -> int:
+    return TEMPORAL_PAD
+
+
+def all_to_all_with_pad(
+    input_: torch.Tensor,
+    process_group: dist.ProcessGroup,
+    scatter_dim: int = 2,
+    gather_dim: int = 1,
+    scatter_pad: int = 0,
+    gather_pad: int = 0,
+):
+    if scatter_pad > 0:
+        pad_shape = list(input_.shape)
+        pad_shape[scatter_dim] = scatter_pad
+        pad_tensor = torch.zeros(pad_shape, device=input_.device, dtype=input_.dtype)
+        input_ = torch.cat([input_, pad_tensor], dim=scatter_dim)
+
+    assert (
+        input_.shape[scatter_dim] % dist.get_world_size(process_group) == 0
+    ), f"Dimension to scatter ({input_.shape[scatter_dim]}) is not divisible by world size ({dist.get_world_size(process_group)})"
+    input_ = _AllToAll.apply(input_, process_group, scatter_dim, gather_dim)
+
+    if gather_pad > 0:
+        input_ = input_.narrow(gather_dim, 0, input_.size(gather_dim) - gather_pad)
+
+    return input_

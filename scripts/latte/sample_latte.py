@@ -10,8 +10,10 @@
 import argparse
 import os
 
+import colossalai
 import imageio
 import torch
+from colossalai.cluster import DistCoordinator
 from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
 from diffusers.schedulers import (
     DDIMScheduler,
@@ -29,15 +31,23 @@ from omegaconf import OmegaConf
 from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
+from opendit.core.parallel_mgr import set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.latte import LattePipeline, LatteT2V
-from opendit.utils.utils import merge_args
+from opendit.utils.utils import merge_args, set_seed
 
 
 def main(args):
-    torch.manual_seed(args.seed)
+    set_seed(args.seed)
     torch.set_grad_enabled(False)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    # == init distributed env ==
+    colossalai.launch_from_torch({})
+    coordinator = DistCoordinator()
+    set_parallel_manager(1, coordinator.world_size)
+    device = f"cuda:{torch.cuda.current_device()}"
 
     set_skip_manager(
         steps=args.num_sampling_steps,
@@ -47,9 +57,12 @@ def main(args):
         spatial_skip=args.spatial_skip,
         spatial_threshold=args.spatial_threshold,
         spatial_gap=args.spatial_gap,
+        spatial_block=args.spatial_block,
         temporal_skip=args.temporal_skip,
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
+        diffusion_skip=args.diffusion_skip,
+        diffusion_skip_timestep=args.diffusion_skip_timestep,
     )
 
     transformer_model = LatteT2V.from_pretrained(
@@ -189,12 +202,13 @@ def main(args):
             mask_feature=True,
             enable_vae_temporal_decoder=args.enable_vae_temporal_decoder,
         ).video
-        if videos.shape[1] == 1:
-            save_image(videos[0][0], args.save_img_path + prompt.replace(" ", "_") + ".png")
-        else:
-            imageio.mimwrite(
-                args.save_img_path + prompt.replace(" ", "_") + "_%04d" % args.run_time + ".mp4", videos[0], fps=8
-            )
+        if coordinator.is_master():
+            if videos.shape[1] == 1:
+                save_image(videos[0][0], args.save_img_path + prompt.replace(" ", "_") + ".png")
+            else:
+                imageio.mimwrite(
+                    args.save_img_path + prompt.replace(" ", "_") + "_%04d" % args.run_time + ".mp4", videos[0], fps=8
+                )
 
 
 if __name__ == "__main__":
@@ -219,18 +233,29 @@ if __name__ == "__main__":
     parser.add_argument("--enable_temporal_attentions", action="store_true")
     parser.add_argument("--enable_vae_temporal_decoder", action="store_true")
     parser.add_argument("--text_prompt", nargs="+")
-    # skip
-    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
-    parser.add_argument("--spatial_threshold", type=int, default=700, help="Spatial attention threshold")
-    parser.add_argument("--spatial_gap", type=int, default=3, help="Spatial attention gap")
-    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
-    parser.add_argument("--temporal_threshold", type=int, default=700, help="Temporal attention threshold")
-    parser.add_argument("--temporal_gap", type=int, default=5, help="Temporal attention gap")
-    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
-    parser.add_argument("--cross_threshold", type=int, default=700, help="Cross attention threshold")
-    parser.add_argument("--cross_gap", type=int, default=5, help="Cross attention gap")
-    args = parser.parse_args()
 
+    # fvd
+    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    parser.add_argument(
+        "--spatial_threshold", type=int, nargs=2, default=[100, 800], help="Spatial attention threshold"
+    )
+    parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
+    parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
+    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument(
+        "--temporal_threshold", type=int, nargs=2, default=[100, 800], help="Temporal attention threshold"
+    )
+    parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
+    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_threshold", type=int, nargs=2, default=[80, 900], help="Cross attention threshold")
+    parser.add_argument("--cross_gap", type=int, default=7, help="Cross attention gap")
+    parser.add_argument(
+        "--diffusion_skip",
+        action="store_true",
+    )
+    parser.add_argument("--diffusion_skip_timestep", nargs="+")
+
+    args = parser.parse_args()
     config_args = OmegaConf.load(args.config)
     args = merge_args(args, config_args)
 

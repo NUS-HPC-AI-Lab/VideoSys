@@ -7,7 +7,6 @@
 # Latte: https://github.com/Vchitect/Latte
 # --------------------------------------------------------
 
-
 import html
 import inspect
 import re
@@ -17,6 +16,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import einops
 import torch
+import torch.distributed as dist
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
@@ -31,6 +31,8 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
+
+from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -542,6 +544,7 @@ class LattePipeline(DiffusionPipeline):
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
         enable_vae_temporal_decoder: bool = False,
+        verbose: bool = False,
     ) -> Union[VideoPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -649,7 +652,33 @@ class LattePipeline(DiffusionPipeline):
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
+        # timesteps = self.scheduler.timesteps # NOTE change timestep_respacing here
+
+        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
+            # TODO add assertion for timestep_respacing
+            # timestep_respacing = get_diffusion_skip_timestep()
+            # timesteps = space_timesteps(1000, timestep_respacing)
+
+            diffusion_skip_timestep = get_diffusion_skip_timestep()
+            timesteps = skip_diffusion_timestep(self.scheduler.timesteps, diffusion_skip_timestep)
+
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
+            orignal_timesteps = self.scheduler.timesteps
+
+            if verbose and dist.get_rank() == 0:
+                print("============================")
+                print("skip diffusion steps!!!")
+                print("============================")
+                print(f"orignal sample timesteps: {orignal_timesteps}")
+                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
+                print("============================")
+                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
+                print(f"sample timesteps: {timesteps}")
+                print(f"num_inference_steps: {len(timesteps)}")
+                print("============================")
+        else:
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
+            timesteps = self.scheduler.timesteps
 
         # 5. Prepare latents.
         latent_channels = self.transformer.config.in_channels
