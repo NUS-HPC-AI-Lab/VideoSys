@@ -18,7 +18,7 @@ from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
 from opendit.core.parallel_mgr import (
     get_sequence_parallel_group,
     get_sequence_parallel_size,
-    is_sequence_parallelism_enable,
+    enable_sequence_parallel,
 )
 from opendit.models.opensora.ckpt_io import load_checkpoint
 from opendit.models.opensora.embed import (
@@ -113,14 +113,14 @@ class STDiTBlock(nn.Module):
         x_m = t2i_modulate(self.norm1(x), shift_msa, scale_msa)
 
         # spatial branch
-        d_s, d_t = self.get_spatial_temporal_size(is_sequence_parallelism_enable(), True)
+        d_s, d_t = self.get_spatial_temporal_size(enable_sequence_parallel(), True)
         x_s = rearrange(x_m, "b (t s) d -> (b t) s d", t=d_t, s=d_s)
         x_s = self.attn(x_s)
         x_s = rearrange(x_s, "(b t) s d -> b (t s) d", t=d_t, s=d_s)
         x = x + self.drop_path(gate_msa * x_s)
 
         # temporal to spatial switch
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             # b t/n s d -> b t s/n d
             x, d_s, d_t = self.dynamic_switch(x, d_s, d_t, temporal_to_spatial=True)
 
@@ -133,7 +133,7 @@ class STDiTBlock(nn.Module):
         x = x + self.drop_path(gate_msa * x_t)
 
         # spatial to temporal switch
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             # b t s/n d -> b t/n s d
             x, d_s, d_t = self.dynamic_switch(x, d_s, d_t, temporal_to_spatial=False)
 
@@ -164,7 +164,7 @@ class STDiTBlock(nn.Module):
 
         x = rearrange(x, "b (t s) d -> b t s d", t=d_t, s=d_s)
         x = all_to_all_comm(x, get_sequence_parallel_group(), scatter_dim=scatter_dim, gather_dim=gather_dim)
-        d_s, d_t = self.get_spatial_temporal_size(is_sequence_parallelism_enable(), split_temporal=split_temporal)
+        d_s, d_t = self.get_spatial_temporal_size(enable_sequence_parallel(), split_temporal=split_temporal)
         x = rearrange(x, "b t s d -> b (t s) d", t=d_t, s=d_s)
         return x, d_s, d_t
 
@@ -285,7 +285,7 @@ class STDiT(nn.Module):
         x = rearrange(x, "b t s d -> b (t s) d")
 
         # shard over the sequence dim if sp is enabled
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             x = split_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="down")
 
         t = self.t_embedder(timestep, dtype=x.dtype)  # (N, D)
@@ -314,7 +314,7 @@ class STDiT(nn.Module):
             else:
                 x = block(x, y, t0, y_lens, tpe)
 
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             x = gather_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="up")
 
         # final process

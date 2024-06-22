@@ -1,0 +1,23 @@
+model_path: LanguageBind/Open-Sora-Plan-v1.1.0
+version: 221x512x512
+num_frames: 221
+height: 512
+width: 512
+cache_dir: "./cache_dir"
+text_encoder_name: DeepFloyd/t5-v1_1-xxl
+text_prompt: [
+  "Several giant wooly mammoths approach treading through a snowy meadow, their long wooly fur lightly blows in the wind as they walk, snow covered trees and dramatic snow capped mountains in the distance, mid afternoon light with wispy clouds and a sun high in the distance creates a warm glow, the low camera view is stunning capturing the large furry mammal with beautiful photography, depth of field.",
+  "A movie trailer featuring the adventures of the 30 year old space man wearing a red wool knitted motorcycle helmet, blue sky, salt desert, cinematic style, shot on 35mm film, vivid colors.",
+  "Animated scene features a close-up of a short fluffy monster kneeling beside a melting red candle. The art style is 3D and realistic, with a focus on lighting and texture. The mood of the painting is one of wonder and curiosity, as the monster gazes at the flame with wide eyes and open mouth. Its pose and expression convey a sense of innocence and playfulness, as if it is exploring the world around it for the first time. The use of warm colors and dramatic lighting further enhances the cozy atmosphere of the image.",
+]
+ae: CausalVAEModel_4x8x8
+save_img_path: "./samples/opensora_plan"
+fps: 24
+guidance_scale: 7.5
+num_sampling_steps: 150
+enable_tiling: True
+
+
+# eval
+eval: True
+eval_dataset: ./evaluations/fastvideodiffusion/datasets/webvid_selected.csv

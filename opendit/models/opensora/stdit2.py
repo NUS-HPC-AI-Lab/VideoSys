@@ -23,7 +23,7 @@ from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
 from opendit.core.parallel_mgr import (
     get_sequence_parallel_group,
     get_sequence_parallel_size,
-    is_sequence_parallelism_enable,
+    enable_sequence_parallel,
 )
 from opendit.core.skip_mgr import is_skip_enabled
 from opendit.models.opensora.ckpt_io import load_checkpoint
@@ -295,14 +295,14 @@ class STDiT2Block(nn.Module):
             x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
         # temporal branch
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             x_m, S, T = self.dynamic_switch(x_m, S, T, temporal_to_spatial=True)
 
         x_t = rearrange(x_m, "B (T S) C -> (B S) T C", T=T, S=S)
         x_t = self.attn_temp(x_t, **temporal_kwargs)
         x_t = rearrange(x_t, "(B S) T C -> B (T S) C", T=T, S=S)
 
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             x_t, S, T = self.dynamic_switch(x_t, S, T, temporal_to_spatial=False)
 
         if x_mask is not None:
@@ -543,7 +543,7 @@ class STDiT2(PreTrainedModel):
         x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
         x = x + pos_emb
 
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             x = split_sequence(x, get_sequence_parallel_group(), dim=1)
             T = T // get_sequence_parallel_size()
 
@@ -603,7 +603,7 @@ class STDiT2(PreTrainedModel):
                 x = block(x, y, t_spc_mlp, t_tmp_mlp, y_lens, x_mask, t0_spc_mlp, t0_tmp_mlp, T, S, int(timestep[0]), i)
             # x.shape: [B, N, C]
 
-        if is_sequence_parallelism_enable():
+        if enable_sequence_parallel():
             x = gather_sequence(x, get_sequence_parallel_group(), dim=1)
             T = T * get_sequence_parallel_size()
 
