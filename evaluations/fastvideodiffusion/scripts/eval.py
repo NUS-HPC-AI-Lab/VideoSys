@@ -120,25 +120,39 @@ def main(args):
         print("LPIPS results:")
         print(json.dumps(result, indent=4))
         
+        output_file = os.path.join(args.generated_video_dir, 'lpips_results.json')
+        with open(output_file, 'w') as f:
+            json.dump(result, f, indent=4)
+
     elif args.calculate_psnr:
         result = calculate_psnr(eval_videos_tensor, generated_videos_tensor)
         
         print("PSNR results:")
         print(json.dumps(result, indent=4))
         
+        output_file = os.path.join(args.generated_video_dir, 'psnr_results.json')
+        with open(output_file, 'w') as f:
+            json.dump(result, f, indent=4)
+
     elif args.calculate_ssim:
         result = calculate_ssim(eval_videos_tensor, generated_videos_tensor)
         
         print("SSIM results:")
         print(json.dumps(result, indent=4))
         
+        output_file = os.path.join(args.generated_video_dir, 'ssim_results.json')
+        with open(output_file, 'w') as f:
+            json.dump(result, f, indent=4)
+
     elif args.calculate_fvd:
-        result = calculate_fvd(eval_videos_tensor, generated_videos_tensor, device=device, method= args.eval_method)
+        result = calculate_fvd(eval_videos_tensor, generated_videos_tensor, device=device, method=args.eval_method)
         
         print(f"FVD results with {args.eval_method}:")
         print(json.dumps(result, indent=4))
-
-
+        
+        output_file = os.path.join(args.generated_video_dir, 'fvd_results.json')
+        with open(output_file, 'w') as f:
+            json.dump(result, f, indent=4)
 
 
 if __name__ == "__main__":
