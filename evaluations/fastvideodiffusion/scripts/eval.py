@@ -45,12 +45,37 @@ def load_video(video_path):
     return video_tensor
 
 
+def preprocess_eval_videos(eval_videos, generated_video_shape):
+    T_gen, C_gen, H_gen, W_gen = generated_video_shape
+    preprocessed_videos = []
+    
+    for video in eval_videos:
+        T_eval, C_eval, H_eval, W_eval = video.shape
+        
+        if T_eval < T_gen:
+            raise ValueError(f"Eval video time steps ({T_eval}) are less than generated video time steps ({T_gen}).")
+        
+        if H_eval < H_gen or W_eval < W_gen:
+            raise ValueError(f"Eval video dimensions ({H_eval}x{W_eval}) are less than generated video dimensions ({H_gen}x{W_gen}).")
+            # TODO 原video 大小小于生成的video大小，如何resize?
+
+        # Center crop
+        # BUG check whether center crop is correct
+        start_h = (H_eval - H_gen) // 2
+        start_w = (W_eval - W_gen) // 2
+        cropped_video = video[:T_gen, :, start_h:start_h + H_gen, start_w:start_w + W_gen]
+        
+        preprocessed_videos.append(cropped_video)
+    
+    return preprocessed_videos
+
+
 
 def main(args):
     device = torch.device(f"cuda:{args.device}")
     
-    eval_video_dir = args.eval_video_dataset
-    generated_video_dir = args.generated_video_dataset
+    eval_video_dir = args.eval_video_dir
+    generated_video_dir = args.generated_video_dir
 
     video_ids = []
     for f in os.listdir(generated_video_dir):
@@ -67,12 +92,20 @@ def main(args):
         raise ValueError("No videos found in the generated video dataset. Exiting.")
 
     eval_videos = load_videos(eval_video_dir, video_ids, file_extension)
-    
     generated_videos = load_videos(generated_video_dir, video_ids, file_extension)
-
 
     if len(eval_videos) == 0 or len(generated_videos) == 0:
         raise ValueError("No matching videos found in one or both directories. Exiting.")
+
+    # Check if all generated videos have the same shape
+    first_shape = generated_videos[0].shape
+    for video in generated_videos:
+        if video.shape != first_shape:
+            raise ValueError("All generated videos must have the same shape.")
+
+
+    generated_video_shape = generated_videos[0].shape
+    generated_videos = preprocess_eval_videos(eval_videos, generated_video_shape)
 
 
     eval_videos_tensor = torch.stack(eval_videos).to(device)
@@ -116,11 +149,12 @@ if __name__ == "__main__":
     parser.add_argument("--calculate_psnr", action="store_true")
     parser.add_argument("--calculate_ssim", action="store_true")
     
-    parser.add_argument("--eval_method", type=str, default="videogpt", required=True)
+    parser.add_argument("--eval_method", type=str, default="videogpt")
     
     # dataset
-    parser.add_argument("--eval_video_dataset", type=str, default="./evaluations/fastvideodiffusion/datasets/webbvid", required=True)
-    parser.add_argument("--generated_video_dataset", type=str, default="./evaluations/fastvideodiffusion/samples/latte", required=True)
+    parser.add_argument("--eval_dataset", type=str, default="./evaluations/fastvideodiffusion/datasets/webvid_selected.csv")
+    parser.add_argument("--eval_video_dir", type=str, default="./evaluations/fastvideodiffusion/datasets/webvid")
+    parser.add_argument("--generated_video_dir", type=str, default="./evaluations/fastvideodiffusion/samples/latte/sample_skip")
     
     parser.add_argument("--device", type=str, default="0")
     

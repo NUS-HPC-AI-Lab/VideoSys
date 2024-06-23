@@ -1,5 +1,4 @@
 # path:
-save_img_path: "./samples/latte/"
 pretrained_model_path: "maxin-cn/Latte-1"
 
 # model config:
@@ -51,3 +50,4 @@ diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
 # eval
 eval: True
 eval_dataset: ./evaluations/fastvideodiffusion/datasets/webvid_selected.csv
+save_img_path: "./evaluations/fastvideodiffusion/samples/latte/sample_skip/"

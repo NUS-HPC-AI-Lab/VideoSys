@@ -15,7 +15,6 @@ text_prompt: [
   "A serene night scene in a forested area. The first frame shows a tranquil lake reflecting the star-filled sky above. The second frame reveals a beautiful sunset, casting a warm glow over the landscape. The third frame showcases the night sky, filled with stars and a vibrant Milky Way galaxy. The video is a time-lapse, capturing the transition from day to night, with the lake and forest serving as a constant backdrop. The style of the video is naturalistic, emphasizing the beauty of the night sky and the peacefulness of the forest.",
 ]
 ae: CausalVAEModel_4x8x8
-save_img_path: "./samples/opensora_plan"
 fps: 24
 guidance_scale: 7.5
 num_sampling_steps: 150
@@ -41,3 +40,4 @@ diffusion_skip_timestep: [3,3,3,0,0,0,0,0,0,0]
 # eval
 eval: True
 eval_dataset: ./evaluations/fastvideodiffusion/datasets/webvid_selected.csv
+save_img_path: "./evaluations/fastvideodiffusion/samples/opensora_plan/sample_65f_skip/"

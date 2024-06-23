@@ -6,5 +6,5 @@ python evaluations/fastvideodiffusion/scripts/eval.py \
     --eval_method "videogpt" \
     --eval_dataset "./evaluations/fastvideodiffusion/datasets/webvid_selected.csv" \
     --eval_video_dir "./evaluations/fastvideodiffusion/datasets/webvid" \
-    --generated_video_dir "./evaluations/fastvideodiffusion/samples/latte/sample_skip" \
+    --generated_video_dir "./evaluations/fastvideodiffusion/samples/opensora/sample_skip" \
     --device "0"

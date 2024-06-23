@@ -47,3 +47,4 @@ diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
 # eval
 eval: True
 eval_dataset: ./evaluations/fastvideodiffusion/datasets/webvid_selected.csv
+save_dir: ./evaluations/fastvideodiffusion/samples/opensora/sample_skip

@@ -11,7 +11,6 @@ text_prompt: [
   "Animated scene features a close-up of a short fluffy monster kneeling beside a melting red candle. The art style is 3D and realistic, with a focus on lighting and texture. The mood of the painting is one of wonder and curiosity, as the monster gazes at the flame with wide eyes and open mouth. Its pose and expression convey a sense of innocence and playfulness, as if it is exploring the world around it for the first time. The use of warm colors and dramatic lighting further enhances the cozy atmosphere of the image.",
 ]
 ae: CausalVAEModel_4x8x8
-save_img_path: "./samples/opensora_plan"
 fps: 24
 guidance_scale: 7.5
 num_sampling_steps: 150
@@ -21,3 +20,6 @@ enable_tiling: True
 # eval
 eval: True
 eval_dataset: ./evaluations/fastvideodiffusion/datasets/webvid_selected.csv
+save_img_path: "./evaluations/fastvideodiffusion/samples/opensora_plan/sample_221f/"
+
+

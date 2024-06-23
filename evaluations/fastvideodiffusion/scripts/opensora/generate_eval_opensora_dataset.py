@@ -32,7 +32,7 @@ from opendit.models.opensora.inference_utils import (
     dframe_to_frame,
     extract_json_from_prompts,
     extract_prompts_loop,
-    get_save_path_name,
+    get_eval_save_path_name,
     load_prompts,
     merge_prompt,
     prepare_multi_resolution_info,
@@ -54,6 +54,14 @@ def main(args):
     torch.backends.cudnn.allow_tf32 = True
 
     # == init distributed env ==
+    if os.environ.get("LOCAL_RANK", None) is None:
+        enable_sequence_parallelism = True
+        os.environ["RANK"] = "0"
+        os.environ["LOCAL_RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = "127.0.0.1"
+        os.environ["MASTER_PORT"] = "29500"
+        
     colossalai.launch_from_torch({})
     coordinator = DistCoordinator()
     set_parallel_manager(1, coordinator.world_size)
@@ -137,10 +145,6 @@ def main(args):
     # inference
     # ======================================================
     # == load eval prompts ==
-    # prompts = args.prompt
-    # if prompts is None:
-    #     assert args.prompt_path is not None
-    #     prompts = load_prompts(args.prompt_path)
     eval_prompts_dict = load_eval_prompts(args.eval_dataset)
     print('Generate eval datasets now!')
     print(f"Number of eval prompts: {len(eval_prompts_dict)}\n")
@@ -168,11 +172,13 @@ def main(args):
     prompt_as_path = args.prompt_as_path
 
     # == Iter over all samples ==
-    eval_prompts_list = list(eval_prompts_dict.items())  
-    # for i in progress_wrap(range(0, len(prompts_list), batch_size)):
-    for i in progress_wrap(range(0, len(eval_prompts_list), batch_size)):
+    ids, eval_prompts = zip(*eval_prompts_dict.items())
+
+    for i in progress_wrap(range(0, len(eval_prompts), batch_size)):
         # == prepare batch prompts ==
-        batch_prompts = eval_prompts_list[i : i + batch_size] # BUG
+        batch_prompts = eval_prompts[i : i + batch_size]
+        batch_ids = ids[i : i + batch_size]
+        
         ms = mask_strategy[i : i + batch_size]
         refs = reference_path[i : i + batch_size]
 
@@ -192,11 +198,10 @@ def main(args):
         for k in range(num_sample):
             # == prepare save paths ==
             save_paths = [
-                get_save_path_name(
-                    save_dir,
+                get_eval_save_path_name(
+                    save_dir=save_dir,
+                    id=batch_ids[idx],  # use batch_ids to pass the id
                     sample_idx=idx,
-                    prompt=original_batch_prompts[idx],
-                    prompt_as_path=prompt_as_path,
                     num_sample=num_sample,
                     k=k,
                 )
@@ -284,8 +289,7 @@ def main(args):
                     refs, ms = append_generated(
                         vae, video_clips[-1], refs, ms, loop_i, condition_frame_length, condition_frame_edit
                     )
-
-                # == sampling ==
+                # == sampling == 
                 z = torch.randn(len(batch_prompts), vae.out_channels, *latent_size, device=device, dtype=dtype)
                 masks = apply_mask_strategy(z, refs, ms, loop_i, align=align)
                 samples = scheduler.sample(
@@ -320,6 +324,7 @@ def main(args):
                     if save_path.endswith(".mp4") and args.watermark:
                         time.sleep(1)  # prevent loading previous generated video
                         add_watermark(save_path)
+                    print(f"Saved sample to {save_path}")
     logger.info("Inference finished.")
     logger.info("Saved samples to %s", save_dir)
 

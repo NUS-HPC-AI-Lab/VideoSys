@@ -15,11 +15,11 @@ def trans(x):
 def calculate_fvd(videos1, videos2, device, method='styleganv'):
 
     if method == 'styleganv':
-        from fvd.styleganv.fvd import get_fvd_feats, frechet_distance, load_i3d_pretrained
+        from .fvd.styleganv.fvd import get_fvd_feats, frechet_distance, load_i3d_pretrained
     elif method == 'videogpt':
-        from fvd.videogpt.fvd import load_i3d_pretrained
-        from fvd.videogpt.fvd import get_fvd_logits as get_fvd_feats
-        from fvd.videogpt.fvd import frechet_distance
+        from .fvd.videogpt.fvd import load_i3d_pretrained
+        from .fvd.videogpt.fvd import get_fvd_logits as get_fvd_feats
+        from .fvd.videogpt.fvd import frechet_distance
 
     print("calculate_fvd...")
 
