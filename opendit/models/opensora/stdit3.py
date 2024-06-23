@@ -28,7 +28,7 @@ from opendit.core.comm import (
     split_sequence,
 )
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.core.skip_mgr import enable_skip, if_skip_cross, if_skip_spatial, if_skip_temporal
+from opendit.core.skip_mgr import enable_skip, if_skip_cross, if_skip_spatial, if_skip_temporal, if_skip_mlp
 
 from .modules import (
     Attention,
@@ -173,20 +173,25 @@ class STDiT3Block(nn.Module):
                 self.last_cross = x_cross
             x = x + x_cross
 
-        # modulate (MLP)
-        x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
-        if x_mask is not None:
-            x_m_zero = t2i_modulate(self.norm2(x), shift_mlp_zero, scale_mlp_zero)
-            x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
+        # TODO: skip MLP
+        skip_mlp, self.mlp_count = if_skip_mlp(int(timestep[0]), self.mlp_count, self.block_idx)
+        if skip_mlp:
+            x_m_s = self.last_mlp
+        else:
+            # modulate (MLP)
+            x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
+            if x_mask is not None:
+                x_m_zero = t2i_modulate(self.norm2(x), shift_mlp_zero, scale_mlp_zero)
+                x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
-        # MLP
-        x_m = self.mlp(x_m)
+            # MLP
+            x_m = self.mlp(x_m)
 
-        # modulate (MLP)
-        x_m_s = gate_mlp * x_m
-        if x_mask is not None:
-            x_m_s_zero = gate_mlp_zero * x_m
-            x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
+            # modulate (MLP)
+            x_m_s = gate_mlp * x_m
+            if x_mask is not None:
+                x_m_s_zero = gate_mlp_zero * x_m
+                x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
 
         # residual
         x = x + self.drop_path(x_m_s)
