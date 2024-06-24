@@ -84,6 +84,11 @@ def main(args):
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
         diffusion_skip_timestep=args.diffusion_skip_timestep,
+        # mlp
+        mlp_skip=args.mlp_skip,
+        mlp_threshold=args.mlp_threshold,
+        mlp_gap=args.mlp_gap,
+        mlp_layer_range=args.mlp_layer_range,
     )
 
     # == init logger ==

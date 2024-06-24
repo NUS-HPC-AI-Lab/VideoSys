@@ -108,6 +108,10 @@ class SkipManager:
 
     def if_skip_mlp(self, timestep: int, count: int, block_idx: int):
         print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
+        if self.mlp_threshold[0] < timestep < self.mlp_threshold[1]:
+            print(f"mlp yes")
+        if self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1]:
+            print(f"layer yes")
         if (
             self.mlp_skip
             and (timestep is not None)
@@ -137,6 +141,11 @@ def set_skip_manager(
     diffusion_skip: bool = False,
     diffusion_timestep_respacing: list = None,
     diffusion_skip_timestep: list = None,
+    # mlp
+    mlp_skip: bool = False,
+    mlp_threshold: list = [450, 520],
+    mlp_gap: int = 3,
+    mlp_layer_range: list = [14, 15],
 ):
     global SKIP_MANAGER
     SKIP_MANAGER = SkipManager(
@@ -154,6 +163,10 @@ def set_skip_manager(
         diffusion_skip,
         diffusion_timestep_respacing,
         diffusion_skip_timestep,
+        mlp_skip,
+        mlp_threshold,
+        mlp_gap,
+        mlp_layer_range,
     )
 
 
