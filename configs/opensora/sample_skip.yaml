@@ -42,7 +42,7 @@ cross_gap: 6
 mlp_skip: True
 mlp_threshold: [450, 520]
 mlp_gap: 2
-mlp_layer_range: [14, 15],
+mlp_layer_range: [0, 28]
 
 
 # skip diffusion

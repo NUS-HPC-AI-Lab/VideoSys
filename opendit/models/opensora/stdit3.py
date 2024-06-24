@@ -90,7 +90,10 @@ class STDiT3Block(nn.Module):
         self.last_attn = None
         self.cross_count = 0
         self.last_cross = None
-
+        # mlp
+        self.mlp_count = 0
+        self.last_mlp = None
+        
     def t_mask_select(self, x_mask, x, masked_x, T, S):
         # x: [B, (T, S), C]
         # mased_x: [B, (T, S), C]
@@ -177,6 +180,7 @@ class STDiT3Block(nn.Module):
         skip_mlp, self.mlp_count = if_skip_mlp(int(timestep[0]), self.mlp_count, self.block_idx)
         if skip_mlp:
             x_m_s = self.last_mlp
+            print(f"skip mlp | time {int(timestep[0])} | block {self.block_idx}")
         else:
             # modulate (MLP)
             x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)

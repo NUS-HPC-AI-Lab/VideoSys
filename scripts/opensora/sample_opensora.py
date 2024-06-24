@@ -53,10 +53,19 @@ def main(args):
     torch.backends.cudnn.allow_tf32 = True
 
     # == init distributed env ==
-    colossalai.launch_from_torch({})
-    coordinator = DistCoordinator()
-    set_parallel_manager(1, coordinator.world_size)
-    enable_sequence_parallelism = enable_sequence_parallel()
+    if os.environ.get("LOCAL_RANK") is None:
+        os.environ["LOCAL_RANK"] = "0"
+        os.environ["RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29500"
+        enable_sequence_parallelism = False
+        dist.init_process_group(backend='gloo', rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
+    else:
+        colossalai.launch_from_torch({})
+        coordinator = DistCoordinator()
+        set_parallel_manager(1, coordinator.world_size)
+        enable_sequence_parallelism = enable_sequence_parallel()
     device = f"cuda:{torch.cuda.current_device()}"
     set_seed(seed=args.seed)
 
@@ -295,7 +304,8 @@ def main(args):
                 video_clips.append(samples)
 
             # == save samples ==
-            if coordinator.is_master():
+            # if coordinator.is_master():
+            if dist.get_rank() == 0:
                 for idx, batch_prompt in enumerate(batch_prompts):
                     if verbose >= 2:
                         logger.info("Prompt: %s", batch_prompt)

@@ -54,7 +54,8 @@ class SkipManager:
         self.mlp_gap = mlp_gap
         self.mlp_layer_range = mlp_layer_range
         
-        if dist.get_rank() == 0:
+        if dist.get_rank() == 0: # DEBUG
+        # if True:
             print(
                 f"\nInit SkipManager:\n\
                 steps={steps}\n\
@@ -106,17 +107,18 @@ class SkipManager:
         return flag, count
 
     def if_skip_mlp(self, timestep: int, count: int, block_idx: int):
+        print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
         if (
             self.mlp_skip
             and (timestep is not None)
-            and (count % self.mlp_gap != 0)
+            # and (count % self.mlp_gap != 0)
             and (self.mlp_threshold[0] < timestep < self.mlp_threshold[1])
             and (self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1])
         ):
             flag = True
+            count = (count + 1) % self.steps
         else:
             flag = False
-        count = (count + 1) % self.steps
         return flag, count
 
 
