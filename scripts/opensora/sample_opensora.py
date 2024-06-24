@@ -378,14 +378,19 @@ if __name__ == "__main__":
     parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
     parser.add_argument("--cross_threshold", type=int, nargs=2, default=[540, 960], help="Cross attention threshold")
     parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
-
+    # skip mlp
+    parser.add_argument("--mlp_skip", action="store_true", help="Enable mlp skip")
+    parser.add_argument("--mlp_threshold", type=int, nargs="+", help="MLP skip layer")
+    parser.add_argument("--mlp_gap", type=int, nargs="+", help="MLP skip gap")
+    parser.add_argument("--mlp_layer_range", type=int, nargs="+", help="MLP skip block size")
+    
     # skip diffusion
     parser.add_argument(
         "--diffusion_skip",
         action="store_true",
     )
     parser.add_argument("--diffusion_skip_timestep", nargs="+")
-
+    
     args = parser.parse_args()
 
     config_args = OmegaConf.load(args.config)
