@@ -24,7 +24,12 @@ class SkipManager:
         diffusion_skip: bool = False,
         diffusion_timestep_respacing: list = None,
         diffusion_skip_timestep: list = None,
-    ):
+        # mlp
+        mlp_skip: bool = False,
+        mlp_threshold: list = [450, 520],
+        mlp_gap: int = 3,
+        mlp_layer_range: list = [14, 15],
+    ):  
         self.steps = steps
 
         self.cross_skip = cross_skip
@@ -43,6 +48,12 @@ class SkipManager:
         self.diffusion_skip = diffusion_skip
         self.diffusion_timestep_respacing = diffusion_timestep_respacing
         self.diffusion_skip_timestep = diffusion_skip_timestep
+        
+        self.mlp_skip = mlp_skip
+        self.mlp_threshold = mlp_threshold
+        self.mlp_gap = mlp_gap
+        self.mlp_layer_range = mlp_layer_range
+        
         if dist.get_rank() == 0:
             print(
                 f"\nInit SkipManager:\n\
@@ -108,7 +119,6 @@ class SkipManager:
         count = (count + 1) % self.steps
         return flag, count
 
-        pass
 
 def set_skip_manager(
     steps: int = 100,
@@ -161,6 +171,10 @@ def if_skip_temporal(timestep: int, count: int):
 
 def if_skip_spatial(timestep: int, count: int, block_idx: int):
     return SKIP_MANAGER.if_skip_spatial(timestep, count, block_idx)
+
+
+def if_skip_mlp(timestep: int, count: int, block_idx: int):
+    return SKIP_MANAGER.if_skip_mlp(timestep, count, block_idx)
 
 
 def get_diffusion_skip():

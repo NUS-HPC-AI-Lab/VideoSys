@@ -38,6 +38,12 @@ temporal_gap: 4
 cross_skip: True
 cross_threshold: [540, 960]  # 24/30
 cross_gap: 6
+# mlp
+mlp_skip: True
+mlp_threshold: [450, 520]
+mlp_gap: 2
+mlp_layer_range: [14, 15],
+
 
 # skip diffusion
 diffusion_skip: True
