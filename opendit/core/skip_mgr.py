@@ -107,20 +107,30 @@ class SkipManager:
         return flag, count
 
     def if_skip_mlp(self, timestep: int, count: int, block_idx: int):
-        print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
+        # print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
         if self.mlp_threshold[0] < timestep < self.mlp_threshold[1]:
             print(f"mlp yes")
-        if self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1]:
-            print(f"layer yes")
+            print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
+            
+        # if self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1]:
+        #     print(f"layer yes")
         if (
             self.mlp_skip
             and (timestep is not None)
-            # and (count % self.mlp_gap != 0)
-            and (self.mlp_threshold[0] < timestep < self.mlp_threshold[1])
+            and (count % self.mlp_gap != 0)
+            and (self.mlp_threshold[0] < timestep <  self.mlp_threshold[1])
             and (self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1])
         ):
             flag = True
             count = (count + 1) % self.steps
+        elif (
+            self.mlp_skip
+            and (timestep is not None)
+            and (self.mlp_threshold[0] < timestep <  self.mlp_threshold[1])
+            and (self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1])
+        ):
+            count = (count + 1) % self.steps
+            flag = False
         else:
             flag = False
         return flag, count
