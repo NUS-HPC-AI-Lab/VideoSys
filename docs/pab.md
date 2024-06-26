@@ -1,17 +1,12 @@
 # Pyramid Attention Broadcast(PAB)
 
-- [Pyramid Attention Broadcast(PAB)](#pyramid-attention-broadcastpab)
-  - [Insights](#insights)
-  - [Pyramid Attention Broadcast (PAB) Mechanism](#pyramid-attention-broadcast-pab-mechanism)
-  - [Experimental Results](#experimental-results)
-  - [Usage](#usage)
-    - [Latte](#latte)
-    - [Open-Sora](#open-sora)
-    - [Open-Sora-Plan](#open-sora-plan)
-    - [Configuration for PAB](#configuration-for-pab)
-      - [Parameters](#parameters)
-      - [Example Configuration](#example-configuration)
-      - [Explanation](#explanation)
+Pyramid Attention Broadcast(PAB)(#pyramid-attention-broadcastpab)
+- [Insights](#insights)
+- [Pyramid Attention Broadcast (PAB) Mechanism](#pyramid-attention-broadcast-pab-mechanism)
+- [Experimental Results](#experimental-results)
+- [Usage](#usage)
+  - [Supported Models](#supported-models)
+  - [Configuration for PAB](#configuration-for-pab)
 
 
 ## Insights
@@ -39,18 +34,10 @@ Here are the results of our experiments, more results are shown in https://oahzx
 
 
 ## Usage
-### [Latte](./docs/latte.md)
-```shell
-torchrun --standalone --nproc_per_node=8 scripts/latte/sample_latte.py --config configs/latte/sample_skip.yaml
-```
-### [Open-Sora](./doc/opensora.md)
 
-### [Open-Sora-Plan](./doc/opensora_plan.md)
-```shell
-torchrun --standalone --nproc_per_node=8 scripts/opensora_plan/sample_opensora_plan.py --config configs/opensora_plan/sample_65f_skip.yaml
-```
+### Supported Models
 
-
+PAB currently supports Open-Sora[[doc](./doc/opensora.md)], Open-Sora-Plan[[doc](./doc/opensora_plan.md)], and Latte [[doc](./docs/latte.md)]
 
 ### Configuration for PAB
 
@@ -66,9 +53,6 @@ To efficiently use the Pyramid Attention Broadcast (PAB) mechanism, configure th
 
 - **spatial_gap**: Number of blocks in model to skip during broadcasting for spatial attention.
   - Type: Integer
-
-- **spatial_block**: Range of steps where spatial attention broadcasting is active.
-  - Format: `[start_step, end_step]`
 
 - **temporal_broadcast**: Enable or disable broadcasting for temporal attention.
   - Type: `True` or `False`
@@ -94,18 +78,17 @@ To efficiently use the Pyramid Attention Broadcast (PAB) mechanism, configure th
 spatial_broadcast: True
 spatial_threshold: [100, 800]
 spatial_gap: 2
-spatial_block: [0, 28]
 
 temporal_broadcast: True
 temporal_threshold: [100, 800]
-temporal_gap: 4
+temporal_gap: 3
 
 cross_broadcast: True
-cross_threshold: [80, 900]
-cross_gap: 7
+cross_threshold: [100, 900]
+cross_gap: 5
 ```
 
-#### Explanation
+Explanation:
 
 - **Spatial Attention**:
   - Broadcasting enabled (`spatial_broadcast: True`)
@@ -116,11 +99,11 @@ cross_gap: 7
 - **Temporal Attention**:
   - Broadcasting enabled (`temporal_broadcast: True`)
   - Applied within the threshold range of 100 to 800
-  - Skips every 4 steps (`temporal_gap: 4`)
+  - Skips every 3 steps (`temporal_gap: 3`)
 
 - **Cross-Modal Attention**:
   - Broadcasting enabled (`cross_broadcast: True`)
-  - Applied within the threshold range of 80 to 900
-  - Skips every 7 steps (`cross_gap: 7`)
+  - Applied within the threshold range of 100 to 900
+  - Skips every 5 steps (`cross_gap: 5`)
 
 Adjust these settings based on your specific needs to optimize the performance of each attention mechanism.
