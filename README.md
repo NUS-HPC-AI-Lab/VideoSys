@@ -79,10 +79,10 @@ OpenDiT fully supports the following models, including training and inference, w
 
 | Model | Train | Inference | Optimize | Usage |
 | ------ | :------: | :------: | :------: | :------: |
-| DiT[source](https://github.com/facebookresearch/DiT)| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
-| Open-Sora[source](https://github.com/hpcaitech/Open-Sora)| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
-| Latte[source](https://github.com/Vchitect/Latte)| ❌ | ✅ | ✅ | [Doc](./docs/latte.md)
-| Open-Sora-Plan[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)| ❌ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
+| DiT[[source](https://github.com/facebookresearch/DiT)]| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
+| Open-Sora[[source](https://github.com/hpcaitech/Open-Sora)]| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
+| Latte[[source](https://github.com/Vchitect/Latte)]| ❌ | ✅ | ✅ | [Doc](./docs/latte.md)
+| Open-Sora-Plan[[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)]| ❌ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
 
 ## Technique Overview
 
@@ -90,7 +90,7 @@ OpenDiT fully supports the following models, including training and inference, w
 
 Real-Time Video Generation with Pyramid Attention Broadcast
 
-Authors: Xuanlei Zhao*,  Xiaolong Jin*,  Kai Wang*, and Yang You.
+Authors: [Xuanlei Zhao](https://oahzxl.github.io/)\*,  [Xiaolong Jin]()\*,  [Kai Wang](https://kaiwang960112.github.io/)\*, and [Yang You](https://www.comp.nus.edu.sg/~youy/). (\* indicates equal contribution)
 
 ![method](./assets/figures/pab_method.png)
 
