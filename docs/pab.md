@@ -44,7 +44,7 @@ Here are the results of our experiments, more results are shown in https://oahzx
 
 ### Supported Models
 
-PAB currently supports Open-Sora[[doc](./docs/opensora.md)], Open-Sora-Plan[[doc](../docs/opensora_plan.md)], and Latte[[doc](../docs/latte.md)]
+PAB currently supports Open-Sora[[doc](../docs/opensora.md)], Open-Sora-Plan[[doc](../docs/opensora_plan.md)], and Latte[[doc](../docs/latte.md)]
 
 ### Configuration for PAB
 
