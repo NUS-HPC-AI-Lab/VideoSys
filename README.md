@@ -79,18 +79,22 @@ OpenDiT fully supports the following models, including training and inference, w
 
 | Model | Train | Inference | Optimize | Usage |
 | ------ | :------: | :------: | :------: | :------: |
-| [DiT](https://github.com/facebookresearch/DiT)| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
-| [Open-Sora](https://github.com/hpcaitech/Open-Sora)| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
-| [Latte](https://github.com/Vchitect/Latte)| ❌ | ✅ | ✅ | [Doc](./docs/latte.md)
-| [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan)| ❌ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
+| DiT[source](https://github.com/facebookresearch/DiT)| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
+| Open-Sora[source](https://github.com/hpcaitech/Open-Sora)| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
+| Latte[source](https://github.com/Vchitect/Latte)| ❌ | ✅ | ✅ | [Doc](./docs/latte.md)
+| Open-Sora-Plan[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)| ❌ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
 
 ## Technique Overview
 
-### PAB [[blog](https://arxiv.org/abs/2403.10266)][[doc](./docs/pab.md)]
+### Pyramid Attention Broadcast (PAB) [[blog](https://arxiv.org/abs/2403.10266)][[doc](./docs/pab.md)]
+
+Real-Time Video Generation with Pyramid Attention Broadcast
+
+Authors: Xuanlei Zhao*,  Xiaolong Jin*,  Kai Wang*, and Yang You.
 
 ![method](./assets/figures/pab_method.png)
 
-Pyramid Attention Broadcast (PAB) is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>.
+PAB is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>.
 
 By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including Open-Sora, Open-Sora-Plan, and Latte.
 
@@ -100,11 +104,11 @@ See its detail and usage [here](./docs/pab.md).
 
 ----
 
-### DSP [[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)]
+### Dyanmic Sequence Parallelism (DSP) [[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)]
 
 ![dsp_overview](./assets/figures/dsp_overview.png)
 
-Dynamic Sequence Parallelism (DSP) is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
+DSP is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
 
 It achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism ([DeepSpeed Ulysses](https://arxiv.org/abs/2309.14509)). For a 10s (80 frames) of 512x512 video, the inference latency of OpenSora is:
 
