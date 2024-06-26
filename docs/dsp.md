@@ -22,4 +22,4 @@ The following is DSP's end-to-end throughput for training of OpenSora:
 
 ### Usage
 
-DSP is currently supported for: OpenSora[[Usage](./opensora.md#low-latency-inference-with-dsp)].
+DSP is currently supported for: OpenSora, OpenSoraPlan and Latte. To enable DSP, you just need to use multiple GPUs with `--nproc_per_node=X`, where `X` is the number of GPUs.
