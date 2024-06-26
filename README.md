@@ -1,30 +1,3 @@
-## Install
-pip install -e .
-
-## Run
-normal:
-torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample.yaml
-skip:
-torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample_skip.yaml
-
-## Description
-Main code modification is in opendit/modules/attn.py
-Control flag is also at the top this file.
-
-## Code format
-Recommend to commit code by PR.
-
-Need to install code formater
-```shell
-# these commands are executed under the Colossal-AI directory
-pip install pre-commit
-pre-commit install
-```
-
-
-
-
-
 <p align="center">
 <img width="200px" alt="OpenDiT" src="./assets/figures/logo.png?raw=true">
 </p>
@@ -34,6 +7,7 @@ pre-commit install
 </p>
 
 ### Latest News 🔥
+- [2024/06] Propose Pyramid Attention Broadcast (PAB)[[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>.
 - [2024/06] Support OpenSora, Open-Sora-Plan and Latte.
 - [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism.
 - [2024/03] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
@@ -98,12 +72,6 @@ cd OpenDiT
 pip install -e .
 ```
 
-(Optional but recommended) Install libraries for training & inference speed up (you can run our code without these libraries):
-
-```shell
-# Install FlashAttention
-pip install flash-attn
-```
 
 ## Usage
 
@@ -112,7 +80,7 @@ OpenDiT fully supports the following models, including training and inference, w
 | Model | Train | Inference | Optimize | Usage |
 | ------ | :------: | :------: | :------: | :------: |
 | [DiT](https://github.com/facebookresearch/DiT)| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
-| [OpenSora](https://github.com/hpcaitech/Open-Sora)| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
+| [Open-Sora](https://github.com/hpcaitech/Open-Sora)| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
 | [Latte](https://github.com/Vchitect/Latte)| ❌ | ✅ | ✅ | [Doc](./docs/latte.md)
 | [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan)| ❌ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
 
@@ -166,7 +134,7 @@ To reproduce our results, you can follow our [instruction](./docs/dit.md/#reprod
 We extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/) for providing valuable insights into algorithms and aiding in the development of the video pipeline. Additionally, we acknowledge [Shenggan Cheng](https://shenggan.github.io/) for his guidance on code optimization and parallelism. Our appreciation also goes to [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice and contributions.
 
 This codebase borrows from:
-* [OpenSora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
+* [Open-Sora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
 * [DiT](https://github.com/facebookresearch/DiT): Scalable Diffusion Models with Transformers.
 * [PixArt](https://github.com/PixArt-alpha/PixArt-alpha): An open-source DiT-based text-to-image model.
 * [Latte](https://github.com/Vchitect/Latte): An attempt to efficiently train DiT for video.
@@ -186,6 +154,7 @@ If you encounter problems using OpenDiT or have a feature request, feel free to 
   journal = {GitHub repository},
   howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/OpenDiT}},
 }
+
 @misc{zhao2024dsp,
       title={DSP: Dynamic Sequence Parallelism for Multi-Dimensional Transformers},
       author={Xuanlei Zhao and Shenggan Cheng and Zangwei Zheng and Zheming Yang and Ziming Liu and Yang You},

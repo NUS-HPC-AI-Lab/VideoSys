@@ -21,6 +21,12 @@ We disable some speedup methods by default. You can change settings in yaml conf
 - `--enable_flashattn`: Whether enable the FlashAttention. The default value is `False`. Recommend to enable.
 - `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the text encoder. The default value is `False`. Requires apex install.
 
+For more efficient inference, you can install flash attention by:
+
+```shell
+pip install flash-attn
+```
+
 ### Inference with [PAB](./docs/pab.md)
 
 PAB provides more efficient inference at the cost of minor quality loss. You can run as follows:
