@@ -31,3 +31,4 @@ prompt: [
 
 # speedup
 flash_attn: False  # turn on for faster inference
+enable_t5_speedup: False  # turn on for less memory usage

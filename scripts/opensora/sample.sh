@@ -1,4 +1,1 @@
-torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample.yaml
-
-# pab
-# torchrun --standalone --nproc_per_node=8 scripts/opensora/sample_opensora.py --config configs/opensora/sample_pab.yaml
+torchrun --standalone --nproc_per_node=1 scripts/opensora/sample.py --config configs/opensora/sample.yaml

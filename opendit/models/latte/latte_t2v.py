@@ -41,8 +41,8 @@ from opendit.core.comm import (
     set_temporal_pad,
     split_sequence,
 )
+from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.core.skip_mgr import enable_skip, if_skip_cross, if_skip_spatial, if_skip_temporal
 
 
 @maybe_allow_in_graph
@@ -370,8 +370,10 @@ class BasicTransformerBlock(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        skip_spatial, self.spatial_count = if_skip_spatial(int(org_timestep[0]), self.spatial_count, self.block_idx)
-        if skip_spatial:
+        broadcast_spatial, self.spatial_count = if_broadcast_spatial(
+            int(org_timestep[0]), self.spatial_count, self.block_idx
+        )
+        if broadcast_spatial:
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -412,7 +414,7 @@ class BasicTransformerBlock(nn.Module):
             elif self.norm_type == "ada_norm_single":
                 attn_output = gate_msa * attn_output
 
-            if enable_skip():
+            if enable_pab():
                 self.set_spatial_last(attn_output)
 
         hidden_states = attn_output + hidden_states
@@ -425,8 +427,8 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Cross-Attention
         if self.attn2 is not None:
-            skip_cross, self.cross_count = if_skip_cross(int(org_timestep[0]), self.cross_count)
-            if skip_cross:
+            broadcast_cross, self.cross_count = if_broadcast_cross(int(org_timestep[0]), self.cross_count)
+            if broadcast_cross:
                 hidden_states = hidden_states + self.cross_last
             else:
                 if self.norm_type == "ada_norm":
@@ -452,7 +454,7 @@ class BasicTransformerBlock(nn.Module):
                     **cross_attention_kwargs,
                 )
 
-                if enable_skip():
+                if enable_pab():
                     self.set_cross_last(attn_output)
 
                 hidden_states = attn_output + hidden_states
@@ -661,8 +663,8 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        skip_temporal, self.count = if_skip_temporal(int(org_timestep[0]), self.count)
-        if skip_temporal:
+        broadcast_temporal, self.count = if_broadcast_temporal(int(org_timestep[0]), self.count)
+        if broadcast_temporal:
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -708,7 +710,7 @@ class BasicTransformerBlock_(nn.Module):
             elif self.use_ada_layer_norm_single:
                 attn_output = gate_msa * attn_output
 
-            if enable_skip():
+            if enable_pab():
                 self.last_out = attn_output
 
         hidden_states = attn_output + hidden_states

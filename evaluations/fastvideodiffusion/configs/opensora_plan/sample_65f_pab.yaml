@@ -12,14 +12,14 @@ num_sampling_steps: 150
 enable_tiling: True
 
 # skip
-spatial_skip: True
+spatial_broadcast: True
 spatial_threshold: [100, 800]
 spatial_gap: 2
 spatial_block: [0, 28]
-temporal_skip: True
+temporal_broadcast: True
 temporal_threshold: [100, 800]
 temporal_gap: 4
-cross_skip: True
+cross_broadcast: True
 cross_threshold: [100, 850]
 cross_gap: 6
 # diffusion_skip: True

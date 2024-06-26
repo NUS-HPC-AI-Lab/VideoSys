@@ -58,7 +58,7 @@ To efficiently use the Pyramid Attention Broadcast (PAB) mechanism, configure th
 
 #### Parameters
 
-- **spatial_skip**: Enable or disable broadcasting for spatial attention.
+- **spatial_broadcast**: Enable or disable broadcasting for spatial attention.
   - Type: `True` or `False`
 
 - **spatial_threshold**: Set the range of diffusion steps within which spatial attention is applied.
@@ -70,7 +70,7 @@ To efficiently use the Pyramid Attention Broadcast (PAB) mechanism, configure th
 - **spatial_block**: Range of steps where spatial attention broadcasting is active.
   - Format: `[start_step, end_step]`
 
-- **temporal_skip**: Enable or disable broadcasting for temporal attention.
+- **temporal_broadcast**: Enable or disable broadcasting for temporal attention.
   - Type: `True` or `False`
 
 - **temporal_threshold**: Set the range of diffusion steps within which temporal attention is applied.
@@ -79,7 +79,7 @@ To efficiently use the Pyramid Attention Broadcast (PAB) mechanism, configure th
 - **temporal_gap**: Number of steps to skip during broadcasting for temporal attention.
   - Type: Integer
 
-- **cross_skip**: Enable or disable broadcasting for cross-modal attention.
+- **cross_broadcast**: Enable or disable broadcasting for cross-modal attention.
   - Type: `True` or `False`
 
 - **cross_threshold**: Set the range of diffusion steps within which cross-modal attention is applied.
@@ -91,16 +91,16 @@ To efficiently use the Pyramid Attention Broadcast (PAB) mechanism, configure th
 #### Example Configuration
 
 ```yaml
-spatial_skip: True
+spatial_broadcast: True
 spatial_threshold: [100, 800]
 spatial_gap: 2
 spatial_block: [0, 28]
 
-temporal_skip: True
+temporal_broadcast: True
 temporal_threshold: [100, 800]
 temporal_gap: 4
 
-cross_skip: True
+cross_broadcast: True
 cross_threshold: [80, 900]
 cross_gap: 7
 ```
@@ -108,18 +108,18 @@ cross_gap: 7
 #### Explanation
 
 - **Spatial Attention**:
-  - Broadcasting enabled (`spatial_skip: True`)
+  - Broadcasting enabled (`spatial_broadcast: True`)
   - Applied within the threshold range of 100 to 800
   - Skips every 2 steps (`spatial_gap: 2`)
   - Active within the first 28 steps (`spatial_block: [0, 28]`)
 
 - **Temporal Attention**:
-  - Broadcasting enabled (`temporal_skip: True`)
+  - Broadcasting enabled (`temporal_broadcast: True`)
   - Applied within the threshold range of 100 to 800
   - Skips every 4 steps (`temporal_gap: 4`)
 
 - **Cross-Modal Attention**:
-  - Broadcasting enabled (`cross_skip: True`)
+  - Broadcasting enabled (`cross_broadcast: True`)
   - Applied within the threshold range of 80 to 900
   - Skips every 7 steps (`cross_gap: 7`)
 

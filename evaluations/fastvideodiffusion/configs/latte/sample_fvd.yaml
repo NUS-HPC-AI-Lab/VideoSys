@@ -25,14 +25,14 @@ enable_temporal_attentions: True
 enable_vae_temporal_decoder: True # use temporal vae decoder from SVD, maybe reduce the video flicker (It's not widely tested)
 
 # fvd
-spatial_skip: True
+spatial_broadcast: True
 spatial_threshold: [100, 800]
 spatial_gap: 2
 spatial_block: [0, 28]
-temporal_skip: True
+temporal_broadcast: True
 temporal_threshold: [100, 800]
 temporal_gap: 4
-cross_skip: True
+cross_broadcast: True
 cross_threshold: [80, 900]
 cross_gap: 7
 # diffusion_skip: False

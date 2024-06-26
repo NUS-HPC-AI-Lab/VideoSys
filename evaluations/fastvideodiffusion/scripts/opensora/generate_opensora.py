@@ -20,8 +20,8 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from evaluations.fastvideodiffusion.scripts.utils import load_eval_prompts
+from opendit.core.pab_mgr import set_pab_manager
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
-from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
@@ -69,16 +69,16 @@ def main(args):
     set_seed(seed=args.seed)
 
     # == init fastvideodiffusion ==
-    set_skip_manager(
+    set_pab_manager(
         steps=args.num_sampling_steps,
-        cross_skip=args.cross_skip,
+        cross_broadcast=args.cross_broadcast,
         cross_threshold=args.cross_threshold,
         cross_gap=args.cross_gap,
-        spatial_skip=args.spatial_skip,
+        spatial_broadcast=args.spatial_broadcast,
         spatial_threshold=args.spatial_threshold,
         spatial_gap=args.spatial_gap,
         spatial_block=args.spatial_block,
-        temporal_skip=args.temporal_skip,
+        temporal_broadcast=args.temporal_broadcast,
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
@@ -365,18 +365,18 @@ if __name__ == "__main__":
     parser.add_argument("--camera-motion", default=None, type=str, help="camera motion")
 
     # skip
-    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    parser.add_argument("--spatial_broadcast", action="store_true", help="Enable spatial attention skip")
     parser.add_argument(
         "--spatial_threshold", type=int, nargs=2, default=[540, 920], help="Spatial attention threshold"
     )
     parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
     parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
-    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument("--temporal_broadcast", action="store_true", help="Enable temporal attention skip")
     parser.add_argument(
         "--temporal_threshold", type=int, nargs=2, default=[540, 960], help="Temporal attention threshold"
     )
     parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
-    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_broadcast", action="store_true", help="Enable cross attention skip")
     parser.add_argument("--cross_threshold", type=int, nargs=2, default=[540, 960], help="Cross attention threshold")
     parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
 

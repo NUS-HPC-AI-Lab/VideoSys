@@ -13,7 +13,7 @@ from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
-from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 from opendit.diffusion.gaussian_diffusion import _extract_into_tensor
 
 

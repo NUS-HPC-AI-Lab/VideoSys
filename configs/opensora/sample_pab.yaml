@@ -31,16 +31,16 @@ prompt: [
 
 # speedup
 flash_attn: True
+enable_t5_speedup: True
 
 # pab
-spatial_skip: True
+spatial_broadcast: True
 spatial_threshold: [540, 940]
 spatial_gap: 2
-spatial_block: [0, 28]
-temporal_skip: True
+temporal_broadcast: True
 temporal_threshold: [540, 940]
 temporal_gap: 4
-cross_skip: True
+cross_broadcast: True
 cross_threshold: [540, 940]
 cross_gap: 6
 # diffusion_skip: True

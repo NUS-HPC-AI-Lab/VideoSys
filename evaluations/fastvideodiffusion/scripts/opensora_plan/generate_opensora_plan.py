@@ -32,8 +32,8 @@ from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
 from evaluations.fastvideodiffusion.scripts.utils import load_eval_prompts
+from opendit.core.pab_mgr import set_pab_manager
 from opendit.core.parallel_mgr import set_parallel_manager
-from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora_plan import LatteT2V, VideoGenPipeline, ae_stride_config, getae_wrapper
 from opendit.utils.utils import merge_args, set_seed
 
@@ -76,16 +76,16 @@ def main(args):
     set_parallel_manager(1, coordinator.world_size)
     device = f"cuda:{torch.cuda.current_device()}"
 
-    set_skip_manager(
+    set_pab_manager(
         steps=args.num_sampling_steps,
-        cross_skip=args.cross_skip,
+        cross_broadcast=args.cross_broadcast,
         cross_threshold=args.cross_threshold,
         cross_gap=args.cross_gap,
-        spatial_skip=args.spatial_skip,
+        spatial_broadcast=args.spatial_broadcast,
         spatial_threshold=args.spatial_threshold,
         spatial_gap=args.spatial_gap,
         spatial_block=args.spatial_block,
-        temporal_skip=args.temporal_skip,
+        temporal_broadcast=args.temporal_broadcast,
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
@@ -217,18 +217,18 @@ if __name__ == "__main__":
     parser.add_argument("--enable_tiling", action="store_true")
 
     # fvd
-    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    parser.add_argument("--spatial_broadcast", action="store_true", help="Enable spatial attention skip")
     parser.add_argument(
         "--spatial_threshold", type=int, nargs=2, default=[100, 800], help="Spatial attention threshold"
     )
     parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
     parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
-    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument("--temporal_broadcast", action="store_true", help="Enable temporal attention skip")
     parser.add_argument(
         "--temporal_threshold", type=int, nargs=2, default=[100, 800], help="Temporal attention threshold"
     )
     parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
-    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_broadcast", action="store_true", help="Enable cross attention skip")
     parser.add_argument("--cross_threshold", type=int, nargs=2, default=[100, 850], help="Cross attention threshold")
     parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
     # skip diffusion

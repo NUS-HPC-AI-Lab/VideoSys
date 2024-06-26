@@ -4,21 +4,20 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-SKIP_MANAGER = None
+PAB_MANAGER = None
 
 
-class SkipManager:
+class PABManager:
     def __init__(
         self,
         steps: int = 100,
-        cross_skip: bool = False,
+        cross_broadcast: bool = False,
         cross_threshold: list = [100, 900],
         cross_gap: int = 5,
-        spatial_skip: bool = False,
+        spatial_broadcast: bool = False,
         spatial_threshold: list = [100, 900],
         spatial_gap: int = 2,
-        spatial_layer_range: list = [0, 28],
-        temporal_skip: bool = False,
+        temporal_broadcast: bool = False,
         temporal_threshold: list = [100, 900],
         temporal_gap: int = 3,
         diffusion_skip: bool = False,
@@ -27,36 +26,37 @@ class SkipManager:
     ):
         self.steps = steps
 
-        self.cross_skip = cross_skip
+        self.cross_broadcast = cross_broadcast
         self.cross_threshold = cross_threshold
         self.cross_gap = cross_gap
 
-        self.spatial_skip = spatial_skip
+        self.spatial_broadcast = spatial_broadcast
         self.spatial_threshold = spatial_threshold
         self.spatial_gap = spatial_gap
-        self.spatial_layer_range = spatial_layer_range
 
-        self.temporal_skip = temporal_skip
+        self.temporal_broadcast = temporal_broadcast
         self.temporal_threshold = temporal_threshold
         self.temporal_gap = temporal_gap
 
         self.diffusion_skip = diffusion_skip
         self.diffusion_timestep_respacing = diffusion_timestep_respacing
         self.diffusion_skip_timestep = diffusion_skip_timestep
+
         if dist.get_rank() == 0:
             print(
-                f"\nInit SkipManager:\n\
-                steps={steps}\n\
-                cross_skip={cross_skip}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
-                spatial_skip={spatial_skip}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}, spatial_layer_range={spatial_layer_range}\n\
-                temporal_skip={temporal_skip}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n\
-                diffusion_skip={diffusion_skip}, diffusion_timestep_respacing={diffusion_timestep_respacing}\n\n",
+                f"\n\
+Init SkipManager:\n\
+    steps={steps}\n\
+    cross_broadcast={cross_broadcast}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
+    spatial_broadcast={spatial_broadcast}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}\n\
+    temporal_broadcast={temporal_broadcast}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n\
+\n",
                 end="",
             )
 
-    def if_skip_cross(self, timestep: int, count: int):
+    def if_broadcast_cross(self, timestep: int, count: int):
         if (
-            self.cross_skip
+            self.cross_broadcast
             and (timestep is not None)
             and (count % self.cross_gap != 0)
             and (self.cross_threshold[0] < timestep < self.cross_threshold[1])
@@ -67,9 +67,9 @@ class SkipManager:
         count = (count + 1) % self.steps
         return flag, count
 
-    def if_skip_temporal(self, timestep: int, count: int):
+    def if_broadcast_temporal(self, timestep: int, count: int):
         if (
-            self.temporal_skip
+            self.temporal_broadcast
             and (timestep is not None)
             and (count % self.temporal_gap != 0)
             and (self.temporal_threshold[0] < timestep < self.temporal_threshold[1])
@@ -80,13 +80,12 @@ class SkipManager:
         count = (count + 1) % self.steps
         return flag, count
 
-    def if_skip_spatial(self, timestep: int, count: int, block_idx: int):
+    def if_broadcast_spatial(self, timestep: int, count: int, block_idx: int):
         if (
-            self.spatial_skip
+            self.spatial_broadcast
             and (timestep is not None)
             and (count % self.spatial_gap != 0)
             and (self.spatial_threshold[0] < timestep < self.spatial_threshold[1])
-            and (self.spatial_layer_range[0] <= block_idx <= self.spatial_layer_range[1])
         ):
             flag = True
         else:
@@ -95,33 +94,31 @@ class SkipManager:
         return flag, count
 
 
-def set_skip_manager(
+def set_pab_manager(
     steps: int = 100,
-    cross_skip: bool = False,
+    cross_broadcast: bool = False,
     cross_threshold: list = [100, 900],
     cross_gap: int = 5,
-    spatial_skip: bool = False,
+    spatial_broadcast: bool = False,
     spatial_threshold: list = [100, 900],
     spatial_gap: int = 2,
-    spatial_block: list = [0, 28],
-    temporal_skip: bool = False,
+    temporal_broadcast: bool = False,
     temporal_threshold: list = [100, 900],
     temporal_gap: int = 3,
     diffusion_skip: bool = False,
     diffusion_timestep_respacing: list = None,
     diffusion_skip_timestep: list = None,
 ):
-    global SKIP_MANAGER
-    SKIP_MANAGER = SkipManager(
+    global PAB_MANAGER
+    PAB_MANAGER = PABManager(
         steps,
-        cross_skip,
+        cross_broadcast,
         cross_threshold,
         cross_gap,
-        spatial_skip,
+        spatial_broadcast,
         spatial_threshold,
         spatial_gap,
-        spatial_block,
-        temporal_skip,
+        temporal_broadcast,
         temporal_threshold,
         temporal_gap,
         diffusion_skip,
@@ -130,34 +127,40 @@ def set_skip_manager(
     )
 
 
-def enable_skip():
-    if SKIP_MANAGER is None:
+def enable_pab():
+    if PAB_MANAGER is None:
         return False
-    return SKIP_MANAGER.cross_skip or SKIP_MANAGER.spatial_skip or SKIP_MANAGER.temporal_skip
+    return PAB_MANAGER.cross_broadcast or PAB_MANAGER.spatial_broadcast or PAB_MANAGER.temporal_broadcast
 
 
-def if_skip_cross(timestep: int, count: int):
-    return SKIP_MANAGER.if_skip_cross(timestep, count)
+def if_broadcast_cross(timestep: int, count: int):
+    if not enable_pab():
+        return False, count
+    return PAB_MANAGER.if_broadcast_cross(timestep, count)
 
 
-def if_skip_temporal(timestep: int, count: int):
-    return SKIP_MANAGER.if_skip_temporal(timestep, count)
+def if_broadcast_temporal(timestep: int, count: int):
+    if not enable_pab():
+        return False, count
+    return PAB_MANAGER.if_broadcast_temporal(timestep, count)
 
 
-def if_skip_spatial(timestep: int, count: int, block_idx: int):
-    return SKIP_MANAGER.if_skip_spatial(timestep, count, block_idx)
+def if_broadcast_spatial(timestep: int, count: int, block_idx: int):
+    if not enable_pab():
+        return False, count
+    return PAB_MANAGER.if_broadcast_spatial(timestep, count, block_idx)
 
 
 def get_diffusion_skip():
-    return SKIP_MANAGER.diffusion_skip
+    return enable_pab() and PAB_MANAGER.diffusion_skip
 
 
 def get_diffusion_timestep_respacing():
-    return SKIP_MANAGER.diffusion_timestep_respacing
+    return PAB_MANAGER.diffusion_timestep_respacing
 
 
 def get_diffusion_skip_timestep():
-    return SKIP_MANAGER.diffusion_skip_timestep
+    return enable_pab() and PAB_MANAGER.diffusion_skip_timestep
 
 
 def space_timesteps(time_steps, time_bins):
