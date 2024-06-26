@@ -35,7 +35,7 @@ For more efficient broadcast and minimum influence to effect, we set varied broa
 ## Experimental Results
 Here are the results of our experiments, more results are shown in https://oahzxl.github.io/PyramidAttentionBroadcast/:
 
-![fastseq_exp](../figure/fastseq_exp.png)
+![fastseq_exp](../assets/figures/fastseq_exp.png)
 
 
 ## Usage

@@ -26,11 +26,11 @@ pre-commit install
 
 
 <p align="center">
-<img width="200px" alt="OpenDiT" src="./figure/logo.png?raw=true">
+<img width="200px" alt="OpenDiT" src="./assets/figures/logo.png?raw=true">
 </p>
 <p align="center"><b><big>An Easy, Fast and Memory-Efficient System for DiT Training and Inference</big></b></p>
 </p>
-<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://discord.gg/E9Dew2vd">[Discord]</a> | <a href="./figure/wechat.png">[WeChat]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a> | <a href="https://zhuanlan.zhihu.com/p/684457582">[Zhihu]</a> | <a href="https://mp.weixin.qq.com/s/IBb9vlo8hfYKrj9ztxkhjg">[Media]</a></p>
+<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://discord.gg/E9Dew2vd">[Discord]</a> | <a href="./assets/figures/wechat.png">[WeChat]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a> | <a href="https://zhuanlan.zhihu.com/p/684457582">[Zhihu]</a> | <a href="https://mp.weixin.qq.com/s/IBb9vlo8hfYKrj9ztxkhjg">[Media]</a></p>
 </p>
 
 ### Latest News 🔥
@@ -62,7 +62,7 @@ OpenDiT boasts the performance by the following techniques:
    - Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
 
 <p align="center">
-<img width="600px" alt="end2end" src="./figure/end2end.png">
+<img width="600px" alt="end2end" src="./assets/figures/end2end.png">
 </p>
 
 Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/)
@@ -112,18 +112,31 @@ OpenDiT fully supports the following models, including training and inference, w
 | Model | Train | Inference | Optimize | Usage |
 | ------ | :------: | :------: | :------: | :------: |
 | [DiT](https://github.com/facebookresearch/DiT)| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
-| [OpenSora](https://github.com/hpcaitech/Open-Sora)| ✅ | ✅ | ✅ | [Doc](./docs/opensora.md)
-| [Latte](https://github.com/Vchitect/Latte)| ❌ | ✅ | ❌ | [Doc](./docs/latte.md)
-| [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan)| ❌ | ✅ | ❌ | [Doc](./docs/opensora_plan.md)
+| [OpenSora](https://github.com/hpcaitech/Open-Sora)| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
+| [Latte](https://github.com/Vchitect/Latte)| ❌ | ✅ | ✅ | [Doc](./docs/latte.md)
+| [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan)| ❌ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
 
 ## Technique Overview
 
+### PAB[[[blog](https://arxiv.org/abs/2403.10266)][doc](./docs/pab.md)]
+
+Pyramid Attention Broadcast (PAB) is the first approach to achieve real-time DiT-based video generation, delivering lossless quality without requiring any training.
+
+By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including Open-Sora, Open-Sora-Plan, and Latte.
+
+Notably, as a training-free approach, PAB can enpower any future DiT-based video generation models with real-time capabilities.
+
+![PAB_compare](./assets/videos/pab_compare.mp4)
+
+See its detail and usage [here](./docs/pab.md).
+
+----
+
 ### DSP [[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)]
 
-![dsp_overview](./figure/dsp_overview.png)
+![dsp_overview](./assets/figures/dsp_overview.png)
 
-
-DSP (Dynamic Sequence Parallelism) is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
+Dynamic Sequence Parallelism (DSP) is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
 
 It achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism ([DeepSpeed Ulysses](https://arxiv.org/abs/2309.14509)). For a 10s (80 frames) of 512x512 video, the inference latency of OpenSora is:
 
@@ -135,40 +148,15 @@ See its detail and usage [here](./docs/dsp.md).
 
 ----
 
-### FastSeq [[doc](./docs/fastseq.md)]
-
-![fastseq_overview](./figure/fastseq_overview.png)
-
-FastSeq is a novel sequence parallelism for large sequences and small-scale parallelism.
-
-It focuses on minimizing sequence communication by employing only two communication operators for every transformer layer, and we an async ring to overlap AllGather communication with qkv computation. See its detail and usage [here](./docs/fastseq.md).
-
-### PAB[[doc](./docs/pab.md)]
-
-[image]
-
-PAB is a novel training-free algorithm that significantly accelerates DiT-based video generation.
-
-PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including [Open-Sora](https://github.com/hpcaitech/Open-Sora), [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan), and [Latte](https://github.com/Vchitect/Latte), by leveraging Pyramid Attention Broadcast(PAB) to mitigate redundant attention computation. See its detail and usage [here](./docs/pab.md).
-
-For a xxs(xx frames) of 512x512 video, the inference latency of OpenSora is:
-
-| Method | 1xH800 | 8xH800 | 8xH800 |
-| ------ | ------ | ------ | ------ |
-| Latency(s) | |  |  |
-
-
-
-
 ## DiT Reproduction Result
 
 We have trained DiT using the origin method with OpenDiT to verify our accuracy. We have trained the model from scratch on ImageNet for 80k steps on 8xA100. Here are some results generated by our trained DiT:
 
-![Results](./figure/dit_results.png)
+![Results](./assets/figures/dit_results.png)
 
 Our loss also aligns with the results listed in the paper:
 
-![Loss](./figure/dit_loss.png)
+![Loss](./assets/figures/dit_loss.png)
 
 To reproduce our results, you can follow our [instruction](./docs/dit.md/#reproduction
 ).
