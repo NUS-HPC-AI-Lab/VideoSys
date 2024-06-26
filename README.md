@@ -90,7 +90,7 @@ OpenDiT fully supports the following models, including training and inference, w
 
 Real-Time Video Generation with Pyramid Attention Broadcast
 
-Authors: [Xuanlei Zhao](https://oahzxl.github.io/)\*,  [Xiaolong Jin]()\*,  [Kai Wang](https://kaiwang960112.github.io/)\*, and [Yang You](https://www.comp.nus.edu.sg/~youy/). (\* indicates equal contribution)
+Authors: [Xuanlei Zhao](https://oahzxl.github.io/)$^{1*}$,  [Xiaolong Jin]()$^{2*}$,  [Kai Wang](https://kaiwang960112.github.io/)$^{1*}$, and [Yang You](https://www.comp.nus.edu.sg/~youy/)$^1$. (\* indicates equal contribution)
 
 ![method](./assets/figures/pab_method.png)
 
