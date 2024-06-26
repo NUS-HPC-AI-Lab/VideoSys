@@ -14,14 +14,14 @@ bash scripts/opensora/sample.sh
 torchrun --standalone --nproc_per_node=1 scripts/opensora/sample.py --config configs/opensora/sample.yaml
 ```
 
-We disable all speedup methods by default. You can change settings in yaml config. Here are details of some key arguments for training:
+We disable some speedup methods by default. You can change settings in yaml config. Here are details of some key arguments:
 
 - `--nproc_per_node`: The GPU number you want to use for the current node. Multiple GPUs inference will enable Dynamic Sequence Parallel.
 - `--dtype`: The data type for sampling. The default value is `bf16`.
 - `--enable_flashattn`: Whether enable the FlashAttention. The default value is `False`. Recommend to enable.
 - `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the text encoder. The default value is `False`. Requires apex install.
 
-### Inference with Pyramid Attention Broadcast (PAB)
+### Inference with [PAB](./docs/pab.md)
 
 PAB provides more efficient inference at the cost of minor quality loss. You can run as follows:
 
