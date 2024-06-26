@@ -92,7 +92,7 @@ Real-Time Video Generation with Pyramid Attention Broadcast
 
 Authors: [Xuanlei Zhao](https://oahzxl.github.io/)$^{1*}$,  [Xiaolong Jin]()$^{2*}$,  [Kai Wang](https://kaiwang960112.github.io/)$^{1*}$, and [Yang You](https://www.comp.nus.edu.sg/~youy/)$^1$. (\* indicates equal contribution)
 
-$^1$ National University of Singapore, $^2$ Purdue University
+$^{1}$National University of Singapore, $^{2}$Purdue University
 
 ![method](./assets/figures/pab_method.png)
 
