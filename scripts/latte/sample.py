@@ -184,8 +184,7 @@ def main(args):
         vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, scheduler=scheduler, transformer=transformer_model
     ).to(device)
 
-    if not os.path.exists(args.save_img_path):
-        os.makedirs(args.save_img_path)
+    os.makedirs(args.save_img_path, exist_ok=True)
 
     # video_grids = []
     for num_prompt, prompt in enumerate(args.text_prompt):
@@ -204,10 +203,12 @@ def main(args):
         ).video
         if coordinator.is_master():
             if videos.shape[1] == 1:
-                save_image(videos[0][0], args.save_img_path + prompt.replace(" ", "_") + ".png")
+                save_image(videos[0][0], args.save_img_path + prompt[:30].replace(" ", "_") + ".png")
             else:
                 imageio.mimwrite(
-                    args.save_img_path + prompt.replace(" ", "_") + "_%04d" % args.run_time + ".mp4", videos[0], fps=8
+                    args.save_img_path + prompt[:30].replace(" ", "_") + "_%04d" % args.run_time + ".mp4",
+                    videos[0],
+                    fps=8,
                 )
 
 
