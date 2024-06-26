@@ -1,7 +1,5 @@
 # OpenSora
 
-https://github.com/hpcaitech/Open-Sora
-
 We support text-to-video generation for OpenSora. Open-Sora is an open-source initiative dedicated to efficiently reproducing OpenAI's Sora which uses `DiT` model with `Spatial-Temporal Attention`.
 
 
@@ -28,9 +26,7 @@ We disable all speedup methods by default. Here are details of some key argument
 - `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
 - `--mixed_precision`: The data type for mixed precision training. The default value is `bf16`.
 - `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to enable.
-- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. This speeds up the training process. The default value is `False`. Recommend to enable it.
 - `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
-- `--enable_modulate_kernel`: Whether enable the modulate kernel optimization. This speeds up the training process. The default value is `False`. This kernel will cause NaN under some circumstances. So we recommend to disable it for now.
 - `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the training process. The default value is `False`. Requires apex install.
 - `--load`: Load previous saved checkpoint dir and continue training.
 
@@ -62,26 +58,17 @@ You can perform video inference as follows. Model weights can be downloaded [her
 # Use script
 bash scripts/opensora/sample_opensora.sh
 # Use command line
-torchrun --standalone --nproc_per_node=2 scripts/opensora/sample_opensora.py \
-    --model_time_scale 1 \
-    --model_space_scale 1 \
-    --image_size 512 512 \
-    --num_frames 16 \
-    --fps 8 \
-    --dtype fp16 \
-    --model_pretrained_path "ckpt_path"
+torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample.yaml
 ```
 
 We disable all speedup methods by default. Here are details of some key arguments for training:
 
 - `--nproc_per_node`: The GPU number you want to use for the current node.
-- `--dtype`: The data type for sampling. The default value is `fp32`.
-- `--enable_layernorm_kernel`: Whether enable the layernorm kernel optimization. The default value is `False`. Recommend to enable it.
+- `--dtype`: The data type for sampling. The default value is `bf16`.
 - `--enable_flashattn`: Whether enable the FlashAttention. The default value is `False`. Recommend to enable.
 - `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the text encoder. The default value is `False`. Requires apex install.
-- `--sequence_parallel_size`: Whether enable sequence parallel. This speeds up the sampling latency. The default value is `False`.
 
-Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`--ckpt /epochXX-global_stepXX`) instead of ema model (`--ckpt /epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
+Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`/epochXX-global_stepXX`) instead of ema model (`/epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
 
 
 ### Low-Latency Inference with DSP
@@ -90,18 +77,7 @@ You can perform low-latency video inference using our Dynamic Sequence Parallel 
 
 TODO edit here
 ```shell
-torchrun --standalone --nproc_per_node=8 scripts/opensora/sample_opensora.py \
-    --model_time_scale 1 \
-    --model_space_scale 1 \
-    --image_size 512 512 \
-    --num_frames 80 \
-    --fps 8 \
-    --dtype fp16 \
-    --sequence_parallel_size 8 \
-    --enable_flashattn \
-    --enable_layernorm_kernel \
-    --text_speedup \
-    --model_pretrained_path "ckpt_path"
+torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample_speedup.yaml
 ```
 
 ### Data Preparation

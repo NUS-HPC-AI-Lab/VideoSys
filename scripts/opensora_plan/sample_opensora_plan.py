@@ -134,7 +134,6 @@ def main(args):
         scheduler = DEISMultistepScheduler()
     elif args.sample_method == "KDPM2AncestralDiscrete":  #########
         scheduler = KDPM2AncestralDiscreteScheduler()
-
     videogen_pipeline = VideoGenPipeline(
         vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, scheduler=scheduler, transformer=transformer_model
     ).to(device=device)

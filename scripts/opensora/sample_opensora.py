@@ -1,13 +1,3 @@
-# Adapted from OpenSora
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# --------------------------------------------------------
-# References:
-# OpenSora: https://github.com/hpcaitech/Open-Sora
-# --------------------------------------------------------
-
-
 import argparse
 import os
 import time
@@ -319,6 +309,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, default=None)
 
     # general
     parser.add_argument("--config", default=None, type=str, help="path to config yaml")
