@@ -118,15 +118,15 @@ OpenDiT fully supports the following models, including training and inference, w
 
 ## Technique Overview
 
-### PAB[[[blog](https://arxiv.org/abs/2403.10266)][doc](./docs/pab.md)]
+### PAB [[blog](https://arxiv.org/abs/2403.10266)][[doc](./docs/pab.md)]
 
-Pyramid Attention Broadcast (PAB) is the first approach to achieve real-time DiT-based video generation, delivering lossless quality without requiring any training.
+Pyramid Attention Broadcast (PAB) is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>.
 
 By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including Open-Sora, Open-Sora-Plan, and Latte.
 
 Notably, as a training-free approach, PAB can enpower any future DiT-based video generation models with real-time capabilities.
 
-![PAB_compare](./assets/videos/pab_compare.mp4)
+![PAB_compare](./assets/figures/pab_method.png)
 
 See its detail and usage [here](./docs/pab.md).
 
