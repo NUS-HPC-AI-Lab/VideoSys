@@ -19,7 +19,7 @@ from colossalai.cluster import DistCoordinator
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from evaluations.fastvideodiffusion.scripts.utils import load_eval_prompts
+from evaluations.pab.scripts.utils import load_eval_prompts
 from opendit.core.pab_mgr import set_pab_manager
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
 from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing
@@ -77,7 +77,6 @@ def main(args):
         spatial_broadcast=args.spatial_broadcast,
         spatial_threshold=args.spatial_threshold,
         spatial_gap=args.spatial_gap,
-        spatial_block=args.spatial_block,
         temporal_broadcast=args.temporal_broadcast,
         temporal_threshold=args.temporal_threshold,
         temporal_gap=args.temporal_gap,
@@ -370,7 +369,6 @@ if __name__ == "__main__":
         "--spatial_threshold", type=int, nargs=2, default=[540, 920], help="Spatial attention threshold"
     )
     parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
-    parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
     parser.add_argument("--temporal_broadcast", action="store_true", help="Enable temporal attention skip")
     parser.add_argument(
         "--temporal_threshold", type=int, nargs=2, default=[540, 960], help="Temporal attention threshold"
@@ -379,8 +377,6 @@ if __name__ == "__main__":
     parser.add_argument("--cross_broadcast", action="store_true", help="Enable cross attention skip")
     parser.add_argument("--cross_threshold", type=int, nargs=2, default=[540, 960], help="Cross attention threshold")
     parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
-
-    # skip diffusion
     parser.add_argument(
         "--diffusion_skip",
         action="store_true",
