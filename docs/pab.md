@@ -13,7 +13,7 @@ We introduce Pyramid Attention Broadcast (PAB), the first approach that achieves
 
 ## Insights
 
-![method](./assets/figures/pab_motivation.png)
+![method](../assets/figures/pab_motivation.png)
 
 Our study reveals two key insights of three **attention mechanisms** within video diffusion transformers:
 - First, attention differences across time steps exhibit a U-shaped pattern, with significant variations occurring during the first and last 15% of steps, while the middle 70% of steps show very stable, minor differences.
@@ -24,7 +24,7 @@ Our study reveals two key insights of three **attention mechanisms** within vide
 
 ## Pyramid Attention Broadcast (PAB) Mechanism
 
-![method](./assets/figures/pab_method.png)
+![method](../assets/figures/pab_method.png)
 
 Building on these insights, we propose a **pyramid attention broadcast(PAB)** mechanism to minimize unnecessary computations and optimize the utility of each attention module, as shown in Figure[xx figure] below.
 
@@ -37,7 +37,7 @@ For more efficient broadcast and minimum influence to effect, we set varied broa
 ## Experimental Results
 Here are the results of our experiments, more results are shown in https://oahzxl.github.io/PAB:
 
-![fastseq_exp](../assets/figures/pab_vis.png)
+![pab_vis](../assets/figures/pab_vis.png)
 
 
 ## Usage
