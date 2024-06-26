@@ -10,7 +10,7 @@ You can perform video inference for Latte-1 as follows.
 # Use script
 bash scripts/latte/sample.sh
 # Use command line
-torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py --config configs/opensora_plan/sample.yaml
+torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py --config configs/latte/sample.yaml
 ```
 
 You can change settings in yaml config. Here are details of some key arguments:

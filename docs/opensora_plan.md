@@ -25,7 +25,7 @@ PAB provides more efficient inference at the cost of minor quality loss. You can
 # Use script
 bash scripts/opensora_plan/sample_pab.sh
 # Use command line
-torchrun --standalone --nproc_per_node=8 scripts/opensora/sample.py --config configs/opensora/sample_pab.yaml
+torchrun --standalone --nproc_per_node=8 scripts/opensora_plan/sample.py --config configs/opensora_plan/sample_65f_pab.yaml
 ```
 
 You can change settings in yaml config. Here are details of some key arguments for training:
