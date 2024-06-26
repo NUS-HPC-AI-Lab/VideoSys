@@ -19,7 +19,7 @@ class ParallelManager(ProcessGroupMesh):
         self.enable_sp = sp_size > 1
 
 
-def set_parallel_manager(dp_size, sp_size, dp_axis, sp_axis):
+def set_parallel_manager(dp_size, sp_size, dp_axis=0, sp_axis=1):
     global PARALLEL_MANAGER
     PARALLEL_MANAGER = ParallelManager(dp_size, sp_size, dp_axis, sp_axis)
 
@@ -44,7 +44,9 @@ def get_sequence_parallel_rank():
     return PARALLEL_MANAGER.sp_rank
 
 
-def use_sequence_parallelism():
+def enable_sequence_parallel():
+    if PARALLEL_MANAGER is None:
+        return False
     return PARALLEL_MANAGER.enable_sp
 
 

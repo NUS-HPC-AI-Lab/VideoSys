@@ -2,7 +2,7 @@
 
 paper: https://arxiv.org/abs/2403.10266
 
-![dsp_overview](../figure/dsp_overview.png)
+![dsp_overview](../assets/figures/dsp_overview.png)
 
 
 DSP (Dynamic Sequence Parallelism) is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
@@ -17,9 +17,9 @@ It achieves **3x** speed for training and **2x** speed for inference in OpenSora
 
 The following is DSP's end-to-end throughput for training of OpenSora:
 
-![dsp_overview](../figure/dsp_exp.png)
+![dsp_overview](../assets/figures/dsp_exp.png)
 
 
 ### Usage
 
-DSP is currently supported for: OpenSora[[Usage](./opensora.md#low-latency-inference-with-dsp)].
+DSP is currently supported for: OpenSora, OpenSoraPlan and Latte. To enable DSP, you just need to use multiple GPUs with `--nproc_per_node=X`, where `X` is the number of GPUs.

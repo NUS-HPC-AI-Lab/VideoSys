@@ -163,3 +163,9 @@ coverage.xml
 # ignore testmon and coverage files
 .coverage
 .testmondata*
+
+pretrained
+samples
+cache_dir
+taming
+evaluations/pab/datasets/
