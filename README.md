@@ -6,7 +6,7 @@
 
 ### Latest News 🔥
 - [2024/06] 🔥<b>Propose Pyramid Attention Broadcast (PAB)[[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.</b>
-- [2024/06] Support Open-Sora, Open-Sora-Plan and Latte.
+- [2024/06] Support Open-Sora-Plan and Latte.
 - [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism.
 - [2024/03] Support Open-Sora: Democratizing Efficient Video Production for All.
 - [2024/02] Release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
