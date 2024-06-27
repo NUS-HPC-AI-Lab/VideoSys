@@ -67,7 +67,7 @@ pip install colossalai==0.3.7
 Install OpenDiT:
 
 ```shell
-git clone https://github.com/oahzxl/OpenDiT
+git clone https://github.com/NUS-HPC-AI-Lab/OpenDiT
 cd OpenDiT
 pip install -e .
 ```
