@@ -3,15 +3,13 @@
 </p>
 <p align="center"><b><big>An Easy, Fast and Memory-Efficient System for DiT Training and Inference</big></b></p>
 </p>
-<p align="center"><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT">[Homepage]</a> | <a href="https://discord.gg/E9Dew2vd">[Discord]</a> | <a href="./assets/figures/wechat.png">[WeChat]</a> | <a href="https://twitter.com/YangYou1991/status/1762447718105170185">[Twitter]</a> | <a href="https://zhuanlan.zhihu.com/p/684457582">[Zhihu]</a> | <a href="https://mp.weixin.qq.com/s/IBb9vlo8hfYKrj9ztxkhjg">[Media]</a></p>
-</p>
 
 ### Latest News 🔥
 - [2024/06] 🔥<b>Propose Pyramid Attention Broadcast (PAB)[[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.</b>
 - [2024/06] Support OpenSora, Open-Sora-Plan and Latte.
 - [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism.
 - [2024/03] Support [OpenSora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
-- [2024/02] Officially release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
+- [2024/02] Release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
 # About
 
