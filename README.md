@@ -17,31 +17,7 @@
 
 OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer (DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
 
-OpenDiT has been adopted by: [OpenSora](https://github.com/hpcaitech/Open-Sora), [MiniSora](https://github.com/mini-sora/minisora), [SpeeDiT](https://github.com/1zeryu/SpeeDiT).
-
-OpenDiT boasts the performance by the following techniques:
-
-1. Up to 80% speedup and 50% memory reduction on GPU
-   - Kernel optimization including FlashAttention, Fused AdaLN, and Fused layernorm kernel.
-   - Hybrid parallelism methods including ZeRO, Gemini, and DDP. Also, sharding the ema model further reduces the memory cost.
-2. FastSeq: A novel sequence parallelism method
-   - Specially designed for DiT-like workloads where the activation size is large but the parameter size is small.
-   - Up to 48% communication save for intra-node sequence parallel.
-   - Break the memory limitation of a single GPU and reduce the overall training and inference time.
-3. Ease of use
-   - Huge performance improvement gains with a few line changes
-   - Users do not need to know the implementation of distributed training.
-4. Complete pipeline of text-to-image and text-to-video generation
-   - Researchers and engineers can easily use and adapt our pipeline to real-world applications without modifying the parallel part.
-   - Verify the accuracy of OpenDiT with text-to-image training on ImageNet and release checkpoint.
-
-<p align="center">
-<img width="600px" alt="end2end" src="./assets/figures/end2end.png">
-</p>
-
-Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/)
-
-OpenDiT will continue to integrate more open-source DiT models. Stay tuned for upcoming enhancements and additional features!
+OpenDiT will continue to integrate more open-source DiT models and techniques. Stay tuned for upcoming enhancements and additional features!
 
 ## Installation
 
@@ -137,7 +113,7 @@ To reproduce our results, you can follow our [instruction](./docs/dit.md/#reprod
 
 ## Acknowledgement
 
-We extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/) for providing valuable insights into algorithms and aiding in the development of the video pipeline. Additionally, we acknowledge [Shenggan Cheng](https://shenggan.github.io/) for his guidance on code optimization and parallelism. Our appreciation also goes to [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice and contributions.
+Thanks [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/), [Xiaolong Jin](), [Kai Wang](https://kaiwang960112.github.io/) for their contribution to the repo. We also extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/) for providing valuable insights into algorithms and aiding in the development of the video pipeline. Additionally, we acknowledge [Shenggan Cheng](https://shenggan.github.io/) for his guidance on code optimization and parallelism. Our appreciation also goes to [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice and contributions.
 
 This codebase borrows from:
 * [Open-Sora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
