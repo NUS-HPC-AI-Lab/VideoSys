@@ -184,7 +184,6 @@ class STDiT3Block(nn.Module):
         )
 
         if skip_mlp:
-            # TODO how to get last timestep
             x_m_s = mlp_outputs.get((previous_timestep, self.block_idx), None) if mlp_outputs is not None else None
             if x_m_s is not None:
                 print(f"Using stored MLP output | time {previous_timestep} | block {self.block_idx}")
@@ -366,8 +365,8 @@ class STDiT3(PreTrainedModel):
             ]
         )
         # BUG mlp outputs for skip
-        self.mlp_outputs = {}
-
+        self.spatial_mlp_outputs = {}
+        self.temporal_mlp_outputs = {}
         # final layer
         self.final_layer = T2IFinalLayer(config.hidden_size, np.prod(self.patch_size), self.out_channels)
 
@@ -492,7 +491,7 @@ class STDiT3(PreTrainedModel):
             # x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
             # x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
-            x, self.mlp_outputs = auto_grad_checkpoint(
+            x, self.spatial_mlp_outputs = auto_grad_checkpoint(
                 spatial_block,
                 x,
                 y,
@@ -503,10 +502,11 @@ class STDiT3(PreTrainedModel):
                 T,
                 S,
                 timestep,
-                mlp_outputs=self.mlp_outputs,
+                mlp_outputs=self.spatial_mlp_outputs,
                 all_timesteps=all_timesteps,
             )
-            x, self.mlp_outputs = auto_grad_checkpoint(
+
+            x, self.temporal_mlp_outputs = auto_grad_checkpoint(
                 temporal_block,
                 x,
                 y,
@@ -517,7 +517,7 @@ class STDiT3(PreTrainedModel):
                 T,
                 S,
                 timestep,
-                mlp_outputs=self.mlp_outputs,
+                mlp_outputs=self.temporal_mlp_outputs,
                 all_timesteps=all_timesteps,
             )
 

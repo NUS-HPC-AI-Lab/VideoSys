@@ -32,7 +32,7 @@ from opendit.models.opensora.inference_utils import (
     dframe_to_frame,
     extract_json_from_prompts,
     extract_prompts_loop,
-    get_save_path_name_mse,
+    get_save_path_name,
     load_prompts,
     merge_prompt,
     prepare_multi_resolution_info,
@@ -204,7 +204,7 @@ def main(args):
         for k in range(num_sample):
             # == prepare save paths ==
             save_paths = [
-                get_save_path_name_mse(
+                get_save_path_name(
                     save_dir,
                     sample_idx=idx,
                     prompt=original_batch_prompts[idx],

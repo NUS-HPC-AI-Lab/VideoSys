@@ -43,8 +43,8 @@ mlp_skip: True
 mlp_threshold: [710, 760]
 mlp_gap: 1
 mlp_layer_range: [14, 15]
+mlp_skip_config: {588: [0, 1, 2, 3, 4], 724: [0, 1, 2, 3, 4], 820: [0, 1, 2, 3, 4]}
 # mlp_skip_config: {588: [0, 2, 4], 724: [0, 2, 4], 820: [0, 2, 4]}
-mlp_skip_config: {820: [0, 2, 4]}
 
 
 # skip diffusion
