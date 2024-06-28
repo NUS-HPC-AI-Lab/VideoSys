@@ -21,7 +21,7 @@ from tqdm import tqdm
 
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
-from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing
+from opendit.models.opensora import OpenSoraVAE_V1_2, RFLOW_mse, STDiT3_XL_2_mse, T5Encoder, text_preprocessing
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
     add_watermark,
@@ -129,7 +129,7 @@ def main(args):
     input_size = (num_frames, *image_size)
     latent_size = vae.get_latent_size(input_size)
     model = (
-        STDiT3_XL_2(
+        STDiT3_XL_2_mse(
             from_pretrained="hpcai-tech/OpenSora-STDiT-v3",
             qk_norm=True,
             enable_flash_attn=True,
@@ -145,7 +145,7 @@ def main(args):
     text_encoder.y_embedder = model.y_embedder  # HACK: for classifier-free guidance
 
     # == build scheduler ==
-    scheduler = RFLOW(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
+    scheduler = RFLOW_mse(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
 
     # ======================================================
     # inference

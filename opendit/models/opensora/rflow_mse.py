@@ -150,7 +150,7 @@ class RFlowScheduler:
         return timepoints * original_samples + (1 - timepoints) * noise
 
 
-class RFLOW:
+class RFLOW_mse:
     def __init__(
         self,
         num_sampling_steps=10,
@@ -260,13 +260,14 @@ class RFLOW:
             pred_cond, pred_uncond = pred.chunk(2, dim=0)
             v_pred = pred_uncond + guidance_scale * (pred_cond - pred_uncond)
 
+            dtype = model.x_embedder.proj.weight.dtype
             # Calculate MSE between current and previous MLP outputs
             if prev_spatial_mlp_outputs is not None and prev_temporal_mlp_outputs is not None:
                 spatial_mse = []
                 for (block_idx, current_output), (_, prev_output) in zip(spatial_mlp_outputs, prev_spatial_mlp_outputs):
                     l2_distance = F.mse_loss(current_output.float(), prev_output.float())
                     spatial_mse.append((block_idx, l2_distance.item()))
-                all_spatial_mse[int(t[0].item())] = spatial_mse
+                all_spatial_mse[int(t[0].to(dtype).item())] = spatial_mse
 
                 temporal_mse = []
                 for (block_idx, current_output), (_, prev_output) in zip(
@@ -274,7 +275,7 @@ class RFLOW:
                 ):
                     l2_distance = F.mse_loss(current_output.float(), prev_output.float())
                     temporal_mse.append((block_idx, l2_distance.item()))
-                all_temporal_mse[int(t[0].item())] = temporal_mse
+                all_temporal_mse[int(t[0].to(dtype).item())] = temporal_mse
 
                 print(f"Time step {i}, Spatial MSE: {spatial_mse}, Temporal MSE: {temporal_mse}")
 

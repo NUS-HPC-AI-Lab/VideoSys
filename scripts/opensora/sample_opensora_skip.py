@@ -21,7 +21,7 @@ from tqdm import tqdm
 
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
-from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing
+from opendit.models.opensora import OpenSoraVAE_V1_2, RFLOW_skip, STDiT3_XL_2_skip, T5Encoder, text_preprocessing
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
     add_watermark,
@@ -32,7 +32,7 @@ from opendit.models.opensora.inference_utils import (
     dframe_to_frame,
     extract_json_from_prompts,
     extract_prompts_loop,
-    get_save_path_name,
+    get_save_path_name_mse,
     load_prompts,
     merge_prompt,
     prepare_multi_resolution_info,
@@ -129,7 +129,7 @@ def main(args):
     input_size = (num_frames, *image_size)
     latent_size = vae.get_latent_size(input_size)
     model = (
-        STDiT3_XL_2(
+        STDiT3_XL_2_skip(
             from_pretrained="hpcai-tech/OpenSora-STDiT-v3",
             qk_norm=True,
             enable_flash_attn=True,
@@ -145,7 +145,7 @@ def main(args):
     text_encoder.y_embedder = model.y_embedder  # HACK: for classifier-free guidance
 
     # == build scheduler ==
-    scheduler = RFLOW(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
+    scheduler = RFLOW_skip(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
 
     # ======================================================
     # inference
@@ -173,7 +173,11 @@ def main(args):
     condition_frame_edit = args.condition_frame_edit
     align = args.align
 
-    save_dir = args.save_dir
+    # save_dir = args.save_dir
+    save_dir = os.path.join(
+        args.save_dir, ", ".join([f"{key}: {value}" for key, value in args.mlp_skip_config.items()])
+    )
+    print(f"save_dir | {save_dir}")
     os.makedirs(save_dir, exist_ok=True)
     prompt_as_path = args.prompt_as_path
 
@@ -200,7 +204,7 @@ def main(args):
         for k in range(num_sample):
             # == prepare save paths ==
             save_paths = [
-                get_save_path_name(
+                get_save_path_name_mse(
                     save_dir,
                     sample_idx=idx,
                     prompt=original_batch_prompts[idx],

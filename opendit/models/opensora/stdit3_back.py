@@ -115,7 +115,6 @@ class STDiT3Block(nn.Module):
         T=None,  # number of frames
         S=None,  # number of pixel patches
         timestep=None,
-        mlp_outputs=None,
     ):
         # prepare modulate parameters
         B, N, C = x.shape
@@ -177,15 +176,11 @@ class STDiT3Block(nn.Module):
                 self.last_cross = x_cross
             x = x + x_cross
 
-        # TODO: skip MLP self.temporal=True (time block)
-        skip_mlp, self.mlp_count, skip_next = if_skip_mlp(int(timestep[0]), self.mlp_count, self.block_idx)
+        # TODO: skip MLP
+        skip_mlp, self.mlp_count = if_skip_mlp(int(timestep[0]), self.mlp_count, self.block_idx)
         if skip_mlp:
-            x_m_s = mlp_outputs.get((int(timestep[0]) - 1, self.block_idx), None) if mlp_outputs is not None else None
-            if x_m_s is not None:
-                print(f"Using stored MLP output | time {int(timestep[0]) - 1} | block {self.block_idx}")
-            else:
-                print(f"No stored MLP output found | time {int(timestep[0]) - 1} | block {self.block_idx}")
-                x_m_s = self.last_mlp
+            x_m_s = self.last_mlp
+            print(f"skip mlp | time {int(timestep[0])} | block {self.block_idx}")
         else:
             # modulate (MLP)
             x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
@@ -201,14 +196,11 @@ class STDiT3Block(nn.Module):
             if x_mask is not None:
                 x_m_s_zero = gate_mlp_zero * x_m
                 x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
-            if skip_next:
-                if mlp_outputs is not None:
-                    mlp_outputs[(int(timestep[0]), self.block_idx)] = x_m_s
 
         # residual
         x = x + self.drop_path(x_m_s)
 
-        return x, mlp_outputs
+        return x
 
     def dynamic_switch(self, x, s, t, to_spatial_shard: bool):
         if to_spatial_shard:
@@ -360,8 +352,6 @@ class STDiT3(PreTrainedModel):
                 for i in range(config.depth)
             ]
         )
-        # BUG mlp outputs for skip
-        self.mlp_outputs = {}
 
         # final layer
         self.final_layer = T2IFinalLayer(config.hidden_size, np.prod(self.patch_size), self.out_channels)
@@ -482,15 +472,8 @@ class STDiT3(PreTrainedModel):
 
         # === blocks ===
         for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            # x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            # x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-
-            x, self.mlp_outputs = auto_grad_checkpoint(
-                spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep, mlp_outputs=self.mlp_outputs
-            )
-            x, self.mlp_outputs = auto_grad_checkpoint(
-                temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep, mlp_outputs=self.mlp_outputs
-            )
+            x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+            x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         if enable_sequence_parallel():
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
@@ -534,7 +517,7 @@ class STDiT3(PreTrainedModel):
         return x
 
 
-def STDiT3_XL_2(from_pretrained=None, **kwargs):
+def STDiT3_XL_2_skip(from_pretrained=None, **kwargs):
     if from_pretrained is not None and not os.path.isdir(from_pretrained):
         model = STDiT3.from_pretrained(from_pretrained, **kwargs)
     else:

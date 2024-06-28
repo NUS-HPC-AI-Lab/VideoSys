@@ -149,7 +149,7 @@ class RFlowScheduler:
         return timepoints * original_samples + (1 - timepoints) * noise
 
 
-class RFLOW:
+class RFLOW_skip:
     def __init__(
         self,
         num_sampling_steps=10,
@@ -230,6 +230,9 @@ class RFLOW:
             noise_added = noise_added | (mask == 1)
 
         progress_wrap = tqdm if progress else (lambda x: x)
+
+        dtype = model.x_embedder.proj.weight.dtype
+        all_timesteps = [int(t.to(dtype).item()) for t in timesteps]
         for i, t in progress_wrap(list(enumerate(timesteps))):
             # mask for adding noise
             if mask is not None:
@@ -247,8 +250,10 @@ class RFLOW:
             # classifier-free guidance
             z_in = torch.cat([z, z], 0)
             t = torch.cat([t, t], 0)
+
             # pred = model(z_in, t, **model_args).chunk(2, dim=1)[0]
-            output = model(z_in, t, **model_args)
+            output = model(z_in, t, all_timesteps, **model_args)
+
             pred = output.chunk(2, dim=1)[0]
             pred_cond, pred_uncond = pred.chunk(2, dim=0)
             v_pred = pred_uncond + guidance_scale * (pred_cond - pred_uncond)

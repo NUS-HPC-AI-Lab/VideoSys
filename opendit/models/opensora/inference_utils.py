@@ -59,6 +59,7 @@ def get_save_path_name(
         save_path = f"{save_path}-{k}"
     return save_path
 
+
 def get_eval_save_path_name(
     save_dir,
     id,  # add id parameter
@@ -72,6 +73,25 @@ def get_eval_save_path_name(
     if sample_name is None:
         sample_name = "" if prompt_as_path else "sample"
     save_path = os.path.join(save_dir, f"{id}")
+    if num_sample != 1:
+        save_path = f"{save_path}-{k}"
+    return save_path
+
+
+def get_save_path_name_mse(
+    save_dir,
+    id,  # add id parameter
+    sample_name=None,  # prefix
+    sample_idx=None,  # sample index
+    prompt=None,  # used prompt
+    prompt_as_path=False,  # use prompt as path
+    num_sample=1,  # number of samples to generate for one prompt
+    k=None,  # kth sample
+):
+    if sample_name is None:
+        sample_name = "" if prompt_as_path else "sample"
+    sample_name_suffix = prompt if prompt_as_path else f"_{sample_idx:04d}"
+    save_path = os.path.join(save_dir, f"{sample_name}{sample_name_suffix[:40]}")
     if num_sample != 1:
         save_path = f"{save_path}-{k}"
     return save_path

@@ -108,38 +108,51 @@ class SkipManager:
         count = (count + 1) % self.steps
         return flag, count
 
-    def if_skip_mlp(self, timestep: int, count: int, block_idx: int):
+    def if_skip_mlp(self, timestep: int, count: int, block_idx: int, all_timesteps):
         # 哪个 block
         # 哪个 timestep
-        # {'t':1, block:[0,2,4]}
-        # {'t':2, block:[0,2,4]}
-        # {1: [0,2,4], 2: [0,2,4]}
-        print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
-        if timestep in {588: [0, 2, 4], 724: [0, 2, 4], 818: [0, 2, 4]}:
-            print(f"debug | t {timestep} | block {block_idx}")
+        # {588: [0, 2, 4], 724: [0, 2, 4], 818: [0, 2, 4]}
 
+        # print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
+        if timestep in {588: [0, 2, 4], 724: [0, 2, 4], 820: [0, 2, 4]}:
+            # print(f"debug | t {timestep} | block {block_idx}")
+            pass
+
+        def find_previous_element(all_timesteps, timestep):
+            try:
+                index = all_timesteps.index(timestep)
+                if index == 0:
+                    return None
+                return all_timesteps[index - 1]
+            except ValueError:
+                return None
+
+        previous_timestep = find_previous_element(all_timesteps, timestep)
         next_flag = False
         if (
             self.mlp_skip
             and (timestep is not None)
             and (timestep in self.mlp_skip_config)
-            and (block_idx - 1) in self.mlp_skip_config[timestep]
-        ):
-            flag = True
-            count = count + 1
-        elif (
-            self.mlp_skip
-            and (timestep is not None)
-            and (timestep in self.mlp_skip_config)
-            and (block_idx in self.mlp_skip_config[timestep])
+            and (block_idx) in self.mlp_skip_config[timestep]
         ):
             flag = False
             next_flag = True
-            print(f"t {timestep} | block {block_idx} | no skip!!")
+            count = count + 1
+            # print(f"t {timestep} | block {block_idx} | previous t {previous_timestep} | no")
+        elif (
+            self.mlp_skip
+            and (timestep is not None)
+            and (previous_timestep in self.mlp_skip_config)
+            and (block_idx in self.mlp_skip_config[previous_timestep])
+        ):
+            flag = True
+            count = 0
+            print(f"t {timestep} | block {block_idx} | previous t {previous_timestep} | skip")
         else:
             flag = False
-            print(f"t {timestep} | block {block_idx} | no skip!!")
-        return flag, count, next_flag
+            # print(f"t {timestep} | block {block_idx} | previous t {previous_timestep}  | no")
+
+        return flag, count, next_flag, previous_timestep
 
 
 def set_skip_manager(
@@ -206,8 +219,8 @@ def if_skip_spatial(timestep: int, count: int, block_idx: int):
     return SKIP_MANAGER.if_skip_spatial(timestep, count, block_idx)
 
 
-def if_skip_mlp(timestep: int, count: int, block_idx: int):
-    return SKIP_MANAGER.if_skip_mlp(timestep, count, block_idx)
+def if_skip_mlp(timestep: int, count: int, block_idx: int, all_timesteps):
+    return SKIP_MANAGER.if_skip_mlp(timestep, count, block_idx, all_timesteps)
 
 
 def get_diffusion_skip():
