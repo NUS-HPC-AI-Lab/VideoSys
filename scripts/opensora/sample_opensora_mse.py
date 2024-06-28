@@ -296,7 +296,7 @@ def main(args):
                 # == sampling ==
                 z = torch.randn(len(batch_prompts), vae.out_channels, *latent_size, device=device, dtype=dtype)
                 masks = apply_mask_strategy(z, refs, ms, loop_i, align=align)
-                samples = scheduler.sample(
+                samples, spatial_mlp_mse, temporal_mlp_mse = scheduler.sample(
                     model,
                     text_encoder,
                     z=z,
@@ -330,6 +330,11 @@ def main(args):
                         time.sleep(1)  # prevent loading previous generated video
                         add_watermark(save_path)
 
+                    # Save spatial and temporal MLP outputs
+                    spatial_save_path = save_path.replace(".mp4", f"_spatial_mlp_mse.pt")
+                    temporal_save_path = save_path.replace(".mp4", f"_temporal_mlp_mse.pt")
+                    torch.save(spatial_mlp_mse, spatial_save_path)
+                    torch.save(temporal_mlp_mse, temporal_save_path)
     logger.info("Inference finished.")
     logger.info("Saved samples to %s", save_dir)
 

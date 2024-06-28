@@ -9,6 +9,7 @@
 
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
@@ -229,7 +230,13 @@ class RFLOW:
             noise_added = torch.zeros_like(mask, dtype=torch.bool)
             noise_added = noise_added | (mask == 1)
 
+        prev_spatial_mlp_outputs = None
+        prev_temporal_mlp_outputs = None
         progress_wrap = tqdm if progress else (lambda x: x)
+
+        all_spatial_mse = {}
+        all_temporal_mse = {}
+
         for i, t in progress_wrap(list(enumerate(timesteps))):
             # mask for adding noise
             if mask is not None:
@@ -248,10 +255,34 @@ class RFLOW:
             z_in = torch.cat([z, z], 0)
             t = torch.cat([t, t], 0)
             # pred = model(z_in, t, **model_args).chunk(2, dim=1)[0]
-            output = model(z_in, t, **model_args)
+            output, spatial_mlp_outputs, temporal_mlp_outputs = model(z_in, t, **model_args)
             pred = output.chunk(2, dim=1)[0]
             pred_cond, pred_uncond = pred.chunk(2, dim=0)
             v_pred = pred_uncond + guidance_scale * (pred_cond - pred_uncond)
+
+            # Calculate MSE between current and previous MLP outputs
+            if prev_spatial_mlp_outputs is not None and prev_temporal_mlp_outputs is not None:
+                spatial_mse = []
+                for (block_idx, current_output), (_, prev_output) in zip(spatial_mlp_outputs, prev_spatial_mlp_outputs):
+                    l2_distance = F.mse_loss(current_output.float(), prev_output.float())
+                    spatial_mse.append((block_idx, l2_distance.item()))
+                all_spatial_mse[int(t[0].item())] = spatial_mse
+
+                temporal_mse = []
+                for (block_idx, current_output), (_, prev_output) in zip(
+                    temporal_mlp_outputs, prev_temporal_mlp_outputs
+                ):
+                    l2_distance = F.mse_loss(current_output.float(), prev_output.float())
+                    temporal_mse.append((block_idx, l2_distance.item()))
+                all_temporal_mse[int(t[0].item())] = temporal_mse
+
+                print(f"Time step {i}, Spatial MSE: {spatial_mse}, Temporal MSE: {temporal_mse}")
+
+            # Update previous MLP outputs and delete current outputs
+            prev_spatial_mlp_outputs = spatial_mlp_outputs
+            prev_temporal_mlp_outputs = temporal_mlp_outputs
+            del spatial_mlp_outputs
+            del temporal_mlp_outputs
 
             # update z
             dt = timesteps[i] - timesteps[i + 1] if i < len(timesteps) - 1 else timesteps[i]
@@ -261,7 +292,9 @@ class RFLOW:
             if mask is not None:
                 z = torch.where(mask_t_upper[:, None, :, None, None], z, x0)
 
-        return z
+        return z, all_spatial_mse, all_temporal_mse
+
+        # return z, all_spatial_mlp_outputs, all_temporal_mlp_outputs
 
     def training_losses(self, model, x_start, model_kwargs=None, noise=None, mask=None, weights=None, t=None):
         return self.scheduler.training_losses(model, x_start, model_kwargs, noise, mask, weights, t)

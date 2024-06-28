@@ -29,7 +29,6 @@ class SkipManager:
         mlp_threshold: list = [450, 520],
         mlp_gap: int = 3,
         mlp_layer_range: list = [14, 15],
-        mlp_skip_config: dict = None,
     ):
         self.steps = steps
 
@@ -54,7 +53,6 @@ class SkipManager:
         self.mlp_threshold = mlp_threshold
         self.mlp_gap = mlp_gap
         self.mlp_layer_range = mlp_layer_range
-        self.mlp_skip_config = mlp_skip_config
 
         if dist.get_rank() == 0:  # DEBUG
             # if True:
@@ -109,37 +107,33 @@ class SkipManager:
         return flag, count
 
     def if_skip_mlp(self, timestep: int, count: int, block_idx: int):
-        # 哪个 block
-        # 哪个 timestep
-        # {'t':1, block:[0,2,4]}
-        # {'t':2, block:[0,2,4]}
-        # {1: [0,2,4], 2: [0,2,4]}
-        print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
-        if timestep in {588: [0, 2, 4], 724: [0, 2, 4], 818: [0, 2, 4]}:
-            print(f"debug | t {timestep} | block {block_idx}")
+        # print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
+        if self.mlp_threshold[0] < timestep < self.mlp_threshold[1]:
+            print(f"mlp yes")
+            print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
 
-        next_flag = False
+        # if self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1]:
+        #     print(f"layer yes")
         if (
             self.mlp_skip
             and (timestep is not None)
-            and (timestep in self.mlp_skip_config)
-            and (block_idx - 1) in self.mlp_skip_config[timestep]
+            and (count % self.mlp_gap != 0)
+            and (self.mlp_threshold[0] < timestep < self.mlp_threshold[1])
+            and (self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1])
         ):
             flag = True
-            count = count + 1
+            count = (count + 1) % self.steps
         elif (
             self.mlp_skip
             and (timestep is not None)
-            and (timestep in self.mlp_skip_config)
-            and (block_idx in self.mlp_skip_config[timestep])
+            and (self.mlp_threshold[0] < timestep < self.mlp_threshold[1])
+            and (self.mlp_layer_range[0] <= block_idx <= self.mlp_layer_range[1])
         ):
+            count = (count + 1) % self.steps
             flag = False
-            next_flag = True
-            print(f"t {timestep} | block {block_idx} | no skip!!")
         else:
             flag = False
-            print(f"t {timestep} | block {block_idx} | no skip!!")
-        return flag, count, next_flag
+        return flag, count
 
 
 def set_skip_manager(
@@ -162,7 +156,6 @@ def set_skip_manager(
     mlp_threshold: list = [450, 520],
     mlp_gap: int = 3,
     mlp_layer_range: list = [14, 15],
-    mlp_skip_config: dict = None,
 ):
     global SKIP_MANAGER
     SKIP_MANAGER = SkipManager(
@@ -184,7 +177,6 @@ def set_skip_manager(
         mlp_threshold,
         mlp_gap,
         mlp_layer_range,
-        mlp_skip_config,
     )
 
 
