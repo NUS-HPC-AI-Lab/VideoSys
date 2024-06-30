@@ -21,7 +21,13 @@ from tqdm import tqdm
 
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
 from opendit.core.skip_mgr_s_t import set_skip_manager
-from opendit.models.opensora import OpenSoraVAE_V1_2, RFLOW_skip, STDiT3_XL_2_skip, T5Encoder, text_preprocessing
+from opendit.models.opensora import (
+    OpenSoraVAE_V1_2,
+    RFLOW_skip_s_t,
+    STDiT3_XL_2_skip_s_t,
+    T5Encoder,
+    text_preprocessing,
+)
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
     add_watermark,
@@ -130,7 +136,7 @@ def main(args):
     input_size = (num_frames, *image_size)
     latent_size = vae.get_latent_size(input_size)
     model = (
-        STDiT3_XL_2_skip(
+        STDiT3_XL_2_skip_s_t(
             from_pretrained="hpcai-tech/OpenSora-STDiT-v3",
             qk_norm=True,
             enable_flash_attn=True,
@@ -146,7 +152,7 @@ def main(args):
     text_encoder.y_embedder = model.y_embedder  # HACK: for classifier-free guidance
 
     # == build scheduler ==
-    scheduler = RFLOW_skip(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
+    scheduler = RFLOW_skip_s_t(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
 
     # ======================================================
     # inference
@@ -175,8 +181,9 @@ def main(args):
     align = args.align
 
     if args.mlp_skip:
-        total_length = sum(len(v) for v in args.mlp_skip_config.values())
-        save_dir = os.path.join(args.save_dir, f"mlp_skip_st_{total_length}")
+        s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
+        t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
+        save_dir = os.path.join(args.save_dir, f"mlp_skip_s_{s_len}_t_{t_len}")
 
     else:
         save_dir = args.save_dir

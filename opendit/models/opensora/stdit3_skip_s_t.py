@@ -179,26 +179,36 @@ class STDiT3Block(nn.Module):
             x = x + x_cross
 
         # TODO: skip MLP self.temporal=True (time block)
-        skip_mlp, self.mlp_count, skip_next, skip_start_t = if_skip_mlp(
-            int(timestep[0]), self.mlp_count, self.block_idx, all_timesteps
+        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
+            int(timestep[0]),
+            self.mlp_count,
+            self.block_idx,
+            all_timesteps,
+            is_temporal=self.temporal,
+            is_spatial=(not self.temporal),
         )
 
         if skip_mlp:
+            skip_start_t = skip_range[0]
             x_m_s = mlp_outputs.get((skip_start_t, self.block_idx), None) if mlp_outputs is not None else None
             if x_m_s is not None:
+                print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
                 if self.temporal:
                     print(
-                        f"Skip | Using stored MLP output | Time | t {int(timestep[0])} | start_t {skip_start_t} | block {self.block_idx}"
+                        f"Skip | Using stored MLP output | Time | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                     )
                 else:
                     print(
-                        f"Skip | Using stored MLP output | Spatial | t {int(timestep[0])} | start_t {skip_start_t} | block {self.block_idx}"
+                        f"Skip | Using stored MLP output | Spatial | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                     )
-
-                del mlp_outputs[(skip_start_t, self.block_idx)]
+                if int(timestep[0]) == skip_range[-1]:
+                    del mlp_outputs[(skip_start_t, self.block_idx)]
+                    print(
+                        f"Skip | Delete stored MLP output | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                    )
             else:
                 raise ValueError(
-                    f"No stored MLP output found | t {int(timestep[0])} | start_t {skip_start_t} | block {self.block_idx}"
+                    f"No stored MLP output found | t {int(timestep[0])} |[{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                 )
         else:
             # modulate (MLP)
@@ -573,7 +583,7 @@ class STDiT3(PreTrainedModel):
         return x
 
 
-def STDiT3_XL_2_skip(from_pretrained=None, **kwargs):
+def STDiT3_XL_2_skip_s_t(from_pretrained=None, **kwargs):
     if from_pretrained is not None and not os.path.isdir(from_pretrained):
         model = STDiT3.from_pretrained(from_pretrained, **kwargs)
     else:

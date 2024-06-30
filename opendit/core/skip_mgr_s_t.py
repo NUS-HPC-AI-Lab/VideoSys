@@ -119,47 +119,66 @@ class SkipManager:
 
         def is_t_in_skip_config(all_timesteps, timestep, config):
             is_t_in_skip_config = False
-            skip_start_t = None
             for key in config:
                 index = all_timesteps.index(key)
-                skip_range = all_timesteps[index, index + int(config[key]["skip_count"])]
+                skip_range = all_timesteps[index : index + 1 + int(config[key]["skip_count"])]
                 if timestep in skip_range:
                     is_t_in_skip_config = True
-                    skip_start_t = key
+                    skip_range = [all_timesteps[index], all_timesteps[index + int(config[key]["skip_count"])]]
                     break
-            return is_t_in_skip_config, skip_start_t
+            return is_t_in_skip_config, skip_range
 
         if is_temporal:
-            is_t_in_skip_config, skip_start_t = is_t_in_skip_config(
+            is_t_in_skip_config, skip_range = is_t_in_skip_config(
                 all_timesteps, timestep, self.mlp_temporal_skip_config
             )
+            next_flag = False
+            if (
+                self.mlp_skip
+                and (timestep is not None)
+                and (timestep in self.mlp_temporal_skip_config)
+                and (block_idx in self.mlp_temporal_skip_config[timestep]["block"])
+            ):
+                flag = False
+                next_flag = True
+                count = count + 1
+            elif (
+                self.mlp_skip
+                and (timestep is not None)
+                and (is_t_in_skip_config)
+                and (block_idx in self.mlp_temporal_skip_config[skip_range[0]]["block"])
+            ):
+                flag = True
+                count = 0
+            else:
+                flag = False
+
+            return flag, count, next_flag, skip_range
+
         elif is_spatial:
-            is_t_in_skip_config, skip_start_t = is_t_in_skip_config(
-                all_timesteps, timestep, self.mlp_spatial_skip_config
-            )
+            is_t_in_skip_config, skip_range = is_t_in_skip_config(all_timesteps, timestep, self.mlp_spatial_skip_config)
+            next_flag = False
+            if (
+                self.mlp_skip
+                and (timestep is not None)
+                and (timestep in self.mlp_spatial_skip_config)
+                and (block_idx in self.mlp_spatial_skip_config[timestep]["block"])
+            ):
+                flag = False
+                next_flag = True
+                count = count + 1
+            elif (
+                self.mlp_skip
+                and (timestep is not None)
+                and (is_t_in_skip_config)
+                and (block_idx in self.mlp_spatial_skip_config[skip_range[0]]["block"])
+            ):
+                flag = True
+                count = 0
+            else:
+                flag = False
 
-        next_flag = False
-        if (
-            self.mlp_skip
-            and (timestep is not None)
-            and (timestep in self.mlp_skip_config)
-            and (block_idx) in self.mlp_skip_config[timestep]
-        ):
-            flag = False
-            next_flag = True
-            count = count + 1
-        elif (
-            self.mlp_skip
-            and (timestep is not None)
-            and (is_t_in_skip_config)
-            and (block_idx in self.mlp_skip_config[skip_start_t])
-        ):
-            flag = True
-            count = 0
-        else:
-            flag = False
-
-        return flag, count, next_flag, skip_start_t
+            return flag, count, next_flag, skip_range
 
 
 def set_skip_manager(
@@ -228,8 +247,8 @@ def if_skip_spatial(timestep: int, count: int, block_idx: int):
     return SKIP_MANAGER.if_skip_spatial(timestep, count, block_idx)
 
 
-def if_skip_mlp(timestep: int, count: int, block_idx: int, all_timesteps):
-    return SKIP_MANAGER.if_skip_mlp(timestep, count, block_idx, all_timesteps)
+def if_skip_mlp(timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False, is_spatial=False):
+    return SKIP_MANAGER.if_skip_mlp(timestep, count, block_idx, all_timesteps, is_temporal, is_spatial)
 
 
 def get_diffusion_skip():
