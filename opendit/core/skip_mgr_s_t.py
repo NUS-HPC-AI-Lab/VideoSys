@@ -29,7 +29,8 @@ class SkipManager:
         mlp_threshold: list = [450, 520],
         mlp_gap: int = 3,
         mlp_layer_range: list = [14, 15],
-        mlp_skip_config: dict = None,
+        mlp_spatial_skip_config: dict = None,
+        mlp_temporal_skip_config: dict = None,
     ):
         self.steps = steps
 
@@ -54,7 +55,8 @@ class SkipManager:
         self.mlp_threshold = mlp_threshold
         self.mlp_gap = mlp_gap
         self.mlp_layer_range = mlp_layer_range
-        self.mlp_skip_config = mlp_skip_config
+        self.mlp_spatial_skip_config = mlp_spatial_skip_config
+        self.mlp_temporal_skip_config = mlp_temporal_skip_config
 
         if dist.get_rank() == 0:  # DEBUG
             # if True:
@@ -108,23 +110,34 @@ class SkipManager:
         count = (count + 1) % self.steps
         return flag, count
 
-    def if_skip_mlp(self, timestep: int, count: int, block_idx: int, all_timesteps):
-        # 哪个 block
-        # 哪个 timestep
+    def if_skip_mlp(
+        self, timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False, is_spatial=False
+    ):
+        # 判断是否spatial / temporal
+        # 判断当前timestep是否在skip_config中
+        # 判断前一个timestep是否在skip_config中
 
-        if timestep in {588: [0, 2, 4], 724: [0, 2, 4], 820: [0, 2, 4]}:
-            pass
+        def is_t_in_skip_config(all_timesteps, timestep, config):
+            is_t_in_skip_config = False
+            skip_start_t = None
+            for key in config:
+                index = all_timesteps.index(key)
+                skip_range = all_timesteps[index, index + int(config[key]["skip_count"])]
+                if timestep in skip_range:
+                    is_t_in_skip_config = True
+                    skip_start_t = key
+                    break
+            return is_t_in_skip_config, skip_start_t
 
-        def find_previous_element(all_timesteps, timestep):
-            try:
-                index = all_timesteps.index(timestep)
-                if index == 0:
-                    return None
-                return all_timesteps[index - 1]
-            except ValueError:
-                return None
+        if is_temporal:
+            is_t_in_skip_config, skip_start_t = is_t_in_skip_config(
+                all_timesteps, timestep, self.mlp_temporal_skip_config
+            )
+        elif is_spatial:
+            is_t_in_skip_config, skip_start_t = is_t_in_skip_config(
+                all_timesteps, timestep, self.mlp_spatial_skip_config
+            )
 
-        previous_timestep = find_previous_element(all_timesteps, timestep)
         next_flag = False
         if (
             self.mlp_skip
@@ -138,15 +151,15 @@ class SkipManager:
         elif (
             self.mlp_skip
             and (timestep is not None)
-            and (previous_timestep in self.mlp_skip_config)
-            and (block_idx in self.mlp_skip_config[previous_timestep])
+            and (is_t_in_skip_config)
+            and (block_idx in self.mlp_skip_config[skip_start_t])
         ):
             flag = True
             count = 0
         else:
             flag = False
 
-        return flag, count, next_flag, previous_timestep
+        return flag, count, next_flag, skip_start_t
 
 
 def set_skip_manager(
@@ -169,8 +182,8 @@ def set_skip_manager(
     mlp_threshold: list = [450, 520],
     mlp_gap: int = 3,
     mlp_layer_range: list = [14, 15],
-    mlp_skip_config: dict = None,
-    mlp_skip_timestep: list = None,
+    mlp_spatial_skip_config: dict = None,
+    mlp_temporal_skip_config: dict = None,
 ):
     global SKIP_MANAGER
     SKIP_MANAGER = SkipManager(
@@ -192,7 +205,8 @@ def set_skip_manager(
         mlp_threshold,
         mlp_gap,
         mlp_layer_range,
-        mlp_skip_config,
+        mlp_spatial_skip_config,
+        mlp_temporal_skip_config,
     )
 
 
