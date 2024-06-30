@@ -1,6 +1,6 @@
 resolution: "480p"
 aspect_ratio: "9:16"
-num_frames: 48
+num_frames: 51
 fps: 24
 frame_interval: 1
 
