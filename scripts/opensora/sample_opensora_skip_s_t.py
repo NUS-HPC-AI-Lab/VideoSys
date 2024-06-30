@@ -9,6 +9,7 @@
 
 
 import argparse
+import json
 import os
 import time
 
@@ -46,6 +47,14 @@ from opendit.models.opensora.inference_utils import (
     split_prompt,
 )
 from opendit.utils.utils import all_exists, create_logger, merge_args, set_seed, str_to_dtype
+
+
+# Convert namespace to dictionary if needed
+def args_to_dict(args):
+    if isinstance(args, dict):
+        return args
+    else:
+        return vars(args)
 
 
 def main(args):
@@ -189,6 +198,13 @@ def main(args):
         save_dir = args.save_dir
     print(f"save_dir | {save_dir}")
     os.makedirs(save_dir, exist_ok=True)
+
+    # Save args to save_dir using json
+    args_path = os.path.join(save_dir, "args.json")
+    with open(args_path, "w") as f:
+        json.dump(args_to_dict(args), f, indent=4)
+    print(f"Arguments saved to {args_path}")
+
     prompt_as_path = args.prompt_as_path
 
     # == Iter over all samples ==
