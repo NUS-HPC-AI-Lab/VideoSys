@@ -173,10 +173,12 @@ def main(args):
     condition_frame_edit = args.condition_frame_edit
     align = args.align
 
-    # save_dir = args.save_dir
-    save_dir = os.path.join(
-        args.save_dir, ", ".join([f"{key}: {value}" for key, value in args.mlp_skip_config.items()])
-    )
+    if args.mlp_skip:
+        total_length = sum(len(v) for v in args.mlp_skip_config.values())
+        save_dir = os.path.join(args.save_dir, f"mlp_skip_{total_length}")
+
+    else:
+        save_dir = args.save_dir
     print(f"save_dir | {save_dir}")
     os.makedirs(save_dir, exist_ok=True)
     prompt_as_path = args.prompt_as_path

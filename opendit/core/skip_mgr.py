@@ -111,11 +111,8 @@ class SkipManager:
     def if_skip_mlp(self, timestep: int, count: int, block_idx: int, all_timesteps):
         # 哪个 block
         # 哪个 timestep
-        # {588: [0, 2, 4], 724: [0, 2, 4], 818: [0, 2, 4]}
 
-        # print(f"timestep: {timestep}, count: {count}, block_idx: {block_idx}")
         if timestep in {588: [0, 2, 4], 724: [0, 2, 4], 820: [0, 2, 4]}:
-            # print(f"debug | t {timestep} | block {block_idx}")
             pass
 
         def find_previous_element(all_timesteps, timestep):
@@ -138,7 +135,6 @@ class SkipManager:
             flag = False
             next_flag = True
             count = count + 1
-            # print(f"t {timestep} | block {block_idx} | previous t {previous_timestep} | no")
         elif (
             self.mlp_skip
             and (timestep is not None)
@@ -147,10 +143,8 @@ class SkipManager:
         ):
             flag = True
             count = 0
-            print(f"t {timestep} | block {block_idx} | previous t {previous_timestep} | skip")
         else:
             flag = False
-            # print(f"t {timestep} | block {block_idx} | previous t {previous_timestep}  | no")
 
         return flag, count, next_flag, previous_timestep
 

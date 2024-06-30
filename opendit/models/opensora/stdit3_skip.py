@@ -186,10 +186,20 @@ class STDiT3Block(nn.Module):
         if skip_mlp:
             x_m_s = mlp_outputs.get((previous_timestep, self.block_idx), None) if mlp_outputs is not None else None
             if x_m_s is not None:
-                print(f"Using stored MLP output | time {previous_timestep} | block {self.block_idx}")
+                if self.temporal:
+                    print(
+                        f"Skip | Using stored MLP output | Time | t {int(timestep[0])} | previous {previous_timestep} | block {self.block_idx}"
+                    )
+                else:
+                    print(
+                        f"Skip | Using stored MLP output | Spatial | t {int(timestep[0])} | previous {previous_timestep} | block {self.block_idx}"
+                    )
+
+                del mlp_outputs[(previous_timestep, self.block_idx)]
             else:
-                print(f"No stored MLP output found | time {previous_timestep} | block {self.block_idx}")
-                x_m_s = self.last_mlp
+                raise ValueError(
+                    f"No stored MLP output found | t {int(timestep[0])} | previous {previous_timestep} | block {self.block_idx}"
+                )
         else:
             # modulate (MLP)
             x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
