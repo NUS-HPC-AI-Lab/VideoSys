@@ -51,7 +51,7 @@ pip install -e .
 
 OpenDiT supports many diffusion models with our various acceleration techniques, enabling these models to run faster and consume less memory.
 
-<b>You can find all available models and their supported accleration techniques in the following table. Click `Doc` to see how to use them.</b>
+<b>You can find all available models and their supported acceleration techniques in the following table. Click `Doc` to see how to use them.</b>
 
 <table>
     <tr>
