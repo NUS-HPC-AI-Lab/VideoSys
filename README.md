@@ -62,10 +62,17 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
 
 <table>
     <tr>
-        <th>Model</th>
-        <th>Acceleration Techniques</th>
-        <th>Documentation</th>
-        <th rowspan="4">Additional Info</th>
+        <th rowspan="2">Model</th>
+        <th rowspan="2">Train</th>
+        <th rowspan="2">Infer</th>
+        <th colspan="3">Acceleration Techniques</th>
+        <th rowspan="2">Usage</th>
+        <th rowspan="2">Additional Info</th>
+    </tr>
+    <tr>
+        <th >Model</th>
+        <th >Train</th>
+        <th >Infer</th>
     </tr>
     <tr>
         <td>Model 1</td>
