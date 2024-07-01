@@ -261,7 +261,7 @@ class RFLOW_mse:
             v_pred = pred_uncond + guidance_scale * (pred_cond - pred_uncond)
 
             dtype = model.x_embedder.proj.weight.dtype
-            # Calculate MSE between current and previous MLP outputs
+            # TODO Calculate MSE between current and previous MLP outputs
             if prev_spatial_mlp_outputs is not None and prev_temporal_mlp_outputs is not None:
                 spatial_mse = []
                 for (block_idx, current_output), (_, prev_output) in zip(spatial_mlp_outputs, prev_spatial_mlp_outputs):

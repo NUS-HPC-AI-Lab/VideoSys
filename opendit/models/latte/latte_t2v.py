@@ -339,6 +339,8 @@ class BasicTransformerBlock(nn.Module):
         self.spatial_last = None
         self.spatial_count = 0
         self.block_idx = block_idx
+        # mse
+        self.mlp_outputs = []
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
@@ -459,6 +461,7 @@ class BasicTransformerBlock(nn.Module):
 
         # 4. Feed-forward
         # i2vgen doesn't have this norm 🤷‍♂️
+        # TODO skip mlp
         if self.norm_type == "ada_norm_continuous":
             norm_hidden_states = self.norm3(hidden_states, added_cond_kwargs["pooled_text_emb"])
         elif not self.norm_type == "ada_norm_single":
@@ -755,6 +758,7 @@ class BasicTransformerBlock_(nn.Module):
             norm_hidden_states = self.norm3(hidden_states)
             norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
 
+        # TODO skip mlp here
         if self._chunk_size is not None:
             # "feed_forward_chunk_size" can be used to save memory
             if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
@@ -1229,6 +1233,9 @@ class LatteT2V(ModelMixin, ConfigMixin):
         else:
             temp_pos_embed = self.temp_pos_embed
 
+        spatial_mlp_outputs = []
+        temporal_mlp_outputs = []
+
         for i, (spatial_block, temp_block) in enumerate(zip(self.transformer_blocks, self.temporal_transformer_blocks)):
             if self.training and self.gradient_checkpointing:
                 hidden_states = torch.utils.checkpoint.checkpoint(
@@ -1301,6 +1308,8 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     None,
                     org_timestep,
                 )
+                spatial_mlp_outputs.extend(spatial_block.mlp_outputs)
+                spatial_block.mlp_outputs = []
 
                 if enable_temporal_attentions:
                     hidden_states = rearrange(hidden_states, "(b f) t d -> (b t) f d", b=input_batch_size).contiguous()
@@ -1343,6 +1352,9 @@ class LatteT2V(ModelMixin, ConfigMixin):
                         hidden_states = rearrange(
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
+
+                temporal_mlp_outputs.extend(temp_block.mlp_outputs)
+                temp_block.mlp_outputs = []
 
         if enable_sequence_parallel():
             hidden_states = self.gather_from_second_dim(hidden_states, input_batch_size)

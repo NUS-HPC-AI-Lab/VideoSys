@@ -17,6 +17,7 @@ from typing import Callable, List, Optional, Tuple, Union
 import einops
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
@@ -65,7 +66,7 @@ class VideoPipelineOutput(BaseOutput):
     video: torch.Tensor
 
 
-class LattePipeline(DiffusionPipeline):
+class LattePipeline_mse(DiffusionPipeline):
     r"""
     Pipeline for text-to-image generation using PixArt-Alpha.
 
@@ -709,6 +710,12 @@ class LattePipeline(DiffusionPipeline):
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
 
+        # TODO MSE
+        all_spatial_mse = {}
+        all_temporal_mse = {}
+        prev_spatial_mlp_outputs = None
+        prev_temporal_mlp_outputs = None
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
@@ -730,14 +737,40 @@ class LattePipeline(DiffusionPipeline):
                 current_timestep = current_timestep.expand(latent_model_input.shape[0])
 
                 # predict noise model_output
-                noise_pred = self.transformer(
+                noise_pred, spatial_mlp_outputs, temporal_mlp_outputs = self.transformer(
                     latent_model_input,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
                     added_cond_kwargs=added_cond_kwargs,
                     enable_temporal_attentions=enable_temporal_attentions,
                     return_dict=False,
-                )[0]
+                )
+
+                # TODO MSE
+                if prev_spatial_mlp_outputs is not None and prev_temporal_mlp_outputs is not None:
+                    spatial_mse = []
+                    for (block_idx, current_output), (_, prev_output) in zip(
+                        spatial_mlp_outputs, prev_spatial_mlp_outputs
+                    ):
+                        l2_distance = F.mse_loss(current_output.float(), prev_output.float())
+                        spatial_mse.append((block_idx, l2_distance.item()))
+                    all_spatial_mse[current_timestep] = spatial_mse
+
+                    temporal_mse = []
+                    for (block_idx, current_output), (_, prev_output) in zip(
+                        temporal_mlp_outputs, prev_temporal_mlp_outputs
+                    ):
+                        l2_distance = F.mse_loss(current_output.float(), prev_output.float())
+                        temporal_mse.append((block_idx, l2_distance.item()))
+                    all_temporal_mse[current_timestep] = temporal_mse
+
+                    print(f"Time step {i}, Spatial MSE: {spatial_mse}, Temporal MSE: {temporal_mse}")
+
+                # Update previous MLP outputs and delete current outputs
+                prev_spatial_mlp_outputs = spatial_mlp_outputs
+                prev_temporal_mlp_outputs = temporal_mlp_outputs
+                del spatial_mlp_outputs
+                del temporal_mlp_outputs
 
                 # perform guidance
                 if do_classifier_free_guidance:
