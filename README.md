@@ -68,7 +68,7 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
     <tr>
         <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
         <td><span style="display: inline-block; text-align: center; width: 100%;">🟡</span></td>
-        <td style="text-align: center;">✅</td>
+        <td text-align="center">✅</td>
         <td style="text-align: center;">✅</td>
         <td style="text-align: center;">✅</td>
         <td style="text-align: center;"><a href="./docs/opensora.md">Doc</a></td>
