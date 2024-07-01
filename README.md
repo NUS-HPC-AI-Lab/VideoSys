@@ -53,13 +53,6 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
 
 <b>You can find all available models and their supported accleration techniques in the following table. Click `Doc` to see how to use them.</b>
 
-| Model | Train | Inference | [DSP](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc) | [PAB](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc) | Usage |
-| ------ | :------: | :------: | :------: | :------: | :------: |
-| Open-Sora [[source](https://github.com/hpcaitech/Open-Sora)]| 🟡 | ✅ | ✅ |  ✅ |[Doc](./docs/opensora.md)
-| Open-Sora-Plan [[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
-| Latte [[source](https://github.com/Vchitect/Latte)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/latte.md)
-| DiT [[source](https://github.com/facebookresearch/DiT)]| ✅ | ✅ | ❌ | ❌ | [Doc](./docs/dit.md)
-
 <table>
     <tr>
         <th rowspan="2">Model</th>
@@ -74,39 +67,39 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
     </tr>
     <tr>
         <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
-        <td>🟡</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td><a href="./docs/opensora.md">Doc</a></td>
+        <td style="text-align: center;">🟡</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;"><a href="./docs/opensora.md">Doc</a></td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
-        <td>❌</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td><a href="./docs/opensora_plan.md">Doc</a></td>
+        <td style="text-align: center;">❌</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;"><a href="./docs/opensora_plan.md">Doc</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
-        <td>❌</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td><a href="./docs/latte.md">Doc</a></td>
+        <td style="text-align: center;">❌</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;"><a href="./docs/latte.md">Doc</a></td>
     </tr>
     <tr>
         <td>DiT [<a href="https://github.com/facebookresearch/DiT">source</a>]</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td>❌</td>
-        <td>❌</td>
-        <td><a href="./docs/dit.md">Doc</a></td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">✅</td>
+        <td style="text-align: center;">❌</td>
+        <td style="text-align: center;">❌</td>
+        <td style="text-align: center;"><a href="./docs/dit.md">Doc</a></td>
     </tr>
 </table>
 
-## Technique Overview
+## Acceleration Techniques
 
 ### Pyramid Attention Broadcast (PAB) [[blog](https://arxiv.org/abs/2403.10266)][[doc](./docs/pab.md)]
 
