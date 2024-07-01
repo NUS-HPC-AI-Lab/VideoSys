@@ -73,25 +73,37 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <th>[PAB](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc)</th>
     </tr>
     <tr>
-        <td>Open-Sora [[source](https://github.com/hpcaitech/Open-Sora)]</td>
+        <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
         <td>🟡</td>
         <td>✅</td>
         <td>✅</td>
         <td>✅</td>
+        <td><a href="./docs/opensora.md">Doc</a></td>
+    </tr>
+    <tr>
+        <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
+        <td>❌</td>
         <td>✅</td>
-        <td>[Doc](./docs/opensora.md)</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td><a href="./docs/opensora_plan.md">Doc</a></td>
     </tr>
     <tr>
-        <td>Model 2</td>
-        <td>Technique C, Technique D</td>
-        <td><a href="doc_link_2">Doc</a></td>
+        <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td><a href="./docs/latte.md">Doc</a></td>
     </tr>
     <tr>
-        <td>Model 3</td>
-        <td>Technique E, Technique F</td>
-        <td><a href="doc_link_3">Doc</a></td>
+        <td>DiT [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>❌</td>
+        <td>❌</td>
+        <td><a href="./docs/dit.md">Doc</a></td>
     </tr>
-    <!-- Add more models as needed -->
 </table>
 
 ## Technique Overview
