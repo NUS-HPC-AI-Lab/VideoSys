@@ -65,6 +65,7 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <th>Model</th>
         <th>Acceleration Techniques</th>
         <th>Documentation</th>
+        <th rowspan="4">Additional Info</th>
     </tr>
     <tr>
         <td>Model 1</td>
