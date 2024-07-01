@@ -69,8 +69,8 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <th rowspan="2">Usage</th>
     </tr>
     <tr>
-        <th>[DSP](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc)</th>
-        <th>[PAB](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc)</th>
+        <th><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc">DSP</a></th>
+        <th><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc">PAB</a></th>
     </tr>
     <tr>
         <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
@@ -97,7 +97,7 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <td><a href="./docs/latte.md">Doc</a></td>
     </tr>
     <tr>
-        <td>DiT [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
+        <td>DiT [<a href="https://github.com/facebookresearch/DiT">source</a>]</td>
         <td>✅</td>
         <td>✅</td>
         <td>❌</td>
