@@ -7,7 +7,7 @@
 ### Latest News 🔥
 - [2024/06] 🔥<b>Propose Pyramid Attention Broadcast (PAB)[[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.</b>
 - [2024/06] Support Open-Sora-Plan and Latte.
-- [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism.
+- [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in Open-Sora compared with sota sequence parallelism.
 - [2024/03] Support Open-Sora: Democratizing Efficient Video Production for All.
 - [2024/02] Release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
@@ -55,10 +55,34 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
 
 | Model | Train | Inference | [DSP](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc) | [PAB](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc) | Usage |
 | ------ | :------: | :------: | :------: | :------: | :------: |
-| Open-Sora[[source](https://github.com/hpcaitech/Open-Sora)]| 🟡 | ✅ | ✅ |  ✅ |[Doc](./docs/opensora.md)
-| Open-Sora-Plan[[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
-| Latte[[source](https://github.com/Vchitect/Latte)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/latte.md)
-| DiT[[source](https://github.com/facebookresearch/DiT)]| ✅ | ✅ | ❌ | ❌ | [Doc](./docs/dit.md)
+| Open-Sora [[source](https://github.com/hpcaitech/Open-Sora)]| 🟡 | ✅ | ✅ |  ✅ |[Doc](./docs/opensora.md)
+| Open-Sora-Plan [[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
+| Latte [[source](https://github.com/Vchitect/Latte)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/latte.md)
+| DiT [[source](https://github.com/facebookresearch/DiT)]| ✅ | ✅ | ❌ | ❌ | [Doc](./docs/dit.md)
+
+<table>
+    <tr>
+        <th>Model</th>
+        <th>Acceleration Techniques</th>
+        <th>Documentation</th>
+    </tr>
+    <tr>
+        <td>Model 1</td>
+        <td>Technique A, Technique B</td>
+        <td><a href="doc_link_1">Doc</a></td>
+    </tr>
+    <tr>
+        <td>Model 2</td>
+        <td>Technique C, Technique D</td>
+        <td><a href="doc_link_2">Doc</a></td>
+    </tr>
+    <tr>
+        <td>Model 3</td>
+        <td>Technique E, Technique F</td>
+        <td><a href="doc_link_3">Doc</a></td>
+    </tr>
+    <!-- Add more models as needed -->
+</table>
 
 ## Technique Overview
 
@@ -72,7 +96,7 @@ Authors: [Xuanlei Zhao](https://oahzxl.github.io/)<sup>1*</sup>,  [Xiaolong Jin]
 
 ![method](./assets/figures/pab_method.png)
 
-PAB is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>. By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including Open-Sora, Open-Sora-Plan, and Latte.
+PAB is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>. By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including [Open-Sora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
 
 See its details [here](./docs/pab.md).
 
@@ -82,9 +106,9 @@ See its details [here](./docs/pab.md).
 
 ![dsp_overview](./assets/figures/dsp_overview.png)
 
-DSP is a novel, elegant and super efficient sequence parallelism for [OpenSora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
+DSP is a novel, elegant and super efficient sequence parallelism for [Open-Sora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and other multi-dimensional transformer architecture.
 
-It achieves **3x** speed for training and **2x** speed for inference in OpenSora compared with sota sequence parallelism ([DeepSpeed Ulysses](https://arxiv.org/abs/2309.14509)). For a 10s (80 frames) of 512x512 video, the inference latency of OpenSora is:
+It achieves **3x** speed for training and **2x** speed for inference in Open-Sora compared with sota sequence parallelism ([DeepSpeed Ulysses](https://arxiv.org/abs/2309.14509)). For a 10s (80 frames) of 512x512 video, the inference latency of Open-Sora is:
 
 | Method | 1xH800 | 8xH800 (DS Ulysses) | 8xH800 (DSP) |
 | ------ | ------ | ------ | ------ |
