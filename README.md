@@ -65,19 +65,21 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <th rowspan="2">Model</th>
         <th rowspan="2">Train</th>
         <th rowspan="2">Infer</th>
-        <th colspan="3">Acceleration Techniques</th>
+        <th colspan="2">Acceleration Techniques</th>
         <th rowspan="2">Usage</th>
-        <th rowspan="2">Additional Info</th>
     </tr>
     <tr>
-        <th >Model</th>
-        <th >Train</th>
-        <th >Infer</th>
+        <th>[DSP](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc)</th>
+        <th>[PAB](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc)</th>
     </tr>
     <tr>
-        <td>Model 1</td>
-        <td>Technique A, Technique B</td>
-        <td><a href="doc_link_1">Doc</a></td>
+        <td>Open-Sora [[source](https://github.com/hpcaitech/Open-Sora)]</td>
+        <td>🟡</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>[Doc](./docs/opensora.md)</td>
     </tr>
     <tr>
         <td>Model 2</td>
