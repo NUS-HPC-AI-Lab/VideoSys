@@ -8,7 +8,7 @@
   _torch_pytree._register_pytree_node(
 /home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/diffusers/models/transformers/transformer_2d.py:34: FutureWarning: `Transformer2DModelOutput` is deprecated and will be removed in version 1.0.0. Importing `Transformer2DModelOutput` from `diffusers.models.transformer_2d` is deprecated and this will be removed in a future version. Please use `from diffusers.models.modeling_outputs import Transformer2DModelOutput`, instead.
   deprecate("Transformer2DModelOutput", "1.0.0", deprecation_message)
-[06/30/24 18:14:37] INFO     colossalai - colossalai - INFO: /home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/colossalai/initialize.py:60 launch
+[06/30/24 18:43:04] INFO     colossalai - colossalai - INFO: /home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/colossalai/initialize.py:60 launch
                     INFO     colossalai - colossalai - INFO: Distributed environment is initialized, world size: 1
 
 Init SkipManager:
@@ -18,26 +18,27 @@ Init SkipManager:
                 temporal_skip=True, temporal_threshold=[540, 960], temporal_gap=4
                 diffusion_skip=True, diffusion_timestep_respacing=None
 
-[[34m2024-06-30 18:14:37[0m] Inference configuration: Namespace(config='configs/opensora/sample_skip_s_t_2.yaml', seed=42, batch_size=1, flash_attn=True, resolution='480p', multi_resolution='STDiT2', dtype='bf16', save_dir='./samples/opensora', num_sample=1, prompt_as_path=True, verbose=2, prompt_path=None, prompt=['a cat wearing sunglasses and working as a lifeguard at pool.', 'A dog in astronaut suit and sunglasses floating in space.'], llm_refine=False, num_frames=48, fps=24, image_size=None, frame_interval=1, aspect_ratio='9:16', watermark=False, num_sampling_steps=30, cfg_scale=7.0, loop=1, align=5, condition_frame_length=5, condition_frame_edit=0.0, reference_path=None, mask_strategy=None, aes=6.5, flow=None, camera_motion=None, spatial_skip=True, spatial_threshold=[540, 920], spatial_gap=2, spatial_block=[0, 28], temporal_skip=True, temporal_threshold=[540, 960], temporal_gap=4, cross_skip=True, cross_threshold=[540, 960], cross_gap=6, mlp_skip=True, mlp_threshold=[710, 760], mlp_gap=1, mlp_layer_range=[14, 15], mlp_skip_config=None, mlp_temporal_skip_config={496: {'block': [0, 1, 2, 3], 'skip_count': 2}, 664: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 856: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 916: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}}, mlp_spatial_skip_config={496: {'block': [0, 1, 2, 3], 'skip_count': 2}, 544: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 628: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 752: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 836: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}}, diffusion_skip=True, diffusion_skip_timestep=[1, 1, 1, 0, 0, 0, 0, 0, 0, 0])
+[[34m2024-06-30 18:43:04[0m] Inference configuration: Namespace(config='configs/opensora/sample_skip_s_t_2.yaml', seed=42, batch_size=1, flash_attn=True, resolution='480p', multi_resolution='STDiT2', dtype='bf16', save_dir='./samples/opensora', num_sample=1, prompt_as_path=True, verbose=2, prompt_path=None, prompt=['a cat wearing sunglasses and working as a lifeguard at pool.', 'A dog in astronaut suit and sunglasses floating in space.'], llm_refine=False, num_frames=48, fps=24, image_size=None, frame_interval=1, aspect_ratio='9:16', watermark=False, num_sampling_steps=30, cfg_scale=7.0, loop=1, align=5, condition_frame_length=5, condition_frame_edit=0.0, reference_path=None, mask_strategy=None, aes=6.5, flow=None, camera_motion=None, spatial_skip=True, spatial_threshold=[540, 920], spatial_gap=2, spatial_block=[0, 28], temporal_skip=True, temporal_threshold=[540, 960], temporal_gap=4, cross_skip=True, cross_threshold=[540, 960], cross_gap=6, mlp_skip=True, mlp_threshold=[710, 760], mlp_gap=1, mlp_layer_range=[14, 15], mlp_skip_config=None, mlp_temporal_skip_config={496: {'block': [0, 1, 2, 3], 'skip_count': 2}, 664: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 856: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 916: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}}, mlp_spatial_skip_config={496: {'block': [0, 1, 2, 3], 'skip_count': 2}, 544: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 628: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 752: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}, 836: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2}}, diffusion_skip=True, diffusion_skip_timestep=[1, 1, 1, 0, 0, 0, 0, 0, 0, 0])
 
-[[34m2024-06-30 18:14:37[0m] Building models...
+[[34m2024-06-30 18:43:04[0m] Building models...
 /home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/huggingface_hub/file_download.py:1132: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
   warnings.warn(
 You are using the default legacy behaviour of the <class 'transformers.models.t5.tokenization_t5.T5Tokenizer'>. This is expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you. If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it means, and thouroughly read the reason why this was added as explained in https://github.com/huggingface/transformers/pull/24565
 
 Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]
-Loading checkpoint shards:  50%|█████     | 1/2 [00:09<00:09,  9.02s/it]
-Loading checkpoint shards: 100%|██████████| 2/2 [00:15<00:00,  7.28s/it]
-Loading checkpoint shards: 100%|██████████| 2/2 [00:15<00:00,  7.54s/it]
+Loading checkpoint shards:  50%|█████     | 1/2 [00:09<00:09,  9.15s/it]
+Loading checkpoint shards: 100%|██████████| 2/2 [00:15<00:00,  7.62s/it]
+Loading checkpoint shards: 100%|██████████| 2/2 [00:15<00:00,  7.85s/it]
 save_dir | ./samples/opensora/mlp_skip_s_148_t_120
+Arguments saved to ./samples/opensora/mlp_skip_s_148_t_120/args.json
 
   0%|          | 0/27 [00:00<?, ?it/s]
-  4%|▎         | 1/27 [00:04<02:08,  4.94s/it]
-  7%|▋         | 2/27 [00:07<01:25,  3.41s/it]
- 11%|█         | 3/27 [00:09<01:10,  2.93s/it]
- 15%|█▍        | 4/27 [00:11<00:54,  2.36s/it]
- 19%|█▊        | 5/27 [00:13<00:50,  2.28s/it]
- 22%|██▏       | 6/27 [00:14<00:38,  1.84s/it]skip_range | [916, 888]
+  4%|▎         | 1/27 [00:05<02:35,  6.00s/it]
+  7%|▋         | 2/27 [00:08<01:36,  3.85s/it]
+ 11%|█         | 3/27 [00:10<01:15,  3.16s/it]
+ 15%|█▍        | 4/27 [00:12<00:57,  2.50s/it]
+ 19%|█▊        | 5/27 [00:14<00:52,  2.37s/it]
+ 22%|██▏       | 6/27 [00:15<00:39,  1.90s/it]skip_range | [916, 888]
 Skip | Using stored MLP output | Time | t 900 | [916, 888] | block 0
 skip_range | [916, 888]
 Skip | Using stored MLP output | Time | t 900 | [916, 888] | block 1
@@ -66,7 +67,7 @@ Skip | Using stored MLP output | Time | t 900 | [916, 888] | block 12
 skip_range | [916, 888]
 Skip | Using stored MLP output | Time | t 900 | [916, 888] | block 13
 
- 26%|██▌       | 7/27 [00:15<00:34,  1.73s/it]skip_range | [916, 888]
+ 26%|██▌       | 7/27 [00:16<00:35,  1.78s/it]skip_range | [916, 888]
 Skip | Using stored MLP output | Time | t 888 | [916, 888] | block 0
 Skip | Delete stored MLP output | t 888 | [916, 888] | block 0
 skip_range | [916, 888]
@@ -109,9 +110,9 @@ skip_range | [916, 888]
 Skip | Using stored MLP output | Time | t 888 | [916, 888] | block 13
 Skip | Delete stored MLP output | t 888 | [916, 888] | block 13
 
- 30%|██▉       | 8/27 [00:16<00:27,  1.43s/it]
- 33%|███▎      | 9/27 [00:18<00:29,  1.65s/it]
- 37%|███▋      | 10/27 [00:19<00:24,  1.44s/it]skip_range | [856, 820]
+ 30%|██▉       | 8/27 [00:17<00:27,  1.46s/it]
+ 33%|███▎      | 9/27 [00:19<00:30,  1.67s/it]
+ 37%|███▋      | 10/27 [00:20<00:24,  1.45s/it]skip_range | [856, 820]
 Skip | Using stored MLP output | Time | t 836 | [856, 820] | block 0
 skip_range | [856, 820]
 Skip | Using stored MLP output | Time | t 836 | [856, 820] | block 1
@@ -140,7 +141,7 @@ Skip | Using stored MLP output | Time | t 836 | [856, 820] | block 12
 skip_range | [856, 820]
 Skip | Using stored MLP output | Time | t 836 | [856, 820] | block 13
 
- 41%|████      | 11/27 [00:20<00:22,  1.39s/it]skip_range | [836, 796]
+ 41%|████      | 11/27 [00:22<00:24,  1.53s/it]skip_range | [836, 796]
 Skip | Using stored MLP output | Spatial | t 820 | [836, 796] | block 0
 skip_range | [856, 820]
 Skip | Using stored MLP output | Time | t 820 | [856, 820] | block 0
@@ -211,7 +212,7 @@ skip_range | [856, 820]
 Skip | Using stored MLP output | Time | t 820 | [856, 820] | block 13
 Skip | Delete stored MLP output | t 820 | [856, 820] | block 13
 
- 44%|████▍     | 12/27 [00:21<00:17,  1.14s/it]skip_range | [836, 796]
+ 44%|████▍     | 12/27 [00:22<00:18,  1.24s/it]skip_range | [836, 796]
 Skip | Using stored MLP output | Spatial | t 796 | [836, 796] | block 0
 Skip | Delete stored MLP output | t 796 | [836, 796] | block 0
 skip_range | [836, 796]
@@ -254,8 +255,8 @@ skip_range | [836, 796]
 Skip | Using stored MLP output | Spatial | t 796 | [836, 796] | block 13
 Skip | Delete stored MLP output | t 796 | [836, 796] | block 13
 
- 48%|████▊     | 13/27 [00:23<00:20,  1.45s/it]
- 52%|█████▏    | 14/27 [00:24<00:16,  1.30s/it]skip_range | [776, 724]
+ 48%|████▊     | 13/27 [00:25<00:21,  1.52s/it]
+ 52%|█████▏    | 14/27 [00:26<00:17,  1.35s/it]skip_range | [776, 724]
 Skip | Using stored MLP output | Time | t 752 | [776, 724] | block 0
 skip_range | [776, 724]
 Skip | Using stored MLP output | Time | t 752 | [776, 724] | block 1
@@ -284,7 +285,7 @@ Skip | Using stored MLP output | Time | t 752 | [776, 724] | block 12
 skip_range | [776, 724]
 Skip | Using stored MLP output | Time | t 752 | [776, 724] | block 13
 
- 56%|█████▌    | 15/27 [00:26<00:17,  1.42s/it]skip_range | [752, 696]
+ 56%|█████▌    | 15/27 [00:27<00:16,  1.33s/it]skip_range | [752, 696]
 Skip | Using stored MLP output | Spatial | t 724 | [752, 696] | block 0
 skip_range | [776, 724]
 Skip | Using stored MLP output | Time | t 724 | [776, 724] | block 0
@@ -355,7 +356,7 @@ skip_range | [776, 724]
 Skip | Using stored MLP output | Time | t 724 | [776, 724] | block 13
 Skip | Delete stored MLP output | t 724 | [776, 724] | block 13
 
- 59%|█████▉    | 16/27 [00:26<00:12,  1.16s/it]skip_range | [752, 696]
+ 59%|█████▉    | 16/27 [00:27<00:12,  1.10s/it]skip_range | [752, 696]
 Skip | Using stored MLP output | Spatial | t 696 | [752, 696] | block 0
 Skip | Delete stored MLP output | t 696 | [752, 696] | block 0
 skip_range | [752, 696]
@@ -398,8 +399,8 @@ skip_range | [752, 696]
 Skip | Using stored MLP output | Spatial | t 696 | [752, 696] | block 13
 Skip | Delete stored MLP output | t 696 | [752, 696] | block 13
 
- 63%|██████▎   | 17/27 [00:28<00:13,  1.40s/it]
- 67%|██████▋   | 18/27 [00:29<00:11,  1.27s/it]skip_range | [664, 588]
+ 63%|██████▎   | 17/27 [00:29<00:13,  1.36s/it]
+ 67%|██████▋   | 18/27 [00:30<00:11,  1.24s/it]skip_range | [664, 588]
 Skip | Using stored MLP output | Time | t 628 | [664, 588] | block 0
 skip_range | [664, 588]
 Skip | Using stored MLP output | Time | t 628 | [664, 588] | block 1
@@ -428,7 +429,7 @@ Skip | Using stored MLP output | Time | t 628 | [664, 588] | block 12
 skip_range | [664, 588]
 Skip | Using stored MLP output | Time | t 628 | [664, 588] | block 13
 
- 70%|███████   | 19/27 [00:31<00:10,  1.34s/it]skip_range | [628, 544]
+ 70%|███████   | 19/27 [00:32<00:10,  1.32s/it]skip_range | [628, 544]
 Skip | Using stored MLP output | Spatial | t 588 | [628, 544] | block 0
 skip_range | [664, 588]
 Skip | Using stored MLP output | Time | t 588 | [664, 588] | block 0
@@ -499,9 +500,9 @@ skip_range | [664, 588]
 Skip | Using stored MLP output | Time | t 588 | [664, 588] | block 13
 Skip | Delete stored MLP output | t 588 | [664, 588] | block 13
 
- 74%|███████▍  | 20/27 [00:31<00:07,  1.11s/it]
- 78%|███████▊  | 21/27 [00:34<00:08,  1.42s/it]
- 81%|████████▏ | 22/27 [00:36<00:08,  1.70s/it]skip_range | [496, 378]
+ 74%|███████▍  | 20/27 [00:32<00:07,  1.10s/it]
+ 78%|███████▊  | 21/27 [00:35<00:08,  1.41s/it]
+ 81%|████████▏ | 22/27 [00:37<00:08,  1.71s/it]skip_range | [496, 378]
 Skip | Using stored MLP output | Spatial | t 440 | [496, 378] | block 0
 skip_range | [496, 378]
 Skip | Using stored MLP output | Time | t 440 | [496, 378] | block 0
@@ -518,7 +519,7 @@ Skip | Using stored MLP output | Spatial | t 440 | [496, 378] | block 3
 skip_range | [496, 378]
 Skip | Using stored MLP output | Time | t 440 | [496, 378] | block 3
 
- 85%|████████▌ | 23/27 [00:38<00:07,  1.87s/it]skip_range | [496, 378]
+ 85%|████████▌ | 23/27 [00:39<00:07,  1.87s/it]skip_range | [496, 378]
 Skip | Using stored MLP output | Spatial | t 378 | [496, 378] | block 0
 Skip | Delete stored MLP output | t 378 | [496, 378] | block 0
 skip_range | [496, 378]
@@ -543,12 +544,12 @@ skip_range | [496, 378]
 Skip | Using stored MLP output | Time | t 378 | [496, 378] | block 3
 Skip | Delete stored MLP output | t 378 | [496, 378] | block 3
 
- 89%|████████▉ | 24/27 [00:40<00:05,  1.98s/it]
- 93%|█████████▎| 25/27 [00:43<00:04,  2.09s/it]
- 96%|█████████▋| 26/27 [00:45<00:02,  2.18s/it]
-100%|██████████| 27/27 [00:47<00:00,  2.23s/it]
-100%|██████████| 27/27 [00:47<00:00,  1.78s/it]
-[[34m2024-06-30 18:15:50[0m] Prompt: a cat wearing sunglasses and working as a lifeguard at pool. aesthetic score: 6.5.
+ 89%|████████▉ | 24/27 [00:42<00:05,  1.99s/it]
+ 93%|█████████▎| 25/27 [00:44<00:04,  2.10s/it]
+ 96%|█████████▋| 26/27 [00:46<00:02,  2.18s/it]
+100%|██████████| 27/27 [00:49<00:00,  2.24s/it]
+100%|██████████| 27/27 [00:49<00:00,  1.82s/it]
+[[34m2024-06-30 18:44:19[0m] Prompt: a cat wearing sunglasses and working as a lifeguard at pool. aesthetic score: 6.5.
 Saved to ./samples/opensora/mlp_skip_s_148_t_120/a cat wearing sunglasses and working as .mp4
 
   0%|          | 0/27 [00:00<?, ?it/s]
@@ -631,7 +632,7 @@ Skip | Delete stored MLP output | t 888 | [916, 888] | block 13
 
  30%|██▉       | 8/27 [00:15<00:31,  1.65s/it]
  33%|███▎      | 9/27 [00:16<00:25,  1.44s/it]
- 37%|███▋      | 10/27 [00:17<00:25,  1.53s/it]skip_range | [856, 820]
+ 37%|███▋      | 10/27 [00:17<00:26,  1.53s/it]skip_range | [856, 820]
 Skip | Using stored MLP output | Time | t 836 | [856, 820] | block 0
 skip_range | [856, 820]
 Skip | Using stored MLP output | Time | t 836 | [856, 820] | block 1
@@ -804,7 +805,7 @@ Skip | Using stored MLP output | Time | t 752 | [776, 724] | block 12
 skip_range | [776, 724]
 Skip | Using stored MLP output | Time | t 752 | [776, 724] | block 13
 
- 56%|█████▌    | 15/27 [00:23<00:13,  1.15s/it]skip_range | [752, 696]
+ 56%|█████▌    | 15/27 [00:23<00:13,  1.16s/it]skip_range | [752, 696]
 Skip | Using stored MLP output | Spatial | t 724 | [752, 696] | block 0
 skip_range | [776, 724]
 Skip | Using stored MLP output | Time | t 724 | [776, 724] | block 0
@@ -1068,7 +1069,7 @@ Skip | Delete stored MLP output | t 378 | [496, 378] | block 3
  96%|█████████▋| 26/27 [00:42<00:02,  2.15s/it]
 100%|██████████| 27/27 [00:45<00:00,  2.22s/it]
 100%|██████████| 27/27 [00:45<00:00,  1.68s/it]
-[[34m2024-06-30 18:16:41[0m] Prompt: a dog in astronaut suit and sunglasses floating in space. aesthetic score: 6.5.
+[[34m2024-06-30 18:45:10[0m] Prompt: a dog in astronaut suit and sunglasses floating in space. aesthetic score: 6.5.
 Saved to ./samples/opensora/mlp_skip_s_148_t_120/A dog in astronaut suit and sunglasses f.mp4
-[[34m2024-06-30 18:16:43[0m] Inference finished.
-[[34m2024-06-30 18:16:43[0m] Saved samples to ./samples/opensora/mlp_skip_s_148_t_120
+[[34m2024-06-30 18:45:12[0m] Inference finished.
+[[34m2024-06-30 18:45:12[0m] Saved samples to ./samples/opensora/mlp_skip_s_148_t_120
