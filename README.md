@@ -68,34 +68,34 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
     <tr>
         <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
         <td align="center">🟡</td>
-        <td text-align="center">✅</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;"><a href="./docs/opensora.md">Doc</a></td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center"><a href="./docs/opensora.md">Doc</a></td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
-        <td style="text-align: center;">❌</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;"><a href="./docs/opensora_plan.md">Doc</a></td>
+        <td align="center">❌</td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center"><a href="./docs/opensora_plan.md">Doc</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
-        <td style="text-align: center;">❌</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;"><a href="./docs/latte.md">Doc</a></td>
+        <td align="center">❌</td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center"><a href="./docs/latte.md">Doc</a></td>
     </tr>
     <tr>
         <td>DiT [<a href="https://github.com/facebookresearch/DiT">source</a>]</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;">✅</td>
-        <td style="text-align: center;">❌</td>
-        <td style="text-align: center;">❌</td>
-        <td style="text-align: center;"><a href="./docs/dit.md">Doc</a></td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center">❌</td>
+        <td align="center">❌</td>
+        <td align="center"><a href="./docs/dit.md">Doc</a></td>
     </tr>
 </table>
 
