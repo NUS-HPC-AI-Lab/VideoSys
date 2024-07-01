@@ -49,14 +49,16 @@ pip install -e .
 
 ## Usage
 
-OpenDiT fully supports the following models, including training and inference, which align with the original methods. Through our novel techniques, we enable these models to run faster and consume less memory. Here's how you can use them:
+OpenDiT supports many diffusion models with our various acceleration techniques, enabling these models to run faster and consume less memory.
 
-| Model | Train | Inference | Optimize | Usage |
-| ------ | :------: | :------: | :------: | :------: |
-| DiT[[source](https://github.com/facebookresearch/DiT)]| ✅ | ✅ | ✅ | [Doc](./docs/dit.md)
-| Open-Sora[[source](https://github.com/hpcaitech/Open-Sora)]| 🟡 | ✅ | ✅ | [Doc](./docs/opensora.md)
-| Latte[[source](https://github.com/Vchitect/Latte)]| ❌ | ✅ | ✅ | [Doc](./docs/latte.md)
-| Open-Sora-Plan[[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)]| ❌ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
+<b>You can find all available models and their supported accleration techniques in the following table. Click `Doc` to see how to use them.</b>
+
+| Model | Train | Inference | [DSP](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc) | [PAB](https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc) | Usage |
+| ------ | :------: | :------: | :------: | :------: | :------: |
+| Open-Sora[[source](https://github.com/hpcaitech/Open-Sora)]| 🟡 | ✅ | ✅ |  ✅ |[Doc](./docs/opensora.md)
+| Open-Sora-Plan[[source](https://github.com/PKU-YuanGroup/Open-Sora-Plan)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/opensora_plan.md)
+| Latte[[source](https://github.com/Vchitect/Latte)]| ❌ | ✅ | ✅ | ✅ | [Doc](./docs/latte.md)
+| DiT[[source](https://github.com/facebookresearch/DiT)]| ✅ | ✅ | ❌ | ❌ | [Doc](./docs/dit.md)
 
 ## Technique Overview
 
@@ -70,13 +72,9 @@ Authors: [Xuanlei Zhao](https://oahzxl.github.io/)<sup>1*</sup>,  [Xiaolong Jin]
 
 ![method](./assets/figures/pab_method.png)
 
-PAB is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>.
+PAB is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>. By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including Open-Sora, Open-Sora-Plan, and Latte.
 
-By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including Open-Sora, Open-Sora-Plan, and Latte.
-
-Notably, as a training-free approach, PAB can enpower any future DiT-based video generation models with real-time capabilities.
-
-See its detail and usage [here](./docs/pab.md).
+See its details [here](./docs/pab.md).
 
 ----
 
@@ -92,7 +90,7 @@ It achieves **3x** speed for training and **2x** speed for inference in OpenSora
 | ------ | ------ | ------ | ------ |
 | Latency(s) | 106 | 45 | 22 |
 
-See its detail and usage [here](./docs/dsp.md).
+See its details [here](./docs/dsp.md).
 
 ----
 
