@@ -33,7 +33,7 @@ from transformers import T5EncoderModel, T5Tokenizer
 
 from opendit.core.parallel_mgr import set_parallel_manager
 from opendit.core.skip_mgr import set_skip_manager
-from opendit.models.latte import LattePipeline, LatteT2V
+from opendit.models.latte import LattePipeline_skip_s_t, LatteT2V_skip_s_t
 from opendit.utils.utils import merge_args, set_seed
 
 
@@ -70,9 +70,16 @@ def main(args):
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
         diffusion_skip_timestep=args.diffusion_skip_timestep,
+        # mlp
+        mlp_skip=args.mlp_skip,
+        mlp_threshold=args.mlp_threshold,
+        mlp_gap=args.mlp_gap,
+        mlp_layer_range=args.mlp_layer_range,
+        mlp_temporal_skip_config=args.mlp_temporal_skip_config,
+        mlp_spatial_skip_config=args.mlp_spatial_skip_config,
     )
 
-    transformer_model = LatteT2V.from_pretrained(
+    transformer_model = LatteT2V_skip_s_t.from_pretrained(
         args.pretrained_model_path, subfolder="transformer", video_length=args.video_length
     ).to(device, dtype=torch.float16)
 
@@ -187,7 +194,7 @@ def main(args):
             variance_type=args.variance_type,
         )
 
-    videogen_pipeline = LattePipeline(
+    videogen_pipeline = LattePipeline_skip_s_t(
         vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, scheduler=scheduler, transformer=transformer_model
     ).to(device)
 

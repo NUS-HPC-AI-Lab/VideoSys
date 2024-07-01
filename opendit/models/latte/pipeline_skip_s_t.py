@@ -17,7 +17,6 @@ from typing import Callable, List, Optional, Tuple, Union
 import einops
 import torch
 import torch.distributed as dist
-import torch.nn.functional as F
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
@@ -66,7 +65,7 @@ class VideoPipelineOutput(BaseOutput):
     video: torch.Tensor
 
 
-class LattePipeline_mse(DiffusionPipeline):
+class LattePipeline_skip_s_t(DiffusionPipeline):
     r"""
     Pipeline for text-to-image generation using PixArt-Alpha.
 
@@ -710,12 +709,6 @@ class LattePipeline_mse(DiffusionPipeline):
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
 
-        # TODO MSE
-        all_spatial_mse = {}
-        all_temporal_mse = {}
-        prev_spatial_mlp_outputs = None
-        prev_temporal_mlp_outputs = None
-
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
@@ -737,40 +730,15 @@ class LattePipeline_mse(DiffusionPipeline):
                 current_timestep = current_timestep.expand(latent_model_input.shape[0])
 
                 # predict noise model_output
-                noise_pred, spatial_mlp_outputs, temporal_mlp_outputs = self.transformer(
+                noise_pred = self.transformer(
                     latent_model_input,
+                    all_timesteps=self.scheduler.timesteps,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
                     added_cond_kwargs=added_cond_kwargs,
                     enable_temporal_attentions=enable_temporal_attentions,
                     return_dict=False,
-                )
-
-                # TODO MSE
-                if prev_spatial_mlp_outputs is not None and prev_temporal_mlp_outputs is not None:
-                    spatial_mse = []
-                    for (block_idx, current_output), (_, prev_output) in zip(
-                        spatial_mlp_outputs, prev_spatial_mlp_outputs
-                    ):
-                        l2_distance = F.mse_loss(current_output.float(), prev_output.float())
-                        spatial_mse.append((block_idx, l2_distance.item()))
-                    all_spatial_mse[int(current_timestep[0])] = spatial_mse
-
-                    temporal_mse = []
-                    for (block_idx, current_output), (_, prev_output) in zip(
-                        temporal_mlp_outputs, prev_temporal_mlp_outputs
-                    ):
-                        l2_distance = F.mse_loss(current_output.float(), prev_output.float())
-                        temporal_mse.append((block_idx, l2_distance.item()))
-                    all_temporal_mse[int(current_timestep[0])] = temporal_mse
-
-                    print(f"Time step {t}, Spatial MSE: {spatial_mse}, Temporal MSE: {temporal_mse}")
-
-                # Update previous MLP outputs and delete current outputs
-                prev_spatial_mlp_outputs = spatial_mlp_outputs
-                prev_temporal_mlp_outputs = temporal_mlp_outputs
-                del spatial_mlp_outputs
-                del temporal_mlp_outputs
+                )[0]
 
                 # perform guidance
                 if do_classifier_free_guidance:
@@ -812,7 +780,7 @@ class LattePipeline_mse(DiffusionPipeline):
         if not return_dict:
             return (video,)
 
-        return VideoPipelineOutput(video=video), all_spatial_mse, all_temporal_mse
+        return VideoPipelineOutput(video=video)
 
     def decode_latents_image(self, latents):
         video_length = latents.shape[2]
