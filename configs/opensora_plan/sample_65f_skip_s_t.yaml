@@ -41,7 +41,7 @@ diffusion_skip_timestep: [3,3,3,0,0,0,0,0,0,0]
 
 
 # mlp
-mlp_skip: False
+mlp_skip: True
 
 mlp_spatial_skip_config: {
 810: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},

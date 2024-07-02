@@ -1537,7 +1537,9 @@ class BasicTransformerBlock_(nn.Module):
         self.last_out = None
         self.count = 0
 
+        # mlp
         self.block_idx = block_idx
+        self.temp_mlp_count = 0
 
     def set_last_out(self, last_out: torch.Tensor):
         self.last_out = last_out
@@ -1662,9 +1664,9 @@ class BasicTransformerBlock_(nn.Module):
         # if not self.use_ada_layer_norm_single:
         #     norm_hidden_states = self.norm3(hidden_states)
         # TODO skip mlp
-        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
+        skip_mlp, self.temp_mlp_count, skip_next, skip_range = if_skip_mlp(
             int(org_timestep[0]),
-            self.mlp_count,
+            self.temp_mlp_count,
             self.block_idx,
             all_timesteps.tolist(),
             is_temporal=self.temporal,
@@ -1921,6 +1923,9 @@ class BasicTransformerBlock(nn.Module):
         self.spatial_count = 0
         self.block_idx = block_idx
 
+        # skip
+        self.spatila_mlp_count = 0
+
     def set_cross_last(self, last_out: torch.Tensor):
         self.cross_last = last_out
 
@@ -2048,9 +2053,9 @@ class BasicTransformerBlock(nn.Module):
                     self.set_cross_last(attn_output)
 
         # TODO skip mlp here
-        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
+        skip_mlp, self.spatila_mlp_count, skip_next, skip_range = if_skip_mlp(
             int(org_timestep[0]),
-            self.mlp_count,
+            self.spatila_mlp_count,
             self.block_idx,
             all_timesteps.tolist(),
             is_temporal=self.temporal,

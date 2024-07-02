@@ -276,6 +276,15 @@ if __name__ == "__main__":
     )
     parser.add_argument("--diffusion_skip_timestep", nargs="+")
 
+    # skip mlp
+    parser.add_argument("--mlp_skip", action="store_true", help="Enable mlp skip")
+    parser.add_argument("--mlp_threshold", type=int, nargs="+", help="MLP skip layer")
+    parser.add_argument("--mlp_gap", type=int, nargs="+", help="MLP skip gap")
+    parser.add_argument("--mlp_layer_range", type=int, nargs="+", help="MLP skip block size")
+    parser.add_argument("--mlp_skip_config", nargs="+")
+    parser.add_argument("--mlp_temporal_skip_config", nargs="+")
+    parser.add_argument("--mlp_spatial_skip_config", nargs="+")
+
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)
     args = merge_args(args, config_args)
