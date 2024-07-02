@@ -519,6 +519,10 @@ class BasicTransformerBlock(nn.Module):
             elif self.norm_type == "ada_norm_single":
                 ff_output = gate_mlp * ff_output
 
+            if skip_next:
+                if mlp_outputs is not None:
+                    mlp_outputs[(int(org_timestep[0]), self.block_idx)] = ff_output
+
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
@@ -671,7 +675,7 @@ class BasicTransformerBlock_(nn.Module):
 
         # fvd
         self.last_out = None
-        self.count = 0
+        self.mlp_count = 0
         self.temporal = True
         self.block_idx = block_idx
 
@@ -693,6 +697,8 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs: Dict[str, Any] = None,
         class_labels: Optional[torch.LongTensor] = None,
         org_timestep: Optional[torch.LongTensor] = None,
+        mlp_outputs=None,
+        all_timesteps=None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
@@ -705,7 +711,7 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        skip_temporal, self.count = if_skip_temporal(int(org_timestep[0]), self.count)
+        skip_temporal, self.mlp_count = if_skip_temporal(int(org_timestep[0]), self.mlp_count)
         if skip_temporal:
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
@@ -756,78 +762,112 @@ class BasicTransformerBlock_(nn.Module):
                 self.last_out = attn_output
 
         hidden_states = attn_output + hidden_states
-        if hidden_states.ndim == 4:
-            hidden_states = hidden_states.squeeze(1)
-
-        # 2.5 GLIGEN Control
-        if gligen_kwargs is not None:
-            hidden_states = self.fuser(hidden_states, gligen_kwargs["objs"])
-
-        # # 3. Cross-Attention
-        # if self.attn2 is not None:
-        #     if self.use_ada_layer_norm:
-        #         norm_hidden_states = self.norm2(hidden_states, timestep)
-        #     elif self.use_ada_layer_norm_zero or self.use_layer_norm:
-        #         norm_hidden_states = self.norm2(hidden_states)
-        #     elif self.use_ada_layer_norm_single:
-        #         # For PixArt norm2 isn't applied here:
-        #         # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
-        #         norm_hidden_states = hidden_states
-        #     else:
-        #         raise ValueError("Incorrect norm")
-
-        #     if self.pos_embed is not None and self.use_ada_layer_norm_single is False:
-        #         norm_hidden_states = self.pos_embed(norm_hidden_states)
-
-        #     attn_output = self.attn2(
-        #         norm_hidden_states,
-        #         encoder_hidden_states=encoder_hidden_states,
-        #         attention_mask=encoder_attention_mask,
-        #         **cross_attention_kwargs,
-        #     )
-        #     hidden_states = attn_output + hidden_states
-
-        # 4. Feed-forward
-        # if not self.use_ada_layer_norm_single:
-        #     norm_hidden_states = self.norm3(hidden_states)
-
-        if self.use_ada_layer_norm_zero:
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-
-        if self.use_ada_layer_norm_single:
-            # norm_hidden_states = self.norm2(hidden_states)
-            norm_hidden_states = self.norm3(hidden_states)
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
 
         # TODO skip mlp here
-        if self._chunk_size is not None:
-            # "feed_forward_chunk_size" can be used to save memory
-            if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
+        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
+            int(org_timestep[0]),
+            self.mlp_count,
+            self.block_idx,
+            all_timesteps.tolist(),
+            is_temporal=self.temporal,
+            is_spatial=(not self.temporal),
+        )
+
+        if skip_mlp:
+            skip_start_t = skip_range[0]
+            ff_output = mlp_outputs.get((skip_start_t, self.block_idx), None) if mlp_outputs is not None else None
+
+            if ff_output is not None:
+                print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
+                if self.temporal:
+                    print(
+                        f"Skip | Using stored MLP output | Time | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                    )
+                else:
+                    print(
+                        f"Skip | Using stored MLP output | Spatial | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                    )
+                if int(org_timestep[0]) == skip_range[-1]:
+                    del mlp_outputs[(skip_start_t, self.block_idx)]
+                    print(
+                        f"Skip | Delete stored MLP output | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                    )
+            else:
                 raise ValueError(
-                    f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
+                    f"No stored MLP output found | t {int(org_timestep[0])} |[{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                 )
-
-            num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
-            ff_output = torch.cat(
-                [
-                    self.ff(hid_slice, scale=lora_scale)
-                    for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)
-                ],
-                dim=self._chunk_dim,
-            )
         else:
-            ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+            if hidden_states.ndim == 4:
+                hidden_states = hidden_states.squeeze(1)
 
-        if self.use_ada_layer_norm_zero:
-            ff_output = gate_mlp.unsqueeze(1) * ff_output
-        elif self.use_ada_layer_norm_single:
-            ff_output = gate_mlp * ff_output
+            # 2.5 GLIGEN Control
+            if gligen_kwargs is not None:
+                hidden_states = self.fuser(hidden_states, gligen_kwargs["objs"])
+
+            if self.use_ada_layer_norm_zero:
+                norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+
+            if self.use_ada_layer_norm_single:
+                # norm_hidden_states = self.norm2(hidden_states)
+                norm_hidden_states = self.norm3(hidden_states)
+                norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
+
+            if self._chunk_size is not None:
+                # "feed_forward_chunk_size" can be used to save memory
+                if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
+                    raise ValueError(
+                        f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
+                    )
+
+                num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
+                ff_output = torch.cat(
+                    [
+                        self.ff(hid_slice, scale=lora_scale)
+                        for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)
+                    ],
+                    dim=self._chunk_dim,
+                )
+            else:
+                ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+
+            if self.use_ada_layer_norm_zero:
+                ff_output = gate_mlp.unsqueeze(1) * ff_output
+            elif self.use_ada_layer_norm_single:
+                ff_output = gate_mlp * ff_output
 
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
         return hidden_states, mlp_outputs
+
+    # # 3. Cross-Attention
+    # if self.attn2 is not None:
+    #     if self.use_ada_layer_norm:
+    #         norm_hidden_states = self.norm2(hidden_states, timestep)
+    #     elif self.use_ada_layer_norm_zero or self.use_layer_norm:
+    #         norm_hidden_states = self.norm2(hidden_states)
+    #     elif self.use_ada_layer_norm_single:
+    #         # For PixArt norm2 isn't applied here:
+    #         # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
+    #         norm_hidden_states = hidden_states
+    #     else:
+    #         raise ValueError("Incorrect norm")
+
+    #     if self.pos_embed is not None and self.use_ada_layer_norm_single is False:
+    #         norm_hidden_states = self.pos_embed(norm_hidden_states)
+
+    #     attn_output = self.attn2(
+    #         norm_hidden_states,
+    #         encoder_hidden_states=encoder_hidden_states,
+    #         attention_mask=encoder_attention_mask,
+    #         **cross_attention_kwargs,
+    #     )
+    #     hidden_states = attn_output + hidden_states
+
+    # 4. Feed-forward
+    # if not self.use_ada_layer_norm_single:
+    #     norm_hidden_states = self.norm3(hidden_states)
 
     def dynamic_switch(self, x, to_spatial_shard: bool):
         if to_spatial_shard:

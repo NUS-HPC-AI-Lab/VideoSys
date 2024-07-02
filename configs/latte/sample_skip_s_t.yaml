@@ -45,13 +45,15 @@ temporal_gap: 4
 cross_skip: True
 cross_threshold: [80, 900]
 cross_gap: 7
-diffusion_skip: True
-diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
+# diffusion_skip: True
+# diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
 
 
 # skip
+mlp_skip: True
+
 mlp_spatial_skip_config: {
-900: {'block': [0, 1, 2, 3], 'skip_count': 4},
+980: {'block': [0, 1, 2, 3], 'skip_count': 4},
 720: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 640: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 560: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
@@ -61,7 +63,7 @@ mlp_spatial_skip_config: {
 
 
 mlp_temporal_skip_config: {
-900: {'block': [0, 1, 2, 3], 'skip_count': 4},
+980: {'block': [0, 1, 2, 3], 'skip_count': 4},
 720: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 640: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 560: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},

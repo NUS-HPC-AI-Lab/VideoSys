@@ -732,7 +732,7 @@ class LattePipeline_skip_s_t(DiffusionPipeline):
                 # predict noise model_output
                 noise_pred = self.transformer(
                     latent_model_input,
-                    all_timesteps=self.scheduler.timesteps,
+                    all_timesteps=timesteps,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
                     added_cond_kwargs=added_cond_kwargs,
