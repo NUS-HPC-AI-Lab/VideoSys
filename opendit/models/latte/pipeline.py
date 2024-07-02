@@ -730,7 +730,7 @@ class LattePipeline(DiffusionPipeline):
                 current_timestep = current_timestep.expand(latent_model_input.shape[0])
 
                 # predict noise model_output
-                noise_pred, spatial_mlp_outputs, temporal_mlp_outputs = self.transformer(
+                noise_pred = self.transformer(
                     latent_model_input,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,

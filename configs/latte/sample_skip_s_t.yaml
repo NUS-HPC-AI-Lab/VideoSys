@@ -53,7 +53,6 @@ cross_gap: 7
 mlp_skip: True
 
 mlp_spatial_skip_config: {
-980: {'block': [0, 1, 2, 3], 'skip_count': 4},
 720: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 640: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 560: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
@@ -63,7 +62,6 @@ mlp_spatial_skip_config: {
 
 
 mlp_temporal_skip_config: {
-980: {'block': [0, 1, 2, 3], 'skip_count': 4},
 720: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 640: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 560: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},

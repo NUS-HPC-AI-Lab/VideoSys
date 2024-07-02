@@ -835,6 +835,10 @@ class BasicTransformerBlock_(nn.Module):
             elif self.use_ada_layer_norm_single:
                 ff_output = gate_mlp * ff_output
 
+            if skip_next:
+                if mlp_outputs is not None:
+                    mlp_outputs[(int(org_timestep[0]), self.block_idx)] = ff_output
+
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)

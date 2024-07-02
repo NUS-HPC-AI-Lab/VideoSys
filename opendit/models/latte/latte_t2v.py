@@ -1233,9 +1233,6 @@ class LatteT2V(ModelMixin, ConfigMixin):
         else:
             temp_pos_embed = self.temp_pos_embed
 
-        spatial_mlp_outputs = []
-        temporal_mlp_outputs = []
-
         for i, (spatial_block, temp_block) in enumerate(zip(self.transformer_blocks, self.temporal_transformer_blocks)):
             if self.training and self.gradient_checkpointing:
                 hidden_states = torch.utils.checkpoint.checkpoint(
@@ -1308,8 +1305,6 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     None,
                     org_timestep,
                 )
-                spatial_mlp_outputs.extend(spatial_block.mlp_outputs)
-                spatial_block.mlp_outputs = []
 
                 if enable_temporal_attentions:
                     hidden_states = rearrange(hidden_states, "(b f) t d -> (b t) f d", b=input_batch_size).contiguous()
@@ -1352,9 +1347,6 @@ class LatteT2V(ModelMixin, ConfigMixin):
                         hidden_states = rearrange(
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
-
-                temporal_mlp_outputs.extend(temp_block.mlp_outputs)
-                temp_block.mlp_outputs = []
 
         if enable_sequence_parallel():
             hidden_states = self.gather_from_second_dim(hidden_states, input_batch_size)
