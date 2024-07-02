@@ -1,6 +1,6 @@
 model_path: LanguageBind/Open-Sora-Plan-v1.1.0
-version: 65x512x512
-num_frames: 65
+version: 20x512x512
+num_frames: 20
 height: 512
 width: 512
 cache_dir: "./cache_dir"

@@ -1,0 +1,160 @@
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/transformers/utils/generic.py:441: UserWarning: torch.utils._pytree._register_pytree_node is deprecated. Please use torch.utils._pytree.register_pytree_node instead.
+  _torch_pytree._register_pytree_node(
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/transformers/utils/generic.py:309: UserWarning: torch.utils._pytree._register_pytree_node is deprecated. Please use torch.utils._pytree.register_pytree_node instead.
+  _torch_pytree._register_pytree_node(
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/transformers/utils/generic.py:309: UserWarning: torch.utils._pytree._register_pytree_node is deprecated. Please use torch.utils._pytree.register_pytree_node instead.
+  _torch_pytree._register_pytree_node(
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/diffusers/models/transformers/transformer_2d.py:34: FutureWarning: `Transformer2DModelOutput` is deprecated and will be removed in version 1.0.0. Importing `Transformer2DModelOutput` from `diffusers.models.transformer_2d` is deprecated and this will be removed in a future version. Please use `from diffusers.models.modeling_outputs import Transformer2DModelOutput`, instead.
+  deprecate("Transformer2DModelOutput", "1.0.0", deprecation_message)
+[07/02/24 11:51:00] INFO     colossalai - colossalai - INFO: /home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/colossalai/initialize.py:60 launch
+                    INFO     colossalai - colossalai - INFO: Distributed environment is initialized, world size: 1
+
+Init SkipManager:
+                steps=150
+                cross_skip=True, cross_threshold=[100, 850], cross_gap=6
+                spatial_skip=True, spatial_threshold=[100, 800], spatial_gap=2, spatial_layer_range=[0, 28]
+                temporal_skip=True, temporal_threshold=[100, 800], temporal_gap=4
+                diffusion_skip=False, diffusion_timestep_respacing=None
+
+Loading model from LanguageBind/Open-Sora-Plan-v1.1.0
+The config attributes {'in_channels': 3, 'out_channels': 3} were passed to CausalVAEModel, but are not expected and will be ignored. Please verify your config.json configuration file.
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=VGG16_Weights.IMAGENET1K_V1`. You can also use `weights=VGG16_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.0.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.0.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.2.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.2.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.5.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.5.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.7.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.7.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.10.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.10.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.12.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.12.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.14.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.14.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.17.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.17.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.19.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.19.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.21.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.21.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.24.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.24.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.26.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.26.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.28.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for features.28.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for classifier.0.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for classifier.0.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for classifier.3.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for classifier.3.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for classifier.6.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for classifier.6.bias: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for lin0.model.1.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for lin1.model.1.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for lin2.model.1.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for lin3.model.1.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/nn/modules/module.py:2047: UserWarning: for lin4.model.1.weight: copying from a non-meta parameter in the checkpoint to a meta parameter in the current model, which is a no-op. (Did you mean to pass `assign=True` to assign items in the state dictionary to their corresponding key in the module instead of copying them in place?)
+  warnings.warn(f'for {key}: copying from a non-meta parameter in the checkpoint to a meta '
+loaded pretrained LPIPS loss from taming/modules/autoencoder/lpips/vgg.pth
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/huggingface_hub/file_download.py:1132: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+You are using the default legacy behaviour of the <class 'transformers.models.t5.tokenization_t5.T5Tokenizer'>. This is expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you. If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it means, and thouroughly read the reason why this was added as explained in https://github.com/huggingface/transformers/pull/24565
+
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]
+Loading checkpoint shards:  50%|█████     | 1/2 [00:05<00:05,  5.43s/it]
+Loading checkpoint shards: 100%|██████████| 2/2 [00:10<00:00,  5.45s/it]
+Loading checkpoint shards: 100%|██████████| 2/2 [00:10<00:00,  5.45s/it]
+
+  0%|          | 0/150 [00:00<?, ?it/s]Time step tensor([894, 891, 891, 888, 888, 885, 885, 882, 882, 879, 879, 876, 876, 870,
+        864, 858, 852, 846, 840, 834, 828, 822, 816, 810, 804, 798, 792, 786,
+        780, 774, 768, 762, 756, 750, 744, 738, 732, 726, 720, 714, 708, 702,
+        696, 690, 684, 678, 672, 666, 660, 654, 648, 642, 636, 630, 624, 618,
+        612, 606, 600, 594, 588, 582, 576, 570, 564, 558, 552, 546, 540, 534,
+        528, 522, 516, 510, 504, 498, 492, 486, 480, 474, 468, 462, 456, 450,
+        444, 438, 432, 426, 420, 414, 408, 402, 396, 390, 384, 378, 372, 366,
+        360, 354, 348, 342, 336, 330, 324, 318, 312, 306, 300, 294, 288, 282,
+        276, 270, 264, 258, 252, 246, 240, 234, 228, 222, 216, 210, 204, 198,
+        192, 186, 180, 174, 168, 162, 156, 150, 144, 138, 132, 126, 120, 114,
+        108, 102,  96,  90,  84,  78,  72,  66,  60,  54,  48,  42,  36,  30,
+         24,  18,  12,   6,   0], device='cuda:0')
+/home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/torch/backends/cuda/__init__.py:342: FutureWarning: torch.backends.cuda.sdp_kernel() is deprecated. In the future, this context manager will be removed. Please see, torch.nn.attention.sdpa_kernel() for the new context manager, with updated signature.
+  warnings.warn(
+Time step tensor([894, 891, 891, 888, 888, 885, 885, 882, 882, 879, 879, 876, 876, 870,
+        864, 858, 852, 846, 840, 834, 828, 822, 816, 810, 804, 798, 792, 786,
+        780, 774, 768, 762, 756, 750, 744, 738, 732, 726, 720, 714, 708, 702,
+        696, 690, 684, 678, 672, 666, 660, 654, 648, 642, 636, 630, 624, 618,
+        612, 606, 600, 594, 588, 582, 576, 570, 564, 558, 552, 546, 540, 534,
+        528, 522, 516, 510, 504, 498, 492, 486, 480, 474, 468, 462, 456, 450,
+        444, 438, 432, 426, 420, 414, 408, 402, 396, 390, 384, 378, 372, 366,
+        360, 354, 348, 342, 336, 330, 324, 318, 312, 306, 300, 294, 288, 282,
+        276, 270, 264, 258, 252, 246, 240, 234, 228, 222, 216, 210, 204, 198,
+        192, 186, 180, 174, 168, 162, 156, 150, 144, 138, 132, 126, 120, 114,
+        108, 102,  96,  90,  84,  78,  72,  66,  60,  54,  48,  42,  36,  30,
+         24,  18,  12,   6,   0], device='cuda:0')
+Time step 891, Spatial MSE: [(0, 1.1634189149845042e-06), (1, 6.512942491099238e-06), (2, 0.00016492782742716372), (3, 2.043221684289165e-05), (4, 8.730229637876619e-06), (5, 6.832528015365824e-06), (6, 8.633956895209849e-06), (7, 5.2532773224811535e-06), (8, 5.408701781561831e-06), (9, 6.9423440436366946e-06), (10, 1.2162360690126661e-05), (11, 1.3516045328287873e-05), (12, 1.7386217223247513e-05), (13, 2.5115092284977436e-05), (14, 8.996054384624586e-05), (15, 0.0001491737930336967), (16, 0.0006073952536098659), (17, 6.35537871858105e-05), (18, 6.386164022842422e-05), (19, 8.848548895912245e-05), (20, 0.00011378682393115014), (21, 8.249437087215483e-05), (22, 9.289050649385899e-05), (23, 8.511952182743698e-05), (24, 0.00016368803335353732), (25, 0.00039194757118821144), (26, 0.00041293923277407885), (27, 0.0037370335776358843)], Temporal MSE: [(0, 1.6369842796848388e-06), (1, 1.200509018417506e-06), (2, 1.6550978898521862e-06), (3, 1.6011503021218232e-06), (4, 1.03394825146097e-06), (5, 1.5591444935125764e-06), (6, 7.511949320360145e-07), (7, 1.0113666348843253e-06), (8, 7.065968361530395e-07), (9, 8.089288030532771e-07), (10, 1.8874727629736299e-06), (11, 1.5932942005747464e-06), (12, 1.48764445384586e-06), (13, 3.816202934103785e-06), (14, 4.048362370667746e-06), (15, 6.062633929104777e-06), (16, 2.6472459921933478e-06), (17, 5.287876319925999e-06), (18, 3.369413207110483e-06), (19, 3.331341986267944e-06), (20, 4.704959792434238e-06), (21, 3.895789177477127e-06), (22, 1.0235651643597521e-05), (23, 6.636990292463452e-06), (24, 1.8776092474581674e-05), (25, 1.6856960428413004e-05), (26, 2.8987976747885114e-06), (27, 1.1651609383989125e-05)]
+Time step tensor([894, 891, 891, 888, 888, 885, 885, 882, 882, 879, 879, 876, 876, 870,
+        864, 858, 852, 846, 840, 834, 828, 822, 816, 810, 804, 798, 792, 786,
+        780, 774, 768, 762, 756, 750, 744, 738, 732, 726, 720, 714, 708, 702,
+        696, 690, 684, 678, 672, 666, 660, 654, 648, 642, 636, 630, 624, 618,
+        612, 606, 600, 594, 588, 582, 576, 570, 564, 558, 552, 546, 540, 534,
+        528, 522, 516, 510, 504, 498, 492, 486, 480, 474, 468, 462, 456, 450,
+        444, 438, 432, 426, 420, 414, 408, 402, 396, 390, 384, 378, 372, 366,
+        360, 354, 348, 342, 336, 330, 324, 318, 312, 306, 300, 294, 288, 282,
+        276, 270, 264, 258, 252, 246, 240, 234, 228, 222, 216, 210, 204, 198,
+        192, 186, 180, 174, 168, 162, 156, 150, 144, 138, 132, 126, 120, 114,
+        108, 102,  96,  90,  84,  78,  72,  66,  60,  54,  48,  42,  36,  30,
+         24,  18,  12,   6,   0], device='cuda:0')
+Time step 891, Spatial MSE: [(0, 1.170029850783294e-08), (1, 1.4664981051737414e-07), (2, 1.4695350500915083e-06), (3, 2.707513999666844e-07), (4, 1.1242703834568601e-07), (5, 8.918129168478117e-08), (6, 2.183307259429057e-07), (7, 1.2775228697137209e-07), (8, 1.1121361609411906e-07), (9, 1.4200431053268403e-07), (10, 1.4844135876046494e-07), (11, 1.5457160884579935e-07), (12, 1.8036662652320956e-07), (13, 1.8124090672699822e-07), (14, 4.102455477550393e-07), (15, 7.230114533740561e-07), (16, 2.367523848079145e-06), (17, 4.3753030354309885e-07), (18, 9.407068546352093e-07), (19, 6.590389034499822e-07), (20, 7.476330097233586e-07), (21, 1.0722832257670234e-06), (22, 1.288203634430829e-06), (23, 1.0412934443593258e-06), (24, 2.9654900117748184e-06), (25, 4.910605639452115e-06), (26, 5.683994459104724e-06), (27, 2.874454003176652e-05)], Temporal MSE: [(0, 7.093598153318226e-09), (1, 9.598841721469853e-09), (2, 9.626977437449113e-09), (3, 1.1786037923400272e-08), (4, 1.542974636947747e-08), (5, 2.6812733366909924e-08), (6, 1.382298631114054e-08), (7, 1.812856531557827e-08), (8, 1.7616397229858194e-08), (9, 2.332771131818845e-08), (10, 3.159128070251427e-08), (11, 3.0867919775801056e-08), (12, 2.8470507729139172e-08), (13, 5.09728081965477e-08), (14, 4.401206155080217e-08), (15, 7.794557177476236e-08), (16, 2.8666125473364445e-08), (17, 5.724208662627461e-08), (18, 5.731667229724735e-08), (19, 5.0542862339852945e-08), (20, 9.314584303865558e-08), (21, 7.523050271629472e-08), (22, 1.2485178046972578e-07), (23, 1.3472065063524497e-07), (24, 2.8176182809147576e-07), (25, 3.6598123642761493e-07), (26, 1.3545491128752474e-07), (27, 1.3603334991785232e-07)]
+Time step tensor([894, 891, 891, 888, 888, 885, 885, 882, 882, 879, 879, 876, 876, 870,
+        864, 858, 852, 846, 840, 834, 828, 822, 816, 810, 804, 798, 792, 786,
+        780, 774, 768, 762, 756, 750, 744, 738, 732, 726, 720, 714, 708, 702,
+        696, 690, 684, 678, 672, 666, 660, 654, 648, 642, 636, 630, 624, 618,
+        612, 606, 600, 594, 588, 582, 576, 570, 564, 558, 552, 546, 540, 534,
+        528, 522, 516, 510, 504, 498, 492, 486, 480, 474, 468, 462, 456, 450,
+        444, 438, 432, 426, 420, 414, 408, 402, 396, 390, 384, 378, 372, 366,
+        360, 354, 348, 342, 336, 330, 324, 318, 312, 306, 300, 294, 288, 282,
+        276, 270, 264, 258, 252, 246, 240, 234, 228, 222, 216, 210, 204, 198,
+        192, 186, 180, 174, 168, 162, 156, 150, 144, 138, 132, 126, 120, 114,
+        108, 102,  96,  90,  84,  78,  72,  66,  60,  54,  48,  42,  36,  30,
+         24,  18,  12,   6,   0], device='cuda:0')

@@ -173,7 +173,8 @@ def main(args):
     condition_frame_edit = args.condition_frame_edit
     align = args.align
 
-    save_dir = args.save_dir
+    # == prepare save dir ==
+    save_dir = os.path.join(args.save_dir, "skip_mse")
     os.makedirs(save_dir, exist_ok=True)
     prompt_as_path = args.prompt_as_path
 
