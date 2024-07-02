@@ -341,6 +341,8 @@ class BasicTransformerBlock(nn.Module):
         self.block_idx = block_idx
         # mse
         self.mlp_outputs = []
+        self.mlp_count = 0
+        self.temporal = False
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
@@ -465,10 +467,10 @@ class BasicTransformerBlock(nn.Module):
         # i2vgen doesn't have this norm 🤷‍♂️
         # TODO skip mlp
         skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
-            int(timestep[0]),
+            int(org_timestep[0]),
             self.mlp_count,
             self.block_idx,
-            all_timesteps,
+            all_timesteps.tolist(),
             is_temporal=self.temporal,
             is_spatial=(not self.temporal),
         )
@@ -481,20 +483,20 @@ class BasicTransformerBlock(nn.Module):
                 print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
                 if self.temporal:
                     print(
-                        f"Skip | Using stored MLP output | Time | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                        f"Skip | Using stored MLP output | Time | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                     )
                 else:
                     print(
-                        f"Skip | Using stored MLP output | Spatial | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                        f"Skip | Using stored MLP output | Spatial | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                     )
-                if int(timestep[0]) == skip_range[-1]:
+                if int(org_timestep[0]) == skip_range[-1]:
                     del mlp_outputs[(skip_start_t, self.block_idx)]
                     print(
-                        f"Skip | Delete stored MLP output | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                        f"Skip | Delete stored MLP output | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                     )
             else:
                 raise ValueError(
-                    f"No stored MLP output found | t {int(timestep[0])} |[{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
+                    f"No stored MLP output found | t {int(org_timestep[0])} |[{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
                 )
 
         else:
@@ -521,7 +523,7 @@ class BasicTransformerBlock(nn.Module):
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
-        return hidden_states
+        return hidden_states, mlp_outputs
 
 
 @maybe_allow_in_graph
@@ -580,6 +582,7 @@ class BasicTransformerBlock_(nn.Module):
         attention_type: str = "default",
         positional_embeddings: Optional[str] = None,
         num_positional_embeddings: Optional[int] = None,
+        block_idx: Optional[int] = None,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -669,6 +672,8 @@ class BasicTransformerBlock_(nn.Module):
         # fvd
         self.last_out = None
         self.count = 0
+        self.temporal = True
+        self.block_idx = block_idx
 
     def set_last_out(self, last_out: torch.Tensor):
         self.last_out = last_out
@@ -822,7 +827,7 @@ class BasicTransformerBlock_(nn.Module):
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
-        return hidden_states
+        return hidden_states, mlp_outputs
 
     def dynamic_switch(self, x, to_spatial_shard: bool):
         if to_spatial_shard:
@@ -1077,6 +1082,7 @@ class LatteT2V_skip_s_t(ModelMixin, ConfigMixin):
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
                     attention_type=attention_type,
+                    block_idx=d,
                 )
                 for d in range(num_layers)
             ]
@@ -1120,6 +1126,10 @@ class LatteT2V_skip_s_t(ModelMixin, ConfigMixin):
         # define temporal positional embedding
         temp_pos_embed = self.get_1d_sincos_temp_embed(inner_dim, video_length)  # 1152 hidden size
         self.register_buffer("temp_pos_embed", torch.from_numpy(temp_pos_embed).float().unsqueeze(0), persistent=False)
+
+        # TODO skip
+        self.spatial_mlp_outputs = {}
+        self.temporal_mlp_outputs = {}
 
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value

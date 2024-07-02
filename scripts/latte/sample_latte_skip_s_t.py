@@ -32,7 +32,7 @@ from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
 from opendit.core.parallel_mgr import set_parallel_manager
-from opendit.core.skip_mgr import set_skip_manager
+from opendit.core.skip_mgr_s_t import set_skip_manager
 from opendit.models.latte import LattePipeline_skip_s_t, LatteT2V_skip_s_t
 from opendit.utils.utils import merge_args, set_seed
 
@@ -268,6 +268,14 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument("--diffusion_skip_timestep", nargs="+")
+    # skip mlp
+    parser.add_argument("--mlp_skip", action="store_true", help="Enable mlp skip")
+    parser.add_argument("--mlp_threshold", type=int, nargs="+", help="MLP skip layer")
+    parser.add_argument("--mlp_gap", type=int, nargs="+", help="MLP skip gap")
+    parser.add_argument("--mlp_layer_range", type=int, nargs="+", help="MLP skip block size")
+    parser.add_argument("--mlp_skip_config", nargs="+")
+    parser.add_argument("--mlp_temporal_skip_config", nargs="+")
+    parser.add_argument("--mlp_spatial_skip_config", nargs="+")
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)
