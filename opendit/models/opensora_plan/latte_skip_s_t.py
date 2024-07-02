@@ -1540,6 +1540,7 @@ class BasicTransformerBlock_(nn.Module):
         # mlp
         self.block_idx = block_idx
         self.temp_mlp_count = 0
+        self.temporal = True
 
     def set_last_out(self, last_out: torch.Tensor):
         self.last_out = last_out
@@ -1925,6 +1926,7 @@ class BasicTransformerBlock(nn.Module):
 
         # skip
         self.spatila_mlp_count = 0
+        self.temporal = False
 
     def set_cross_last(self, last_out: torch.Tensor):
         self.cross_last = last_out

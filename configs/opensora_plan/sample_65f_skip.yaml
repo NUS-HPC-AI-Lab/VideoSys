@@ -18,7 +18,7 @@ ae: CausalVAEModel_4x8x8
 save_img_path: "./samples/opensora_plan"
 fps: 24
 guidance_scale: 7.5
-num_sampling_steps: 5
+num_sampling_steps: 150
 enable_tiling: True
 
 # skip

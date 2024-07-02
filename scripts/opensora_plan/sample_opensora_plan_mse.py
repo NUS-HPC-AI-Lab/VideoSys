@@ -183,13 +183,12 @@ def main(args):
                     value_range=(0, 1),
                 )  # t c h w
             else:
-                imageio.mimwrite(
-                    os.path.join(args.save_img_path, f"{idx}.{ext}"), videos[0], fps=args.fps, quality=9
-                )  # highest quality is 10, lowest is 0
+                path = os.path.join(args.save_img_path, f"{idx}.{ext}")
+                imageio.mimwrite(path, videos[0], fps=args.fps, quality=9)  # highest quality is 10, lowest is 0
 
                 # Save spatial and temporal MLP outputs
-                spatial_save_path = args.save_img_path.replace(".mp4", f"_spatial_mlp_mse.pt")
-                temporal_save_path = args.save_img_path.replace(".mp4", f"_temporal_mlp_mse.pt")
+                spatial_save_path = path.replace(".mp4", f"_spatial_mlp_mse.pt")
+                temporal_save_path = path.replace(".mp4", f"_temporal_mlp_mse.pt")
                 torch.save(all_spatial_mse, spatial_save_path)
                 torch.save(all_temporal_mse, temporal_save_path)
                 print(f"Saved spatial and temporal MLP outputs to {spatial_save_path} and {temporal_save_path}")
