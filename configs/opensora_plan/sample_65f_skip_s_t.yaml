@@ -44,20 +44,35 @@ diffusion_skip_timestep: [3,3,3,0,0,0,0,0,0,0]
 mlp_skip: True
 
 mlp_spatial_skip_config: {
-810: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-630: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+594: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 570: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-480: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-300: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+546: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+522: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+498: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+474: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+450: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+426: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+402: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+378: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+354: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+330: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 }
 
 
+
 mlp_temporal_skip_config: {
-810: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-630: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+594: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 570: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-480: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-300: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+546: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+522: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+498: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+474: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+450: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+426: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+402: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+378: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+354: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+330: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 }
 
 

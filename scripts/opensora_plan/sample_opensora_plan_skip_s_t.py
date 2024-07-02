@@ -8,6 +8,7 @@
 # --------------------------------------------------------
 
 import argparse
+import json
 import math
 import os
 
@@ -56,6 +57,14 @@ def save_video_grid(video, nrow=None):
     return video_grid
 
 
+# Convert namespace to dictionary if needed
+def args_to_dict(args):
+    if isinstance(args, dict):
+        return args
+    else:
+        return vars(args)
+
+
 def main(args):
     set_seed(42)
     torch.set_grad_enabled(False)
@@ -63,12 +72,12 @@ def main(args):
     torch.backends.cudnn.allow_tf32 = True
 
     # == init distributed env ==
-    if os.environ.get("LOCAL_RANK", None) is None:  # BUG
-        os.environ["RANK"] = "0"
-        os.environ["LOCAL_RANK"] = "0"
-        os.environ["WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = "127.0.0.1"
-        os.environ["MASTER_PORT"] = "29505"
+    # if os.environ.get("LOCAL_RANK", None) is None:  # BUG
+    #     os.environ["RANK"] = "0"
+    #     os.environ["LOCAL_RANK"] = "0"
+    #     os.environ["WORLD_SIZE"] = "1"
+    #     os.environ["MASTER_ADDR"] = "127.0.0.1"
+    #     os.environ["MASTER_PORT"] = "29505"
 
     colossalai.launch_from_torch({})
     coordinator = DistCoordinator()
@@ -163,6 +172,11 @@ def main(args):
     print(f"save_img_path | {args.save_img_path}")
 
     os.makedirs(args.save_img_path, exist_ok=True)
+
+    args_path = os.path.join(args.save_img_path, "args.json")
+    with open(args_path, "w") as f:
+        json.dump(args_to_dict(args), f, indent=4)
+    print(f"Arguments saved to {args_path}")
 
     video_grids = []
     if not isinstance(args.text_prompt, list):
