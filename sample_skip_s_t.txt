@@ -4,7 +4,7 @@
   _torch_pytree._register_pytree_node(
 /home/jin509/anaconda3/envs/opendit/lib/python3.10/site-packages/diffusers/models/transformers/transformer_2d.py:34: FutureWarning: `Transformer2DModelOutput` is deprecated and will be removed in version 1.0.0. Importing `Transformer2DModelOutput` from `diffusers.models.transformer_2d` is deprecated and this will be removed in a future version. Please use `from diffusers.models.modeling_outputs import Transformer2DModelOutput`, instead.
   deprecate("Transformer2DModelOutput", "1.0.0", deprecation_message)
-[07/01/24 21:28:12] INFO     colossalai - colossalai - INFO:
+[07/01/24 21:28:11] INFO     colossalai - colossalai - INFO:
                              /home/jin509/anaconda3/envs/opendit/lib/python3.10/
                              site-packages/colossalai/initialize.py:60 launch
                     INFO     colossalai - colossalai - INFO: Distributed
@@ -26,33 +26,33 @@ Some weights of the model checkpoint were not used when initializing LatteT2V_sk
 Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
 
 Downloading shards:   0%|          | 0/4 [00:00<?, ?it/s]
-Downloading shards: 100%|██████████| 4/4 [00:00<00:00, 5076.31it/s]
+Downloading shards: 100%|██████████| 4/4 [00:00<00:00, 5731.88it/s]
 
 Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]
-Loading checkpoint shards:  25%|██▌       | 1/4 [00:01<00:03,  1.02s/it]
-Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.12it/s]
-Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.11it/s]
-Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.34it/s]
-Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.23it/s]
-save_dir | ./samples/latte/skip_mlp_s_50_t_50
-Arguments saved to ./samples/latte/skip_mlp_s_50_t_50/args.json
+Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:02,  1.11it/s]
+Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.19it/s]
+Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.30it/s]
+Loading checkpoint shards: 100%|██████████| 4/4 [00:02<00:00,  1.46it/s]
+Loading checkpoint shards: 100%|██████████| 4/4 [00:02<00:00,  1.36it/s]
+save_dir | ./samples/latte/skip_mlp_s_70_t_70
+Arguments saved to ./samples/latte/skip_mlp_s_70_t_70/args.json
 Processing the (Yellow and black tropical fish dart through the sea.) prompt
 
   0%|          | 0/50 [00:00<?, ?it/s]
-  2%|▏         | 1/50 [00:04<03:19,  4.07s/it]
-  4%|▍         | 2/50 [00:04<01:46,  2.22s/it]
-  6%|▌         | 3/50 [00:05<01:16,  1.62s/it]
-  8%|▊         | 4/50 [00:06<01:01,  1.34s/it]
- 10%|█         | 5/50 [00:07<00:53,  1.19s/it]
- 12%|█▏        | 6/50 [00:08<00:47,  1.08s/it]
- 14%|█▍        | 7/50 [00:09<00:43,  1.00s/it]
- 16%|█▌        | 8/50 [00:10<00:40,  1.02it/s]
- 18%|█▊        | 9/50 [00:11<00:38,  1.07it/s]
- 20%|██        | 10/50 [00:12<00:36,  1.10it/s]
- 22%|██▏       | 11/50 [00:12<00:32,  1.19it/s]
- 24%|██▍       | 12/50 [00:13<00:28,  1.35it/s]
- 26%|██▌       | 13/50 [00:14<00:28,  1.30it/s]
- 28%|██▊       | 14/50 [00:14<00:24,  1.44it/s]skip_range | [720, 680]
+  2%|▏         | 1/50 [00:04<03:56,  4.82s/it]
+  4%|▍         | 2/50 [00:06<02:11,  2.73s/it]
+  6%|▌         | 3/50 [00:07<01:37,  2.07s/it]
+  8%|▊         | 4/50 [00:08<01:20,  1.75s/it]
+ 10%|█         | 5/50 [00:09<01:10,  1.56s/it]
+ 12%|█▏        | 6/50 [00:11<01:03,  1.43s/it]
+ 14%|█▍        | 7/50 [00:12<00:58,  1.36s/it]
+ 16%|█▌        | 8/50 [00:13<00:55,  1.33s/it]
+ 18%|█▊        | 9/50 [00:14<00:52,  1.27s/it]
+ 20%|██        | 10/50 [00:15<00:49,  1.24s/it]
+ 22%|██▏       | 11/50 [00:16<00:45,  1.16s/it]
+ 24%|██▍       | 12/50 [00:17<00:39,  1.04s/it]
+ 26%|██▌       | 13/50 [00:18<00:40,  1.08s/it]
+ 28%|██▊       | 14/50 [00:19<00:37,  1.04s/it]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 0
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 0
@@ -72,8 +72,16 @@ skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 6
 
- 30%|███       | 15/50 [00:15<00:24,  1.46it/s]skip_range | [720, 680]
+ 30%|███       | 15/50 [00:20<00:35,  1.00s/it]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 0
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 0
 skip_range | [720, 680]
@@ -103,10 +111,22 @@ Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 4
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
 
- 32%|███▏      | 16/50 [00:15<00:20,  1.62it/s]
- 34%|███▍      | 17/50 [00:16<00:22,  1.46it/s]
- 36%|███▌      | 18/50 [00:17<00:20,  1.58it/s]skip_range | [640, 600]
+ 32%|███▏      | 16/50 [00:21<00:30,  1.12it/s]
+ 34%|███▍      | 17/50 [00:22<00:32,  1.01it/s]
+ 36%|███▌      | 18/50 [00:23<00:29,  1.09it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 0
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 0
@@ -126,8 +146,16 @@ skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 6
 
- 38%|███▊      | 19/50 [00:17<00:19,  1.60it/s]skip_range | [640, 600]
+ 38%|███▊      | 19/50 [00:24<00:27,  1.13it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 0
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 0
 skip_range | [640, 600]
@@ -157,10 +185,22 @@ Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 4
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
 
- 40%|████      | 20/50 [00:18<00:17,  1.74it/s]
- 42%|████▏     | 21/50 [00:19<00:19,  1.52it/s]
- 44%|████▍     | 22/50 [00:19<00:17,  1.59it/s]skip_range | [560, 520]
+ 40%|████      | 20/50 [00:24<00:24,  1.24it/s]
+ 42%|████▏     | 21/50 [00:25<00:26,  1.09it/s]
+ 44%|████▍     | 22/50 [00:26<00:25,  1.11it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 0
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 0
@@ -180,8 +220,16 @@ skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 6
 
- 46%|████▌     | 23/50 [00:20<00:16,  1.60it/s]skip_range | [560, 520]
+ 46%|████▌     | 23/50 [00:27<00:24,  1.12it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 0
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 0
 skip_range | [560, 520]
@@ -211,10 +259,22 @@ Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 4
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
 
- 48%|████▊     | 24/50 [00:20<00:14,  1.74it/s]
- 50%|█████     | 25/50 [00:21<00:16,  1.52it/s]
- 52%|█████▏    | 26/50 [00:22<00:14,  1.64it/s]skip_range | [480, 440]
+ 48%|████▊     | 24/50 [00:28<00:21,  1.23it/s]
+ 50%|█████     | 25/50 [00:29<00:22,  1.09it/s]
+ 52%|█████▏    | 26/50 [00:30<00:20,  1.16it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 0
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 0
@@ -234,8 +294,16 @@ skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 6
 
- 54%|█████▍    | 27/50 [00:22<00:14,  1.64it/s]skip_range | [480, 440]
+ 54%|█████▍    | 27/50 [00:30<00:19,  1.17it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 0
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 0
 skip_range | [480, 440]
@@ -265,10 +333,22 @@ Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 4
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
 
- 56%|█████▌    | 28/50 [00:23<00:12,  1.77it/s]
- 58%|█████▊    | 29/50 [00:23<00:14,  1.49it/s]
- 60%|██████    | 30/50 [00:24<00:12,  1.61it/s]skip_range | [400, 360]
+ 56%|█████▌    | 28/50 [00:31<00:17,  1.26it/s]
+ 58%|█████▊    | 29/50 [00:32<00:19,  1.05it/s]
+ 60%|██████    | 30/50 [00:33<00:17,  1.13it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 0
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 0
@@ -288,8 +368,16 @@ skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 6
 
- 62%|██████▏   | 31/50 [00:25<00:11,  1.62it/s]skip_range | [400, 360]
+ 62%|██████▏   | 31/50 [00:34<00:16,  1.16it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 0
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 0
 skip_range | [400, 360]
@@ -319,44 +407,56 @@ Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 4
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
 
- 64%|██████▍   | 32/50 [00:25<00:10,  1.75it/s]
- 66%|██████▌   | 33/50 [00:26<00:11,  1.53it/s]
- 68%|██████▊   | 34/50 [00:26<00:09,  1.63it/s]
- 70%|███████   | 35/50 [00:27<00:09,  1.57it/s]
- 72%|███████▏  | 36/50 [00:28<00:08,  1.62it/s]
- 74%|███████▍  | 37/50 [00:29<00:08,  1.45it/s]
- 76%|███████▌  | 38/50 [00:29<00:07,  1.57it/s]
- 78%|███████▊  | 39/50 [00:30<00:07,  1.53it/s]
- 80%|████████  | 40/50 [00:30<00:06,  1.64it/s]
- 82%|████████▏ | 41/50 [00:31<00:06,  1.47it/s]
- 84%|████████▍ | 42/50 [00:32<00:05,  1.59it/s]
- 86%|████████▌ | 43/50 [00:32<00:04,  1.50it/s]
- 88%|████████▊ | 44/50 [00:33<00:03,  1.61it/s]
- 90%|█████████ | 45/50 [00:34<00:03,  1.45it/s]
- 92%|█████████▏| 46/50 [00:35<00:03,  1.32it/s]
- 94%|█████████▍| 47/50 [00:36<00:02,  1.24it/s]
- 96%|█████████▌| 48/50 [00:37<00:01,  1.19it/s]
- 98%|█████████▊| 49/50 [00:37<00:00,  1.16it/s]
-100%|██████████| 50/50 [00:38<00:00,  1.14it/s]
-100%|██████████| 50/50 [00:38<00:00,  1.29it/s]
+ 64%|██████▍   | 32/50 [00:35<00:14,  1.26it/s]
+ 66%|██████▌   | 33/50 [00:36<00:15,  1.10it/s]
+ 68%|██████▊   | 34/50 [00:37<00:13,  1.15it/s]
+ 70%|███████   | 35/50 [00:38<00:13,  1.10it/s]
+ 72%|███████▏  | 36/50 [00:38<00:12,  1.14it/s]
+ 74%|███████▍  | 37/50 [00:39<00:12,  1.04it/s]
+ 76%|███████▌  | 38/50 [00:40<00:10,  1.12it/s]
+ 78%|███████▊  | 39/50 [00:41<00:10,  1.08it/s]
+ 80%|████████  | 40/50 [00:42<00:08,  1.14it/s]
+ 82%|████████▏ | 41/50 [00:43<00:08,  1.04it/s]
+ 84%|████████▍ | 42/50 [00:44<00:07,  1.12it/s]
+ 86%|████████▌ | 43/50 [00:45<00:06,  1.07it/s]
+ 88%|████████▊ | 44/50 [00:46<00:05,  1.14it/s]
+ 90%|█████████ | 45/50 [00:47<00:04,  1.02it/s]
+ 92%|█████████▏| 46/50 [00:48<00:04,  1.07s/it]
+ 94%|█████████▍| 47/50 [00:49<00:03,  1.13s/it]
+ 96%|█████████▌| 48/50 [00:51<00:02,  1.16s/it]
+ 98%|█████████▊| 49/50 [00:52<00:01,  1.21s/it]
+100%|██████████| 50/50 [00:53<00:00,  1.23s/it]
+100%|██████████| 50/50 [00:53<00:00,  1.07s/it]
 Processing the (An epic tornado attacking above aglowing city at night.) prompt
 
   0%|          | 0/50 [00:00<?, ?it/s]
-  2%|▏         | 1/50 [00:00<00:44,  1.09it/s]
-  4%|▍         | 2/50 [00:01<00:43,  1.09it/s]
-  6%|▌         | 3/50 [00:02<00:43,  1.09it/s]
-  8%|▊         | 4/50 [00:03<00:42,  1.09it/s]
- 10%|█         | 5/50 [00:04<00:41,  1.09it/s]
- 12%|█▏        | 6/50 [00:05<00:39,  1.12it/s]
- 14%|█▍        | 7/50 [00:06<00:37,  1.13it/s]
- 16%|█▌        | 8/50 [00:07<00:37,  1.12it/s]
- 18%|█▊        | 9/50 [00:08<00:36,  1.13it/s]
- 20%|██        | 10/50 [00:08<00:34,  1.14it/s]
- 22%|██▏       | 11/50 [00:09<00:32,  1.21it/s]
- 24%|██▍       | 12/50 [00:10<00:27,  1.37it/s]
- 26%|██▌       | 13/50 [00:10<00:28,  1.32it/s]
- 28%|██▊       | 14/50 [00:11<00:24,  1.46it/s]skip_range | [720, 680]
+  2%|▏         | 1/50 [00:01<01:02,  1.28s/it]
+  4%|▍         | 2/50 [00:02<01:00,  1.26s/it]
+  6%|▌         | 3/50 [00:03<00:59,  1.26s/it]
+  8%|▊         | 4/50 [00:05<00:58,  1.27s/it]
+ 10%|█         | 5/50 [00:06<00:57,  1.28s/it]
+ 12%|█▏        | 6/50 [00:07<00:54,  1.25s/it]
+ 14%|█▍        | 7/50 [00:08<00:52,  1.22s/it]
+ 16%|█▌        | 8/50 [00:09<00:51,  1.24s/it]
+ 18%|█▊        | 9/50 [00:11<00:50,  1.23s/it]
+ 20%|██        | 10/50 [00:12<00:48,  1.22s/it]
+ 22%|██▏       | 11/50 [00:13<00:45,  1.16s/it]
+ 24%|██▍       | 12/50 [00:14<00:38,  1.03s/it]
+ 26%|██▌       | 13/50 [00:15<00:39,  1.06s/it]
+ 28%|██▊       | 14/50 [00:16<00:34,  1.03it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 0
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 0
@@ -376,8 +476,16 @@ skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 6
 
- 30%|███       | 15/50 [00:12<00:23,  1.46it/s]skip_range | [720, 680]
+ 30%|███       | 15/50 [00:16<00:33,  1.04it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 0
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 0
 skip_range | [720, 680]
@@ -407,10 +515,22 @@ Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 4
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
 
- 32%|███▏      | 16/50 [00:12<00:20,  1.62it/s]
- 34%|███▍      | 17/50 [00:13<00:22,  1.45it/s]
- 36%|███▌      | 18/50 [00:14<00:20,  1.57it/s]skip_range | [640, 600]
+ 32%|███▏      | 16/50 [00:17<00:29,  1.16it/s]
+ 34%|███▍      | 17/50 [00:18<00:31,  1.04it/s]
+ 36%|███▌      | 18/50 [00:19<00:28,  1.12it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 0
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 0
@@ -430,8 +550,16 @@ skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 6
 
- 38%|███▊      | 19/50 [00:14<00:19,  1.59it/s]skip_range | [640, 600]
+ 38%|███▊      | 19/50 [00:20<00:27,  1.14it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 0
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 0
 skip_range | [640, 600]
@@ -461,10 +589,22 @@ Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 4
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
 
- 40%|████      | 20/50 [00:15<00:17,  1.73it/s]
- 42%|████▏     | 21/50 [00:15<00:19,  1.51it/s]
- 44%|████▍     | 22/50 [00:16<00:17,  1.57it/s]skip_range | [560, 520]
+ 40%|████      | 20/50 [00:21<00:24,  1.23it/s]
+ 42%|████▏     | 21/50 [00:22<00:26,  1.07it/s]
+ 44%|████▍     | 22/50 [00:23<00:25,  1.11it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 0
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 0
@@ -484,8 +624,16 @@ skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 6
 
- 46%|████▌     | 23/50 [00:17<00:17,  1.59it/s]skip_range | [560, 520]
+ 46%|████▌     | 23/50 [00:23<00:23,  1.14it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 0
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 0
 skip_range | [560, 520]
@@ -515,10 +663,22 @@ Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 4
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
 
- 48%|████▊     | 24/50 [00:17<00:15,  1.73it/s]
- 50%|█████     | 25/50 [00:18<00:16,  1.51it/s]
- 52%|█████▏    | 26/50 [00:18<00:14,  1.62it/s]skip_range | [480, 440]
+ 48%|████▊     | 24/50 [00:24<00:20,  1.24it/s]
+ 50%|█████     | 25/50 [00:25<00:22,  1.09it/s]
+ 52%|█████▏    | 26/50 [00:26<00:21,  1.14it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 0
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 0
@@ -538,8 +698,16 @@ skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 6
 
- 54%|█████▍    | 27/50 [00:19<00:14,  1.62it/s]skip_range | [480, 440]
+ 54%|█████▍    | 27/50 [00:27<00:20,  1.15it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 0
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 0
 skip_range | [480, 440]
@@ -569,10 +737,22 @@ Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 4
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
 
- 56%|█████▌    | 28/50 [00:20<00:12,  1.75it/s]
- 58%|█████▊    | 29/50 [00:20<00:14,  1.48it/s]
- 60%|██████    | 30/50 [00:21<00:12,  1.59it/s]skip_range | [400, 360]
+ 56%|█████▌    | 28/50 [00:28<00:17,  1.25it/s]
+ 58%|█████▊    | 29/50 [00:29<00:19,  1.07it/s]
+ 60%|██████    | 30/50 [00:29<00:17,  1.14it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 0
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 0
@@ -592,8 +772,16 @@ skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 6
 
- 62%|██████▏   | 31/50 [00:22<00:11,  1.60it/s]skip_range | [400, 360]
+ 62%|██████▏   | 31/50 [00:30<00:16,  1.15it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 0
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 0
 skip_range | [400, 360]
@@ -623,44 +811,56 @@ Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 4
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
 
- 64%|██████▍   | 32/50 [00:22<00:10,  1.74it/s]
- 66%|██████▌   | 33/50 [00:23<00:11,  1.51it/s]
- 68%|██████▊   | 34/50 [00:23<00:09,  1.62it/s]
- 70%|███████   | 35/50 [00:24<00:09,  1.56it/s]
- 72%|███████▏  | 36/50 [00:25<00:08,  1.61it/s]
- 74%|███████▍  | 37/50 [00:26<00:09,  1.44it/s]
- 76%|███████▌  | 38/50 [00:26<00:07,  1.57it/s]
- 78%|███████▊  | 39/50 [00:27<00:07,  1.52it/s]
- 80%|████████  | 40/50 [00:27<00:06,  1.63it/s]
- 82%|████████▏ | 41/50 [00:28<00:06,  1.46it/s]
- 84%|████████▍ | 42/50 [00:29<00:05,  1.57it/s]
- 86%|████████▌ | 43/50 [00:29<00:04,  1.49it/s]
- 88%|████████▊ | 44/50 [00:30<00:03,  1.60it/s]
- 90%|█████████ | 45/50 [00:31<00:03,  1.44it/s]
- 92%|█████████▏| 46/50 [00:32<00:03,  1.31it/s]
- 94%|█████████▍| 47/50 [00:33<00:02,  1.23it/s]
- 96%|█████████▌| 48/50 [00:34<00:01,  1.18it/s]
- 98%|█████████▊| 49/50 [00:34<00:00,  1.15it/s]
-100%|██████████| 50/50 [00:35<00:00,  1.13it/s]
-100%|██████████| 50/50 [00:35<00:00,  1.39it/s]
+ 64%|██████▍   | 32/50 [00:31<00:14,  1.23it/s]
+ 66%|██████▌   | 33/50 [00:32<00:15,  1.07it/s]
+ 68%|██████▊   | 34/50 [00:33<00:13,  1.15it/s]
+ 70%|███████   | 35/50 [00:34<00:13,  1.12it/s]
+ 72%|███████▏  | 36/50 [00:35<00:12,  1.15it/s]
+ 74%|███████▍  | 37/50 [00:36<00:12,  1.02it/s]
+ 76%|███████▌  | 38/50 [00:37<00:10,  1.09it/s]
+ 78%|███████▊  | 39/50 [00:38<00:10,  1.06it/s]
+ 80%|████████  | 40/50 [00:38<00:08,  1.15it/s]
+ 82%|████████▏ | 41/50 [00:40<00:08,  1.04it/s]
+ 84%|████████▍ | 42/50 [00:40<00:07,  1.12it/s]
+ 86%|████████▌ | 43/50 [00:41<00:06,  1.05it/s]
+ 88%|████████▊ | 44/50 [00:42<00:05,  1.12it/s]
+ 90%|█████████ | 45/50 [00:43<00:04,  1.01it/s]
+ 92%|█████████▏| 46/50 [00:45<00:04,  1.07s/it]
+ 94%|█████████▍| 47/50 [00:46<00:03,  1.13s/it]
+ 96%|█████████▌| 48/50 [00:47<00:02,  1.18s/it]
+ 98%|█████████▊| 49/50 [00:49<00:01,  1.21s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.23s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.01s/it]
 Processing the (Slow pan upward of blazing oak fire in an indoor fireplace.) prompt
 
   0%|          | 0/50 [00:00<?, ?it/s]
-  2%|▏         | 1/50 [00:00<00:45,  1.08it/s]
-  4%|▍         | 2/50 [00:01<00:44,  1.08it/s]
-  6%|▌         | 3/50 [00:02<00:43,  1.08it/s]
-  8%|▊         | 4/50 [00:03<00:42,  1.08it/s]
- 10%|█         | 5/50 [00:04<00:41,  1.08it/s]
- 12%|█▏        | 6/50 [00:05<00:39,  1.11it/s]
- 14%|█▍        | 7/50 [00:06<00:38,  1.13it/s]
- 16%|█▌        | 8/50 [00:07<00:37,  1.11it/s]
- 18%|█▊        | 9/50 [00:08<00:36,  1.13it/s]
- 20%|██        | 10/50 [00:08<00:35,  1.14it/s]
- 22%|██▏       | 11/50 [00:09<00:32,  1.20it/s]
- 24%|██▍       | 12/50 [00:10<00:27,  1.36it/s]
- 26%|██▌       | 13/50 [00:11<00:28,  1.31it/s]
- 28%|██▊       | 14/50 [00:11<00:24,  1.45it/s]skip_range | [720, 680]
+  2%|▏         | 1/50 [00:01<01:02,  1.27s/it]
+  4%|▍         | 2/50 [00:02<01:00,  1.27s/it]
+  6%|▌         | 3/50 [00:03<01:00,  1.28s/it]
+  8%|▊         | 4/50 [00:05<00:59,  1.29s/it]
+ 10%|█         | 5/50 [00:06<00:57,  1.28s/it]
+ 12%|█▏        | 6/50 [00:07<00:55,  1.25s/it]
+ 14%|█▍        | 7/50 [00:08<00:53,  1.23s/it]
+ 16%|█▌        | 8/50 [00:10<00:52,  1.26s/it]
+ 18%|█▊        | 9/50 [00:11<00:50,  1.24s/it]
+ 20%|██        | 10/50 [00:12<00:48,  1.22s/it]
+ 22%|██▏       | 11/50 [00:13<00:45,  1.16s/it]
+ 24%|██▍       | 12/50 [00:14<00:39,  1.04s/it]
+ 26%|██▌       | 13/50 [00:15<00:39,  1.08s/it]
+ 28%|██▊       | 14/50 [00:16<00:35,  1.02it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 0
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 0
@@ -680,8 +880,16 @@ skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 6
 
- 30%|███       | 15/50 [00:12<00:24,  1.45it/s]skip_range | [720, 680]
+ 30%|███       | 15/50 [00:17<00:33,  1.04it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 0
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 0
 skip_range | [720, 680]
@@ -711,10 +919,22 @@ Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 4
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
 
- 32%|███▏      | 16/50 [00:12<00:21,  1.61it/s]
- 34%|███▍      | 17/50 [00:13<00:22,  1.44it/s]
- 36%|███▌      | 18/50 [00:14<00:20,  1.56it/s]skip_range | [640, 600]
+ 32%|███▏      | 16/50 [00:17<00:29,  1.16it/s]
+ 34%|███▍      | 17/50 [00:18<00:31,  1.04it/s]
+ 36%|███▌      | 18/50 [00:19<00:28,  1.10it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 0
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 0
@@ -734,8 +954,16 @@ skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 6
 
- 38%|███▊      | 19/50 [00:14<00:19,  1.58it/s]skip_range | [640, 600]
+ 38%|███▊      | 19/50 [00:20<00:27,  1.12it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 0
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 0
 skip_range | [640, 600]
@@ -765,10 +993,22 @@ Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 4
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
 
- 40%|████      | 20/50 [00:15<00:17,  1.72it/s]
- 42%|████▏     | 21/50 [00:16<00:19,  1.50it/s]
- 44%|████▍     | 22/50 [00:16<00:17,  1.56it/s]skip_range | [560, 520]
+ 40%|████      | 20/50 [00:21<00:24,  1.22it/s]
+ 42%|████▏     | 21/50 [00:22<00:26,  1.08it/s]
+ 44%|████▍     | 22/50 [00:23<00:25,  1.12it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 0
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 0
@@ -788,8 +1028,16 @@ skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 6
 
- 46%|████▌     | 23/50 [00:17<00:17,  1.58it/s]skip_range | [560, 520]
+ 46%|████▌     | 23/50 [00:24<00:23,  1.14it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 0
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 0
 skip_range | [560, 520]
@@ -819,10 +1067,22 @@ Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 4
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
 
- 48%|████▊     | 24/50 [00:17<00:15,  1.71it/s]
- 50%|█████     | 25/50 [00:18<00:16,  1.50it/s]
- 52%|█████▏    | 26/50 [00:19<00:14,  1.61it/s]skip_range | [480, 440]
+ 48%|████▊     | 24/50 [00:24<00:21,  1.22it/s]
+ 50%|█████     | 25/50 [00:25<00:23,  1.06it/s]
+ 52%|█████▏    | 26/50 [00:26<00:21,  1.13it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 0
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 0
@@ -842,8 +1102,16 @@ skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 6
 
- 54%|█████▍    | 27/50 [00:19<00:14,  1.61it/s]skip_range | [480, 440]
+ 54%|█████▍    | 27/50 [00:27<00:19,  1.16it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 0
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 0
 skip_range | [480, 440]
@@ -873,10 +1141,22 @@ Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 4
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
 
- 56%|█████▌    | 28/50 [00:20<00:12,  1.74it/s]
- 58%|█████▊    | 29/50 [00:21<00:14,  1.47it/s]
- 60%|██████    | 30/50 [00:21<00:12,  1.59it/s]skip_range | [400, 360]
+ 56%|█████▌    | 28/50 [00:28<00:17,  1.26it/s]
+ 58%|█████▊    | 29/50 [00:29<00:19,  1.06it/s]
+ 60%|██████    | 30/50 [00:30<00:17,  1.11it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 0
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 0
@@ -896,8 +1176,16 @@ skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 6
 
- 62%|██████▏   | 31/50 [00:22<00:11,  1.59it/s]skip_range | [400, 360]
+ 62%|██████▏   | 31/50 [00:31<00:16,  1.13it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 0
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 0
 skip_range | [400, 360]
@@ -927,44 +1215,56 @@ Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 4
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
 
- 64%|██████▍   | 32/50 [00:22<00:10,  1.73it/s]
- 66%|██████▌   | 33/50 [00:23<00:11,  1.51it/s]
- 68%|██████▊   | 34/50 [00:24<00:09,  1.62it/s]
- 70%|███████   | 35/50 [00:24<00:09,  1.55it/s]
- 72%|███████▏  | 36/50 [00:25<00:08,  1.60it/s]
- 74%|███████▍  | 37/50 [00:26<00:09,  1.44it/s]
- 76%|███████▌  | 38/50 [00:26<00:07,  1.56it/s]
- 78%|███████▊  | 39/50 [00:27<00:07,  1.52it/s]
- 80%|████████  | 40/50 [00:27<00:06,  1.62it/s]
- 82%|████████▏ | 41/50 [00:28<00:06,  1.45it/s]
- 84%|████████▍ | 42/50 [00:29<00:05,  1.57it/s]
- 86%|████████▌ | 43/50 [00:30<00:04,  1.48it/s]
- 88%|████████▊ | 44/50 [00:30<00:03,  1.59it/s]
- 90%|█████████ | 45/50 [00:31<00:03,  1.43it/s]
- 92%|█████████▏| 46/50 [00:32<00:03,  1.30it/s]
- 94%|█████████▍| 47/50 [00:33<00:02,  1.23it/s]
- 96%|█████████▌| 48/50 [00:34<00:01,  1.18it/s]
- 98%|█████████▊| 49/50 [00:35<00:00,  1.15it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.12it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.38it/s]
+ 64%|██████▍   | 32/50 [00:31<00:14,  1.23it/s]
+ 66%|██████▌   | 33/50 [00:32<00:15,  1.09it/s]
+ 68%|██████▊   | 34/50 [00:33<00:13,  1.16it/s]
+ 70%|███████   | 35/50 [00:34<00:13,  1.10it/s]
+ 72%|███████▏  | 36/50 [00:35<00:12,  1.12it/s]
+ 74%|███████▍  | 37/50 [00:36<00:12,  1.01it/s]
+ 76%|███████▌  | 38/50 [00:37<00:10,  1.10it/s]
+ 78%|███████▊  | 39/50 [00:38<00:10,  1.08it/s]
+ 80%|████████  | 40/50 [00:39<00:08,  1.15it/s]
+ 82%|████████▏ | 41/50 [00:40<00:08,  1.02it/s]
+ 84%|████████▍ | 42/50 [00:41<00:07,  1.09it/s]
+ 86%|████████▌ | 43/50 [00:42<00:06,  1.05it/s]
+ 88%|████████▊ | 44/50 [00:42<00:05,  1.13it/s]
+ 90%|█████████ | 45/50 [00:44<00:04,  1.02it/s]
+ 92%|█████████▏| 46/50 [00:45<00:04,  1.08s/it]
+ 94%|█████████▍| 47/50 [00:46<00:03,  1.15s/it]
+ 96%|█████████▌| 48/50 [00:47<00:02,  1.18s/it]
+ 98%|█████████▊| 49/50 [00:49<00:01,  1.21s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.23s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.01s/it]
 Processing the (a cat wearing sunglasses and working as a lifeguard at pool.) prompt
 
   0%|          | 0/50 [00:00<?, ?it/s]
-  2%|▏         | 1/50 [00:00<00:45,  1.07it/s]
-  4%|▍         | 2/50 [00:01<00:44,  1.08it/s]
-  6%|▌         | 3/50 [00:02<00:43,  1.08it/s]
-  8%|▊         | 4/50 [00:03<00:42,  1.08it/s]
- 10%|█         | 5/50 [00:04<00:41,  1.08it/s]
- 12%|█▏        | 6/50 [00:05<00:39,  1.10it/s]
- 14%|█▍        | 7/50 [00:06<00:38,  1.12it/s]
- 16%|█▌        | 8/50 [00:07<00:37,  1.11it/s]
- 18%|█▊        | 9/50 [00:08<00:36,  1.12it/s]
- 20%|██        | 10/50 [00:09<00:35,  1.13it/s]
- 22%|██▏       | 11/50 [00:09<00:32,  1.20it/s]
- 24%|██▍       | 12/50 [00:10<00:28,  1.35it/s]
- 26%|██▌       | 13/50 [00:11<00:28,  1.30it/s]
- 28%|██▊       | 14/50 [00:11<00:24,  1.45it/s]skip_range | [720, 680]
+  2%|▏         | 1/50 [00:01<01:03,  1.29s/it]
+  4%|▍         | 2/50 [00:02<01:02,  1.30s/it]
+  6%|▌         | 3/50 [00:03<01:00,  1.29s/it]
+  8%|▊         | 4/50 [00:05<00:58,  1.28s/it]
+ 10%|█         | 5/50 [00:06<00:57,  1.28s/it]
+ 12%|█▏        | 6/50 [00:07<00:55,  1.26s/it]
+ 14%|█▍        | 7/50 [00:08<00:53,  1.25s/it]
+ 16%|█▌        | 8/50 [00:10<00:52,  1.25s/it]
+ 18%|█▊        | 9/50 [00:11<00:50,  1.23s/it]
+ 20%|██        | 10/50 [00:12<00:48,  1.22s/it]
+ 22%|██▏       | 11/50 [00:13<00:45,  1.17s/it]
+ 24%|██▍       | 12/50 [00:14<00:39,  1.05s/it]
+ 26%|██▌       | 13/50 [00:15<00:39,  1.07s/it]
+ 28%|██▊       | 14/50 [00:16<00:34,  1.03it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 0
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 0
@@ -984,8 +1284,16 @@ skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 6
 
- 30%|███       | 15/50 [00:12<00:24,  1.45it/s]skip_range | [720, 680]
+ 30%|███       | 15/50 [00:17<00:33,  1.05it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 0
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 0
 skip_range | [720, 680]
@@ -1015,10 +1323,22 @@ Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 4
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
 
- 32%|███▏      | 16/50 [00:12<00:21,  1.61it/s]
- 34%|███▍      | 17/50 [00:13<00:22,  1.44it/s]
- 36%|███▌      | 18/50 [00:14<00:20,  1.56it/s]skip_range | [640, 600]
+ 32%|███▏      | 16/50 [00:17<00:29,  1.16it/s]
+ 34%|███▍      | 17/50 [00:18<00:32,  1.03it/s]
+ 36%|███▌      | 18/50 [00:19<00:29,  1.10it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 0
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 0
@@ -1038,8 +1358,16 @@ skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 6
 
- 38%|███▊      | 19/50 [00:14<00:19,  1.58it/s]skip_range | [640, 600]
+ 38%|███▊      | 19/50 [00:20<00:27,  1.13it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 0
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 0
 skip_range | [640, 600]
@@ -1069,10 +1397,22 @@ Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 4
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
 
- 40%|████      | 20/50 [00:15<00:17,  1.71it/s]
- 42%|████▏     | 21/50 [00:16<00:19,  1.50it/s]
- 44%|████▍     | 22/50 [00:16<00:17,  1.56it/s]skip_range | [560, 520]
+ 40%|████      | 20/50 [00:21<00:24,  1.24it/s]
+ 42%|████▏     | 21/50 [00:22<00:26,  1.09it/s]
+ 44%|████▍     | 22/50 [00:23<00:25,  1.11it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 0
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 0
@@ -1092,8 +1432,16 @@ skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 6
 
- 46%|████▌     | 23/50 [00:17<00:17,  1.57it/s]skip_range | [560, 520]
+ 46%|████▌     | 23/50 [00:24<00:24,  1.12it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 0
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 0
 skip_range | [560, 520]
@@ -1123,10 +1471,22 @@ Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 4
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
 
- 48%|████▊     | 24/50 [00:17<00:15,  1.71it/s]
- 50%|█████     | 25/50 [00:18<00:16,  1.50it/s]
- 52%|█████▏    | 26/50 [00:19<00:14,  1.61it/s]skip_range | [480, 440]
+ 48%|████▊     | 24/50 [00:24<00:21,  1.21it/s]
+ 50%|█████     | 25/50 [00:25<00:23,  1.08it/s]
+ 52%|█████▏    | 26/50 [00:26<00:20,  1.15it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 0
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 0
@@ -1146,8 +1506,16 @@ skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 6
 
- 54%|█████▍    | 27/50 [00:19<00:14,  1.61it/s]skip_range | [480, 440]
+ 54%|█████▍    | 27/50 [00:27<00:19,  1.17it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 0
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 0
 skip_range | [480, 440]
@@ -1177,10 +1545,22 @@ Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 4
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
 
- 56%|█████▌    | 28/50 [00:20<00:12,  1.74it/s]
- 58%|█████▊    | 29/50 [00:21<00:14,  1.47it/s]
- 60%|██████    | 30/50 [00:21<00:12,  1.58it/s]skip_range | [400, 360]
+ 56%|█████▌    | 28/50 [00:28<00:17,  1.25it/s]
+ 58%|█████▊    | 29/50 [00:29<00:20,  1.04it/s]
+ 60%|██████    | 30/50 [00:30<00:17,  1.11it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 0
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 0
@@ -1200,8 +1580,16 @@ skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 6
 
- 62%|██████▏   | 31/50 [00:22<00:11,  1.59it/s]skip_range | [400, 360]
+ 62%|██████▏   | 31/50 [00:31<00:16,  1.14it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 0
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 0
 skip_range | [400, 360]
@@ -1231,44 +1619,56 @@ Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 4
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
 
- 64%|██████▍   | 32/50 [00:22<00:10,  1.73it/s]
- 66%|██████▌   | 33/50 [00:23<00:11,  1.51it/s]
- 68%|██████▊   | 34/50 [00:24<00:09,  1.61it/s]
- 70%|███████   | 35/50 [00:24<00:09,  1.55it/s]
- 72%|███████▏  | 36/50 [00:25<00:08,  1.60it/s]
- 74%|███████▍  | 37/50 [00:26<00:09,  1.43it/s]
- 76%|███████▌  | 38/50 [00:26<00:07,  1.55it/s]
- 78%|███████▊  | 39/50 [00:27<00:07,  1.51it/s]
- 80%|████████  | 40/50 [00:28<00:06,  1.62it/s]
- 82%|████████▏ | 41/50 [00:28<00:06,  1.45it/s]
- 84%|████████▍ | 42/50 [00:29<00:05,  1.57it/s]
- 86%|████████▌ | 43/50 [00:30<00:04,  1.48it/s]
- 88%|████████▊ | 44/50 [00:30<00:03,  1.59it/s]
- 90%|█████████ | 45/50 [00:31<00:03,  1.43it/s]
- 92%|█████████▏| 46/50 [00:32<00:03,  1.30it/s]
- 94%|█████████▍| 47/50 [00:33<00:02,  1.22it/s]
- 96%|█████████▌| 48/50 [00:34<00:01,  1.18it/s]
- 98%|█████████▊| 49/50 [00:35<00:00,  1.14it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.12it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.38it/s]
+ 64%|██████▍   | 32/50 [00:31<00:14,  1.25it/s]
+ 66%|██████▌   | 33/50 [00:32<00:15,  1.10it/s]
+ 68%|██████▊   | 34/50 [00:33<00:13,  1.15it/s]
+ 70%|███████   | 35/50 [00:34<00:13,  1.09it/s]
+ 72%|███████▏  | 36/50 [00:35<00:12,  1.12it/s]
+ 74%|███████▍  | 37/50 [00:36<00:12,  1.03it/s]
+ 76%|███████▌  | 38/50 [00:37<00:10,  1.11it/s]
+ 78%|███████▊  | 39/50 [00:38<00:10,  1.08it/s]
+ 80%|████████  | 40/50 [00:39<00:08,  1.13it/s]
+ 82%|████████▏ | 41/50 [00:40<00:08,  1.02it/s]
+ 84%|████████▍ | 42/50 [00:41<00:07,  1.11it/s]
+ 86%|████████▌ | 43/50 [00:42<00:06,  1.06it/s]
+ 88%|████████▊ | 44/50 [00:42<00:05,  1.13it/s]
+ 90%|█████████ | 45/50 [00:44<00:04,  1.01it/s]
+ 92%|█████████▏| 46/50 [00:45<00:04,  1.08s/it]
+ 94%|█████████▍| 47/50 [00:46<00:03,  1.14s/it]
+ 96%|█████████▌| 48/50 [00:47<00:02,  1.17s/it]
+ 98%|█████████▊| 49/50 [00:49<00:01,  1.22s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.24s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.01s/it]
 Processing the (Sunset over the sea.) prompt
 
   0%|          | 0/50 [00:00<?, ?it/s]
-  2%|▏         | 1/50 [00:00<00:45,  1.08it/s]
-  4%|▍         | 2/50 [00:01<00:44,  1.08it/s]
-  6%|▌         | 3/50 [00:02<00:43,  1.08it/s]
-  8%|▊         | 4/50 [00:03<00:42,  1.08it/s]
- 10%|█         | 5/50 [00:04<00:41,  1.08it/s]
- 12%|█▏        | 6/50 [00:05<00:39,  1.10it/s]
- 14%|█▍        | 7/50 [00:06<00:38,  1.12it/s]
- 16%|█▌        | 8/50 [00:07<00:37,  1.11it/s]
- 18%|█▊        | 9/50 [00:08<00:36,  1.12it/s]
- 20%|██        | 10/50 [00:09<00:35,  1.13it/s]
- 22%|██▏       | 11/50 [00:09<00:32,  1.20it/s]
- 24%|██▍       | 12/50 [00:10<00:28,  1.35it/s]
- 26%|██▌       | 13/50 [00:11<00:28,  1.30it/s]
- 28%|██▊       | 14/50 [00:11<00:24,  1.44it/s]skip_range | [720, 680]
+  2%|▏         | 1/50 [00:01<01:04,  1.31s/it]
+  4%|▍         | 2/50 [00:02<01:01,  1.29s/it]
+  6%|▌         | 3/50 [00:03<00:59,  1.27s/it]
+  8%|▊         | 4/50 [00:05<00:58,  1.27s/it]
+ 10%|█         | 5/50 [00:06<00:57,  1.29s/it]
+ 12%|█▏        | 6/50 [00:07<00:55,  1.26s/it]
+ 14%|█▍        | 7/50 [00:08<00:53,  1.23s/it]
+ 16%|█▌        | 8/50 [00:10<00:52,  1.24s/it]
+ 18%|█▊        | 9/50 [00:11<00:50,  1.23s/it]
+ 20%|██        | 10/50 [00:12<00:49,  1.23s/it]
+ 22%|██▏       | 11/50 [00:13<00:45,  1.17s/it]
+ 24%|██▍       | 12/50 [00:14<00:39,  1.04s/it]
+ 26%|██▌       | 13/50 [00:15<00:39,  1.06s/it]
+ 28%|██▊       | 14/50 [00:16<00:34,  1.03it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 0
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 0
@@ -1288,8 +1688,16 @@ skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 6
 
- 30%|███       | 15/50 [00:12<00:24,  1.45it/s]skip_range | [720, 680]
+ 30%|███       | 15/50 [00:17<00:33,  1.04it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 0
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 0
 skip_range | [720, 680]
@@ -1319,10 +1727,22 @@ Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 4
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
 
- 32%|███▏      | 16/50 [00:12<00:21,  1.61it/s]
- 34%|███▍      | 17/50 [00:13<00:22,  1.44it/s]
- 36%|███▌      | 18/50 [00:14<00:20,  1.56it/s]skip_range | [640, 600]
+ 32%|███▏      | 16/50 [00:17<00:29,  1.15it/s]
+ 34%|███▍      | 17/50 [00:18<00:32,  1.03it/s]
+ 36%|███▌      | 18/50 [00:19<00:28,  1.11it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 0
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 0
@@ -1342,8 +1762,16 @@ skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 6
 
- 38%|███▊      | 19/50 [00:14<00:19,  1.57it/s]skip_range | [640, 600]
+ 38%|███▊      | 19/50 [00:20<00:27,  1.14it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 0
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 0
 skip_range | [640, 600]
@@ -1373,10 +1801,22 @@ Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 4
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
 
- 40%|████      | 20/50 [00:15<00:17,  1.71it/s]
- 42%|████▏     | 21/50 [00:16<00:19,  1.50it/s]
- 44%|████▍     | 22/50 [00:16<00:17,  1.56it/s]skip_range | [560, 520]
+ 40%|████      | 20/50 [00:21<00:24,  1.23it/s]
+ 42%|████▏     | 21/50 [00:22<00:27,  1.07it/s]
+ 44%|████▍     | 22/50 [00:23<00:25,  1.10it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 0
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 0
@@ -1396,8 +1836,16 @@ skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 6
 
- 46%|████▌     | 23/50 [00:17<00:17,  1.57it/s]skip_range | [560, 520]
+ 46%|████▌     | 23/50 [00:24<00:23,  1.13it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 0
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 0
 skip_range | [560, 520]
@@ -1427,10 +1875,22 @@ Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 4
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
 
- 48%|████▊     | 24/50 [00:17<00:15,  1.71it/s]
- 50%|█████     | 25/50 [00:18<00:16,  1.50it/s]
- 52%|█████▏    | 26/50 [00:19<00:14,  1.61it/s]skip_range | [480, 440]
+ 48%|████▊     | 24/50 [00:24<00:21,  1.23it/s]
+ 50%|█████     | 25/50 [00:25<00:23,  1.09it/s]
+ 52%|█████▏    | 26/50 [00:26<00:20,  1.14it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 0
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 0
@@ -1450,8 +1910,16 @@ skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 6
 
- 54%|█████▍    | 27/50 [00:19<00:14,  1.61it/s]skip_range | [480, 440]
+ 54%|█████▍    | 27/50 [00:27<00:19,  1.15it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 0
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 0
 skip_range | [480, 440]
@@ -1481,10 +1949,22 @@ Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 4
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
 
- 56%|█████▌    | 28/50 [00:20<00:12,  1.74it/s]
- 58%|█████▊    | 29/50 [00:21<00:14,  1.47it/s]
- 60%|██████    | 30/50 [00:21<00:12,  1.58it/s]skip_range | [400, 360]
+ 56%|█████▌    | 28/50 [00:28<00:17,  1.24it/s]
+ 58%|█████▊    | 29/50 [00:29<00:19,  1.06it/s]
+ 60%|██████    | 30/50 [00:30<00:17,  1.13it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 0
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 0
@@ -1504,8 +1984,16 @@ skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 6
 
- 62%|██████▏   | 31/50 [00:22<00:11,  1.59it/s]skip_range | [400, 360]
+ 62%|██████▏   | 31/50 [00:31<00:16,  1.16it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 0
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 0
 skip_range | [400, 360]
@@ -1535,44 +2023,56 @@ Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 4
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
 
- 64%|██████▍   | 32/50 [00:22<00:10,  1.72it/s]
- 66%|██████▌   | 33/50 [00:23<00:11,  1.50it/s]
- 68%|██████▊   | 34/50 [00:24<00:09,  1.61it/s]
- 70%|███████   | 35/50 [00:24<00:09,  1.55it/s]
- 72%|███████▏  | 36/50 [00:25<00:08,  1.60it/s]
- 74%|███████▍  | 37/50 [00:26<00:09,  1.43it/s]
- 76%|███████▌  | 38/50 [00:26<00:07,  1.56it/s]
- 78%|███████▊  | 39/50 [00:27<00:07,  1.51it/s]
- 80%|████████  | 40/50 [00:28<00:06,  1.62it/s]
- 82%|████████▏ | 41/50 [00:28<00:06,  1.45it/s]
- 84%|████████▍ | 42/50 [00:29<00:05,  1.56it/s]
- 86%|████████▌ | 43/50 [00:30<00:04,  1.47it/s]
- 88%|████████▊ | 44/50 [00:30<00:03,  1.59it/s]
- 90%|█████████ | 45/50 [00:31<00:03,  1.43it/s]
- 92%|█████████▏| 46/50 [00:32<00:03,  1.30it/s]
- 94%|█████████▍| 47/50 [00:33<00:02,  1.22it/s]
- 96%|█████████▌| 48/50 [00:34<00:01,  1.17it/s]
- 98%|█████████▊| 49/50 [00:35<00:00,  1.14it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.12it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.38it/s]
+ 64%|██████▍   | 32/50 [00:31<00:14,  1.25it/s]
+ 66%|██████▌   | 33/50 [00:32<00:15,  1.08it/s]
+ 68%|██████▊   | 34/50 [00:33<00:14,  1.14it/s]
+ 70%|███████   | 35/50 [00:34<00:13,  1.10it/s]
+ 72%|███████▏  | 36/50 [00:35<00:12,  1.14it/s]
+ 74%|███████▍  | 37/50 [00:36<00:12,  1.03it/s]
+ 76%|███████▌  | 38/50 [00:37<00:10,  1.10it/s]
+ 78%|███████▊  | 39/50 [00:38<00:10,  1.06it/s]
+ 80%|████████  | 40/50 [00:39<00:08,  1.13it/s]
+ 82%|████████▏ | 41/50 [00:40<00:08,  1.03it/s]
+ 84%|████████▍ | 42/50 [00:41<00:07,  1.12it/s]
+ 86%|████████▌ | 43/50 [00:42<00:06,  1.05it/s]
+ 88%|████████▊ | 44/50 [00:42<00:05,  1.12it/s]
+ 90%|█████████ | 45/50 [00:44<00:04,  1.01it/s]
+ 92%|█████████▏| 46/50 [00:45<00:04,  1.07s/it]
+ 94%|█████████▍| 47/50 [00:46<00:03,  1.13s/it]
+ 96%|█████████▌| 48/50 [00:47<00:02,  1.18s/it]
+ 98%|█████████▊| 49/50 [00:49<00:01,  1.22s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.24s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.01s/it]
 Processing the (A dog in astronaut suit and sunglasses floating in space.) prompt
 
   0%|          | 0/50 [00:00<?, ?it/s]
-  2%|▏         | 1/50 [00:00<00:45,  1.07it/s]
-  4%|▍         | 2/50 [00:01<00:44,  1.07it/s]
-  6%|▌         | 3/50 [00:02<00:43,  1.07it/s]
-  8%|▊         | 4/50 [00:03<00:42,  1.07it/s]
- 10%|█         | 5/50 [00:04<00:41,  1.07it/s]
- 12%|█▏        | 6/50 [00:05<00:40,  1.10it/s]
- 14%|█▍        | 7/50 [00:06<00:38,  1.12it/s]
- 16%|█▌        | 8/50 [00:07<00:38,  1.10it/s]
- 18%|█▊        | 9/50 [00:08<00:36,  1.12it/s]
- 20%|██        | 10/50 [00:09<00:35,  1.13it/s]
- 22%|██▏       | 11/50 [00:09<00:32,  1.19it/s]
- 24%|██▍       | 12/50 [00:10<00:28,  1.35it/s]
- 26%|██▌       | 13/50 [00:11<00:28,  1.30it/s]
- 28%|██▊       | 14/50 [00:11<00:25,  1.44it/s]skip_range | [720, 680]
+  2%|▏         | 1/50 [00:01<01:02,  1.28s/it]
+  4%|▍         | 2/50 [00:02<01:01,  1.28s/it]
+  6%|▌         | 3/50 [00:03<01:00,  1.28s/it]
+  8%|▊         | 4/50 [00:05<00:59,  1.28s/it]
+ 10%|█         | 5/50 [00:06<00:57,  1.29s/it]
+ 12%|█▏        | 6/50 [00:07<00:55,  1.25s/it]
+ 14%|█▍        | 7/50 [00:08<00:52,  1.23s/it]
+ 16%|█▌        | 8/50 [00:10<00:52,  1.25s/it]
+ 18%|█▊        | 9/50 [00:11<00:50,  1.24s/it]
+ 20%|██        | 10/50 [00:12<00:48,  1.22s/it]
+ 22%|██▏       | 11/50 [00:13<00:45,  1.17s/it]
+ 24%|██▍       | 12/50 [00:14<00:39,  1.04s/it]
+ 26%|██▌       | 13/50 [00:15<00:39,  1.07s/it]
+ 28%|██▊       | 14/50 [00:16<00:35,  1.02it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 0
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 0
@@ -1592,8 +2092,16 @@ skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 700 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 700 | [720, 680] | block 6
 
- 30%|███       | 15/50 [00:12<00:24,  1.44it/s]skip_range | [720, 680]
+ 30%|███       | 15/50 [00:17<00:33,  1.04it/s]skip_range | [720, 680]
 Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 0
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 0
 skip_range | [720, 680]
@@ -1623,10 +2131,22 @@ Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
 skip_range | [720, 680]
 Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 4
 Skip | Delete stored MLP output | t 680 | [720, 680] | block 4
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 5
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 5
+skip_range | [720, 680]
+Skip | Using stored MLP output | Spatial | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
+skip_range | [720, 680]
+Skip | Using stored MLP output | Time | t 680 | [720, 680] | block 6
+Skip | Delete stored MLP output | t 680 | [720, 680] | block 6
 
- 32%|███▏      | 16/50 [00:12<00:21,  1.60it/s]
- 34%|███▍      | 17/50 [00:13<00:23,  1.43it/s]
- 36%|███▌      | 18/50 [00:14<00:20,  1.55it/s]skip_range | [640, 600]
+ 32%|███▏      | 16/50 [00:17<00:29,  1.16it/s]
+ 34%|███▍      | 17/50 [00:18<00:31,  1.04it/s]
+ 36%|███▌      | 18/50 [00:19<00:28,  1.11it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 0
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 0
@@ -1646,8 +2166,16 @@ skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 620 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 620 | [640, 600] | block 6
 
- 38%|███▊      | 19/50 [00:14<00:19,  1.57it/s]skip_range | [640, 600]
+ 38%|███▊      | 19/50 [00:20<00:27,  1.13it/s]skip_range | [640, 600]
 Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 0
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 0
 skip_range | [640, 600]
@@ -1677,10 +2205,22 @@ Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
 skip_range | [640, 600]
 Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 4
 Skip | Delete stored MLP output | t 600 | [640, 600] | block 4
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 5
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 5
+skip_range | [640, 600]
+Skip | Using stored MLP output | Spatial | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
+skip_range | [640, 600]
+Skip | Using stored MLP output | Time | t 600 | [640, 600] | block 6
+Skip | Delete stored MLP output | t 600 | [640, 600] | block 6
 
- 40%|████      | 20/50 [00:15<00:17,  1.71it/s]
- 42%|████▏     | 21/50 [00:16<00:19,  1.49it/s]
- 44%|████▍     | 22/50 [00:16<00:18,  1.55it/s]skip_range | [560, 520]
+ 40%|████      | 20/50 [00:21<00:24,  1.22it/s]
+ 42%|████▏     | 21/50 [00:22<00:26,  1.08it/s]
+ 44%|████▍     | 22/50 [00:23<00:25,  1.12it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 0
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 0
@@ -1700,8 +2240,16 @@ skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 540 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 540 | [560, 520] | block 6
 
- 46%|████▌     | 23/50 [00:17<00:17,  1.57it/s]skip_range | [560, 520]
+ 46%|████▌     | 23/50 [00:24<00:23,  1.14it/s]skip_range | [560, 520]
 Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 0
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 0
 skip_range | [560, 520]
@@ -1731,10 +2279,22 @@ Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
 skip_range | [560, 520]
 Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 4
 Skip | Delete stored MLP output | t 520 | [560, 520] | block 4
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 5
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 5
+skip_range | [560, 520]
+Skip | Using stored MLP output | Spatial | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
+skip_range | [560, 520]
+Skip | Using stored MLP output | Time | t 520 | [560, 520] | block 6
+Skip | Delete stored MLP output | t 520 | [560, 520] | block 6
 
- 48%|████▊     | 24/50 [00:17<00:15,  1.70it/s]
- 50%|█████     | 25/50 [00:18<00:16,  1.49it/s]
- 52%|█████▏    | 26/50 [00:19<00:14,  1.60it/s]skip_range | [480, 440]
+ 48%|████▊     | 24/50 [00:24<00:21,  1.23it/s]
+ 50%|█████     | 25/50 [00:25<00:23,  1.07it/s]
+ 52%|█████▏    | 26/50 [00:26<00:21,  1.14it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 0
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 0
@@ -1754,8 +2314,16 @@ skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 460 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 460 | [480, 440] | block 6
 
- 54%|█████▍    | 27/50 [00:19<00:14,  1.60it/s]skip_range | [480, 440]
+ 54%|█████▍    | 27/50 [00:27<00:19,  1.16it/s]skip_range | [480, 440]
 Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 0
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 0
 skip_range | [480, 440]
@@ -1785,10 +2353,22 @@ Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
 skip_range | [480, 440]
 Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 4
 Skip | Delete stored MLP output | t 440 | [480, 440] | block 4
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 5
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 5
+skip_range | [480, 440]
+Skip | Using stored MLP output | Spatial | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
+skip_range | [480, 440]
+Skip | Using stored MLP output | Time | t 440 | [480, 440] | block 6
+Skip | Delete stored MLP output | t 440 | [480, 440] | block 6
 
- 56%|█████▌    | 28/50 [00:20<00:12,  1.73it/s]
- 58%|█████▊    | 29/50 [00:21<00:14,  1.46it/s]
- 60%|██████    | 30/50 [00:21<00:12,  1.58it/s]skip_range | [400, 360]
+ 56%|█████▌    | 28/50 [00:28<00:17,  1.26it/s]
+ 58%|█████▊    | 29/50 [00:29<00:19,  1.06it/s]
+ 60%|██████    | 30/50 [00:30<00:17,  1.13it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 0
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 0
@@ -1808,8 +2388,16 @@ skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 380 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 380 | [400, 360] | block 6
 
- 62%|██████▏   | 31/50 [00:22<00:11,  1.58it/s]skip_range | [400, 360]
+ 62%|██████▏   | 31/50 [00:31<00:16,  1.14it/s]skip_range | [400, 360]
 Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 0
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 0
 skip_range | [400, 360]
@@ -1839,24 +2427,36 @@ Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
 skip_range | [400, 360]
 Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 4
 Skip | Delete stored MLP output | t 360 | [400, 360] | block 4
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 5
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 5
+skip_range | [400, 360]
+Skip | Using stored MLP output | Spatial | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
+skip_range | [400, 360]
+Skip | Using stored MLP output | Time | t 360 | [400, 360] | block 6
+Skip | Delete stored MLP output | t 360 | [400, 360] | block 6
 
- 64%|██████▍   | 32/50 [00:22<00:10,  1.72it/s]
- 66%|██████▌   | 33/50 [00:23<00:11,  1.50it/s]
- 68%|██████▊   | 34/50 [00:24<00:09,  1.61it/s]
- 70%|███████   | 35/50 [00:24<00:09,  1.55it/s]
- 72%|███████▏  | 36/50 [00:25<00:08,  1.59it/s]
- 74%|███████▍  | 37/50 [00:26<00:09,  1.43it/s]
- 76%|███████▌  | 38/50 [00:26<00:07,  1.55it/s]
- 78%|███████▊  | 39/50 [00:27<00:07,  1.51it/s]
- 80%|████████  | 40/50 [00:28<00:06,  1.61it/s]
- 82%|████████▏ | 41/50 [00:28<00:06,  1.44it/s]
- 84%|████████▍ | 42/50 [00:29<00:05,  1.56it/s]
- 86%|████████▌ | 43/50 [00:30<00:04,  1.47it/s]
- 88%|████████▊ | 44/50 [00:30<00:03,  1.58it/s]
- 90%|█████████ | 45/50 [00:31<00:03,  1.43it/s]
- 92%|█████████▏| 46/50 [00:32<00:03,  1.30it/s]
- 94%|█████████▍| 47/50 [00:33<00:02,  1.22it/s]
- 96%|█████████▌| 48/50 [00:34<00:01,  1.17it/s]
- 98%|█████████▊| 49/50 [00:35<00:00,  1.14it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.12it/s]
-100%|██████████| 50/50 [00:36<00:00,  1.38it/s]
+ 64%|██████▍   | 32/50 [00:31<00:14,  1.23it/s]
+ 66%|██████▌   | 33/50 [00:32<00:15,  1.09it/s]
+ 68%|██████▊   | 34/50 [00:33<00:13,  1.16it/s]
+ 70%|███████   | 35/50 [00:34<00:13,  1.11it/s]
+ 72%|███████▏  | 36/50 [00:35<00:12,  1.13it/s]
+ 74%|███████▍  | 37/50 [00:36<00:12,  1.02it/s]
+ 76%|███████▌  | 38/50 [00:37<00:10,  1.10it/s]
+ 78%|███████▊  | 39/50 [00:38<00:10,  1.08it/s]
+ 80%|████████  | 40/50 [00:39<00:08,  1.15it/s]
+ 82%|████████▏ | 41/50 [00:40<00:08,  1.03it/s]
+ 84%|████████▍ | 42/50 [00:41<00:07,  1.10it/s]
+ 86%|████████▌ | 43/50 [00:42<00:06,  1.04it/s]
+ 88%|████████▊ | 44/50 [00:42<00:05,  1.12it/s]
+ 90%|█████████ | 45/50 [00:44<00:04,  1.02it/s]
+ 92%|█████████▏| 46/50 [00:45<00:04,  1.07s/it]
+ 94%|█████████▍| 47/50 [00:46<00:03,  1.14s/it]
+ 96%|█████████▌| 48/50 [00:47<00:02,  1.18s/it]
+ 98%|█████████▊| 49/50 [00:49<00:01,  1.21s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.23s/it]
+100%|██████████| 50/50 [00:50<00:00,  1.01s/it]

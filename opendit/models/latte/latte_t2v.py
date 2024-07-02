@@ -339,8 +339,6 @@ class BasicTransformerBlock(nn.Module):
         self.spatial_last = None
         self.spatial_count = 0
         self.block_idx = block_idx
-        # mse
-        self.mlp_outputs = []
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
@@ -461,7 +459,6 @@ class BasicTransformerBlock(nn.Module):
 
         # 4. Feed-forward
         # i2vgen doesn't have this norm 🤷‍♂️
-        # TODO skip mlp
         if self.norm_type == "ada_norm_continuous":
             norm_hidden_states = self.norm3(hidden_states, added_cond_kwargs["pooled_text_emb"])
         elif not self.norm_type == "ada_norm_single":
@@ -758,7 +755,6 @@ class BasicTransformerBlock_(nn.Module):
             norm_hidden_states = self.norm3(hidden_states)
             norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
 
-        # TODO skip mlp here
         if self._chunk_size is not None:
             # "feed_forward_chunk_size" can be used to save memory
             if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
