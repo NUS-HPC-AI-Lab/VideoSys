@@ -1,6 +1,6 @@
 model_path: LanguageBind/Open-Sora-Plan-v1.1.0
-version: 65x512x512
-num_frames: 65
+version: 65x512x512 # 65x512x512, 221x512x512
+num_frames: 65      # 65, 221
 height: 512
 width: 512
 cache_dir: "./cache_dir"
@@ -31,7 +31,7 @@ spatial_broadcast: True
 spatial_threshold: [100, 800]
 spatial_gap: 2
 temporal_broadcast: True
-temporal_threshold: [100, 800]
+temporal_threshold: [100, 750]
 temporal_gap: 4
 cross_broadcast: True
 cross_threshold: [100, 850]

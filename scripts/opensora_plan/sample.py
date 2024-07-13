@@ -141,7 +141,6 @@ def main(args):
 
     os.makedirs(args.save_img_path, exist_ok=True)
 
-    video_grids = []
     if not isinstance(args.text_prompt, list):
         args.text_prompt = [args.text_prompt]
     if len(args.text_prompt) == 1 and args.text_prompt[0].endswith("txt"):
@@ -173,35 +172,10 @@ def main(args):
 
             else:
                 imageio.mimwrite(
-                    os.path.join(args.save_img_path, f"{idx}.{ext}"), videos[0], fps=args.fps, quality=9
+                    os.path.join(args.save_img_path, f"{idx}.{ext}"), videos[0], fps=args.fps, quality=7
                 )  # highest quality is 10, lowest is 0
         except:
             print("Error when saving {}".format(prompt))
-        video_grids.append(videos)
-    video_grids = torch.cat(video_grids, dim=0)
-
-    # torchvision.io.write_video(args.save_img_path + '_%04d' % args.run_time + '-.mp4', video_grids, fps=6)
-    if coordinator.is_master():
-        if args.force_images:
-            save_image(
-                video_grids / 255.0,
-                os.path.join(
-                    args.save_img_path, f"{args.sample_method}_gs{args.guidance_scale}_s{args.num_sampling_steps}.{ext}"
-                ),
-                nrow=math.ceil(math.sqrt(len(video_grids))),
-                normalize=True,
-                value_range=(0, 1),
-            )
-        else:
-            video_grids = save_video_grid(video_grids)
-            imageio.mimwrite(
-                os.path.join(
-                    args.save_img_path, f"{args.sample_method}_gs{args.guidance_scale}_s{args.num_sampling_steps}.{ext}"
-                ),
-                video_grids,
-                fps=args.fps,
-                quality=9,
-            )
 
     print("save path {}".format(args.save_img_path))
 
@@ -231,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument("--tile_overlap_factor", type=float, default=0.25)
     parser.add_argument("--enable_tiling", action="store_true")
 
-    # fvd
+    # pab
     parser.add_argument("--spatial_broadcast", action="store_true", help="Enable spatial attention skip")
     parser.add_argument(
         "--spatial_threshold", type=int, nargs=2, default=[100, 800], help="Spatial attention threshold"
