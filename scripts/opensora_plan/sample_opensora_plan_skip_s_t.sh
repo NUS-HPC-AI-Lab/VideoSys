@@ -16,3 +16,17 @@ echo "Finished opensora_plan_sample_65f_skip_s_t_3.txt"
 
 CUDA_VISIBLE_DEVICES=7 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample_opensora_plan_skip_s_t.py --config configs/opensora_plan/sample_65f_skip_s_t_6.yaml > opensora_plan_sample_65f_skip_s_t_6.txt 2>&1 &
 echo "Finished opensora_plan_sample_65f_skip_s_t_4.txt"
+
+
+
+CUDA_VISIBLE_DEVICES=2 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample_opensora_plan_skip_s_t.py --config configs/opensora_plan/sample_65f_skip_s_t_7.yaml > opensora_plan_sample_65f_skip_s_t_7.txt 2>&1 &
+echo "Finished opensora_plan_sample_65f_skip_s_t_7.txt"
+
+CUDA_VISIBLE_DEVICES=3 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample_opensora_plan_skip_s_t.py --config configs/opensora_plan/sample_65f_skip_s_t_8.yaml > opensora_plan_sample_65f_skip_s_t_8.txt 2>&1 &
+echo "Finished opensora_plan_sample_65f_skip_s_t_8.txt"
+
+CUDA_VISIBLE_DEVICES=4 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample_opensora_plan_skip_s_t.py --config configs/opensora_plan/sample_65f_skip_s_t_9.yaml > opensora_plan_sample_65f_skip_s_t_9.txt 2>&1 &
+echo "Finished opensora_plan_sample_65f_skip_s_t_9.txt"
+
+CUDA_VISIBLE_DEVICES=5 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample_opensora_plan_skip_s_t.py --config configs/opensora_plan/sample_65f_skip_s_t_10.yaml > opensora_plan_sample_65f_skip_s_t_10.txt 2>&1 &
+echo "Finished opensora_plan_sample_65f_skip_s_t_10.txt"
