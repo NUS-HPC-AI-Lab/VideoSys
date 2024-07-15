@@ -25,7 +25,7 @@ from diffusers.utils import BACKENDS_MAPPING, BaseOutput, is_bs4_available, is_f
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import PABConfig, get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 from opendit.utils.utils import save_video
 
 from .latte_t2v import LatteT2V
@@ -45,22 +45,66 @@ class VideoPipelineOutput(BaseOutput):
     video: torch.Tensor
 
 
+class LattePABConfig(PABConfig):
+    def __init__(
+        self,
+        steps: int = 50,
+        spatial_broadcast: bool = True,
+        spatial_threshold: list = [100, 800],
+        spatial_gap: int = 2,
+        temporal_broadcast: bool = True,
+        temporal_threshold: list = [100, 850],
+        temporal_gap: int = 2,
+        cross_broadcast: bool = True,
+        cross_threshold: list = [100, 850],
+        cross_gap: int = 7,
+        diffusion_skip: bool = False,
+        diffusion_timestep_respacing: list = None,
+        diffusion_skip_timestep: list = None,
+    ):
+        super().__init__(
+            steps=steps,
+            spatial_broadcast=spatial_broadcast,
+            spatial_threshold=spatial_threshold,
+            spatial_gap=spatial_gap,
+            temporal_broadcast=temporal_broadcast,
+            temporal_threshold=temporal_threshold,
+            temporal_gap=temporal_gap,
+            cross_broadcast=cross_broadcast,
+            cross_threshold=cross_threshold,
+            cross_gap=cross_gap,
+            diffusion_skip=diffusion_skip,
+            diffusion_timestep_respacing=diffusion_timestep_respacing,
+            diffusion_skip_timestep=diffusion_skip_timestep,
+        )
+
+
 class LatteConfig:
     def __init__(
         self,
         model_path: str = "maxin-cn/Latte-1",
         enable_vae_temporal_decoder: bool = True,
+        # ======= scheduler ========
         beta_start: float = 0.0001,
         beta_end: float = 0.02,
         beta_schedule: str = "linear",
         variance_type: str = "learned_range",
+        # ======= pab ========
+        enable_pab: bool = False,
+        pab_config: LattePABConfig = LattePABConfig(),
     ):
         self.model_path = model_path
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
+
+        # ======= scheduler ========
         self.beta_start = beta_start
         self.beta_end = beta_end
         self.beta_schedule = beta_schedule
         self.variance_type = variance_type
+
+        # ======= pab ========
+        self.enable_pab = enable_pab
+        self.pab_config = pab_config
 
 
 class LattePipeline(DiffusionPipeline):
@@ -104,7 +148,7 @@ class LattePipeline(DiffusionPipeline):
         dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
-        self.config = config
+
         # initialize the model if not provided
         if transformer is None:
             transformer = LatteT2V.from_pretrained(config.model_path, subfolder="transformer", video_length=16).to(
@@ -143,6 +187,8 @@ class LattePipeline(DiffusionPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
+
+        self.enable_vae_temporal_decoder = config.enable_vae_temporal_decoder
 
     def set_eval_and_device(self, device, *modules):
         for module in modules:
@@ -797,7 +843,7 @@ class LattePipeline(DiffusionPipeline):
             if latents.shape[2] == 1:  # image
                 video = self.decode_latents_image(latents)
             else:  # video
-                if self.config.enable_vae_temporal_decoder:
+                if self.enable_vae_temporal_decoder:
                     video = self.decode_latents_with_temporal_decoder(latents)
                 else:
                     video = self.decode_latents(latents)
