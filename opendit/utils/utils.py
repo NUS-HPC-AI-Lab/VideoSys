@@ -2,6 +2,7 @@ import logging
 import os
 import random
 
+import imageio
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -84,3 +85,13 @@ def create_logger(logging_dir=None):
         logger = logging.getLogger(__name__)
         logger.addHandler(logging.NullHandler())
     return logger
+
+
+def save_video(video, output_path, fps):
+    """
+    Save a video to disk.
+    """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    if dist.get_rank() == 0:
+        imageio.mimwrite(output_path, video, fps=fps)
+    dist.barrier()
