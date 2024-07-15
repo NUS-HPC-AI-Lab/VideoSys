@@ -1,3 +1,5 @@
+# Usage: torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py
+
 import opendit
 from opendit import LatteConfig, LattePipeline
 

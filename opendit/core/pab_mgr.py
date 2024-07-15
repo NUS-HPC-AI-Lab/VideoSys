@@ -114,6 +114,11 @@ def enable_pab():
     )
 
 
+def update_steps(steps: int):
+    if PAB_MANAGER is not None:
+        PAB_MANAGER.config.steps = steps
+
+
 def if_broadcast_cross(timestep: int, count: int):
     if not enable_pab():
         return False, count

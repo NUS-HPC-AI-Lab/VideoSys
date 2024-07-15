@@ -25,7 +25,14 @@ from diffusers.utils import BACKENDS_MAPPING, BaseOutput, is_bs4_available, is_f
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.pab_mgr import PABConfig, get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import (
+    PABConfig,
+    get_diffusion_skip,
+    get_diffusion_skip_timestep,
+    set_pab_manager,
+    skip_diffusion_timestep,
+    update_steps,
+)
 from opendit.utils.utils import save_video
 
 from .latte_t2v import LatteT2V
@@ -177,6 +184,10 @@ class LattePipeline(DiffusionPipeline):
                 variance_type=config.variance_type,
                 clip_sample=False,
             )
+
+        # pab
+        if config.enable_pab:
+            set_pab_manager(config.pab_config)
 
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)
@@ -731,6 +742,7 @@ class LattePipeline(DiffusionPipeline):
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
+        update_steps(num_inference_steps)
         # timesteps = self.scheduler.timesteps # NOTE change timestep_respacing here
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
