@@ -16,10 +16,10 @@ import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.cluster import DistCoordinator
+from evaluations.pab.scripts.utils import load_eval_prompts
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from evaluations.pab.scripts.utils import load_eval_prompts
 from opendit.core.pab_mgr import set_pab_manager
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
 from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing

@@ -1,0 +1,15 @@
+{
+    "temporal_flickering": [
+        0.9870143142401003,
+        [
+            {
+                "video_path": "/data/xuanlei/Lumiere-exp/eval/videos/In a still frame, a stop sign-0.mp4",
+                "video_results": 0.9870143142401003
+            },
+            {
+                "video_path": "/data/xuanlei/Lumiere-exp/eval/videos/In a still frame, a stop sign-1.mp4",
+                "video_results": 0.9870143142401003
+            }
+        ]
+    ]
+}

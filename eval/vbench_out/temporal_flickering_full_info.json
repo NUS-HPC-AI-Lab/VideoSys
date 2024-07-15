@@ -1,0 +1,12 @@
+[
+    {
+        "prompt_en": "In a still frame, a stop sign",
+        "dimension": [
+            "temporal_flickering"
+        ],
+        "video_list": [
+            "/data/xuanlei/Lumiere-exp/eval/videos/In a still frame, a stop sign-0.mp4",
+            "/data/xuanlei/Lumiere-exp/eval/videos/In a still frame, a stop sign-1.mp4"
+        ]
+    }
+]

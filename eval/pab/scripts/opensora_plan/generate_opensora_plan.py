@@ -27,11 +27,11 @@ from diffusers.schedulers import (
     PNDMScheduler,
 )
 from diffusers.schedulers.scheduling_dpmsolver_singlestep import DPMSolverSinglestepScheduler
+from evaluations.pab.scripts.utils import load_eval_prompts
 from omegaconf import OmegaConf
 from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
-from evaluations.pab.scripts.utils import load_eval_prompts
 from opendit.core.pab_mgr import set_pab_manager
 from opendit.core.parallel_mgr import set_parallel_manager
 from opendit.models.opensora_plan import LatteT2V, VideoGenPipeline, ae_stride_config, getae_wrapper
