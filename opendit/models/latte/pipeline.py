@@ -104,7 +104,7 @@ class LattePipeline(DiffusionPipeline):
         dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
-
+        self.config = config
         # initialize the model if not provided
         if transformer is None:
             transformer = LatteT2V.from_pretrained(config.model_path, subfolder="transformer", video_length=16).to(
@@ -576,7 +576,6 @@ class LattePipeline(DiffusionPipeline):
         clean_caption: bool = True,
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
-        enable_vae_temporal_decoder: bool = True,
         verbose: bool = False,
     ) -> Union[VideoPipelineOutput, Tuple]:
         """
@@ -798,7 +797,7 @@ class LattePipeline(DiffusionPipeline):
             if latents.shape[2] == 1:  # image
                 video = self.decode_latents_image(latents)
             else:  # video
-                if enable_vae_temporal_decoder:
+                if self.config.enable_vae_temporal_decoder:
                     video = self.decode_latents_with_temporal_decoder(latents)
                 else:
                     video = self.decode_latents(latents)
