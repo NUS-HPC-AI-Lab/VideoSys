@@ -1,3 +1,5 @@
+from typing import Optional
+
 import colossalai
 import torch
 import torch.distributed as dist
@@ -58,8 +60,10 @@ def get_parallel_manager():
     return PARALLEL_MANAGER
 
 
-def initialize(seed: int = None, sp_size: int = None):
-    colossalai.launch_from_torch({})
+def initialize(seed: Optional[int] = None, sp_size: Optional[int] = None):
+    if not dist.is_initialized():
+        colossalai.launch_from_torch({})
+
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 

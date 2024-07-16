@@ -12,7 +12,7 @@ def run_base():
 
     prompt = "Sunset over the sea."
     video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt[:50]}.mp4")
+    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 def run_pab():
@@ -23,7 +23,7 @@ def run_pab():
 
     prompt = "Sunset over the sea."
     video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt[:50]}.mp4")
+    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 if __name__ == "__main__":

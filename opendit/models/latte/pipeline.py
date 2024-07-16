@@ -19,7 +19,6 @@ import torch
 import torch.distributed as dist
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
-from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.schedulers import DDIMScheduler
 from diffusers.utils import BACKENDS_MAPPING, BaseOutput, is_bs4_available, is_ftfy_available, logging
 from diffusers.utils.torch_utils import randn_tensor
@@ -33,6 +32,7 @@ from opendit.core.pab_mgr import (
     skip_diffusion_timestep,
     update_steps,
 )
+from opendit.core.pipeline import VideoSysPipeline
 from opendit.utils.utils import save_video
 
 from .latte_t2v import LatteT2V
@@ -98,7 +98,7 @@ class LatteConfig:
         variance_type: str = "learned_range",
         # ======= pab ========
         enable_pab: bool = False,
-        pab_config: LattePABConfig = LattePABConfig(),
+        pab_config: PABConfig = LattePABConfig(),
     ):
         self.model_path = model_path
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
@@ -114,7 +114,7 @@ class LatteConfig:
         self.pab_config = pab_config
 
 
-class LattePipeline(DiffusionPipeline):
+class LattePipeline(VideoSysPipeline):
     r"""
     Pipeline for text-to-image generation using PixArt-Alpha.
 
@@ -146,15 +146,16 @@ class LattePipeline(DiffusionPipeline):
     def __init__(
         self,
         config: LatteConfig = LatteConfig(),
-        tokenizer=None,
-        text_encoder=None,
-        vae=None,
-        transformer=None,
-        scheduler=None,
+        tokenizer: Optional[T5Tokenizer] = None,
+        text_encoder: Optional[T5EncoderModel] = None,
+        vae: Optional[AutoencoderKL] = None,
+        transformer: Optional[LatteT2V] = None,
+        scheduler: Optional[DDIMScheduler] = None,
         device: torch.device = torch.device("cuda"),
         dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
+        self._config = config
 
         # initialize the model if not provided
         if transformer is None:
@@ -198,13 +199,6 @@ class LattePipeline(DiffusionPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
-
-        self.enable_vae_temporal_decoder = config.enable_vae_temporal_decoder
-
-    def set_eval_and_device(self, device, *modules):
-        for module in modules:
-            module.eval()
-            module.to(device)
 
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
@@ -708,6 +702,7 @@ class LattePipeline(DiffusionPipeline):
         video_length = 16
         height = 512
         width = 512
+        update_steps(num_inference_steps)
         self.check_inputs(prompt, height, width, negative_prompt, callback_steps, prompt_embeds, negative_prompt_embeds)
 
         # 2. Default height and width to transformer
@@ -742,7 +737,6 @@ class LattePipeline(DiffusionPipeline):
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
-        update_steps(num_inference_steps)
         # timesteps = self.scheduler.timesteps # NOTE change timestep_respacing here
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
@@ -855,7 +849,7 @@ class LattePipeline(DiffusionPipeline):
             if latents.shape[2] == 1:  # image
                 video = self.decode_latents_image(latents)
             else:  # video
-                if self.enable_vae_temporal_decoder:
+                if self._config.enable_vae_temporal_decoder:
                     video = self.decode_latents_with_temporal_decoder(latents)
                 else:
                     video = self.decode_latents(latents)
@@ -870,9 +864,6 @@ class LattePipeline(DiffusionPipeline):
             return (video,)
 
         return VideoPipelineOutput(video=video)
-
-    def __call__(self, *args, **kwargs):
-        return self.generate(*args, **kwargs)
 
     def decode_latents_image(self, latents):
         video_length = latents.shape[2]
