@@ -47,16 +47,16 @@ mlp_skip: True
 
 
 mlp_spatial_skip_config: {
-664: {'block': [0, 1, 2, 3, 4, 5], 'skip_count': 2},
-776: {'block': [0, 1, 2, 3, 4, 5], 'skip_count': 2},
-856: {'block': [0, 1, 2, 3, 4, 5], 'skip_count': 2},
+664: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+776: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+856: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
 }
 
 
 mlp_temporal_skip_config: {
-664: {'block': [0, 1, 2, 3, 4, 5], 'skip_count': 2},
-776: {'block': [0, 1, 2, 3, 4, 5], 'skip_count': 2},
-856: {'block': [0, 1, 2, 3, 4, 5], 'skip_count': 2},
+664: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+776: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+856: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
 }
 
 
