@@ -39,11 +39,17 @@ diffusion_skip_timestep: [3,3,3,0,0,0,0,0,0,0]
 # open-sora plan 150 steps, so we can skip more
 
 
-
 # mlp
 mlp_skip: True
 
+
 mlp_spatial_skip_config: {
+738: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+714: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+690: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+666: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+642: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+618: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 594: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 570: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 546: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
@@ -52,15 +58,16 @@ mlp_spatial_skip_config: {
 474: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 450: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 426: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-402: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-378: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-354: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-330: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 }
-
 
 
 mlp_temporal_skip_config: {
+738: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+714: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+690: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+666: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+642: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
+618: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 594: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 570: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 546: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
@@ -69,12 +76,7 @@ mlp_temporal_skip_config: {
 474: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 450: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 426: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-402: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-378: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-354: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
-330: {'block': [0, 1, 2, 3, 4, 5, 6], 'skip_count': 2},
 }
-
 
 # Time step tensor([894, 891, 891, 888, 888, 885, 885, 882, 882, 879, 879, 876, 876, 870,
 #         864, 858, 852, 846, 840, 834, 828, 822, 816, 810, 804, 798, 792, 786,

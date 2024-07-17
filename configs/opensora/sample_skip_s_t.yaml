@@ -48,25 +48,31 @@ mlp_threshold: [710, 760]
 mlp_gap: 1
 mlp_layer_range: [14, 15]
 
+
+
 mlp_spatial_skip_config: {
 496: {'block': [0, 1, 2, 3], 'skip_count': 3},
-544: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
-628: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
-752: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
-776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
-836: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
+544: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+628: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+752: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+836: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+964: {'block': [0, 1, 2, 3], 'skip_count': 3},
 }
 
 
 mlp_temporal_skip_config: {
 496: {'block': [0, 1, 2, 3], 'skip_count': 3},
-664: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
-776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
-856: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
-916: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'skip_count': 2},
+544: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+628: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+752: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+776: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+836: {'block': [0, 1, 2, 3, 4, 5, 6, 7, 8], 'skip_count': 3},
+964: {'block': [0, 1, 2, 3], 'skip_count': 3},
 }
 
 
+
 # skip diffusion
-diffusion_skip: True
+diffusion_skip: False
 diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]

@@ -57,7 +57,15 @@ from opendit.core.comm import (
     split_sequence,
 )
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.core.skip_mgr_s_t import enable_skip, if_skip_cross, if_skip_mlp, if_skip_spatial, if_skip_temporal
+from opendit.core.skip_mgr_s_t import (
+    enable_skip,
+    get_skip_output,
+    if_skip_cross,
+    if_skip_mlp,
+    if_skip_spatial,
+    if_skip_temporal,
+    save_skip_output,
+)
 
 if is_xformers_available():
     import xformers
@@ -1675,28 +1683,14 @@ class BasicTransformerBlock_(nn.Module):
         )
 
         if skip_mlp:
-            skip_start_t = skip_range[0]
-            ff_output = mlp_outputs.get((skip_start_t, self.block_idx), None) if mlp_outputs is not None else None
+            ff_output = get_skip_output(
+                skip_range,
+                timestep=int(org_timestep[0]),
+                block_idx=self.block_idx,
+                is_temporal=self.temporal,
+                is_spatial=(not self.temporal),
+            )
 
-            if ff_output is not None:
-                print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
-                if self.temporal:
-                    print(
-                        f"Skip | Using stored MLP output | Time | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-                else:
-                    print(
-                        f"Skip | Using stored MLP output | Spatial | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-                if int(org_timestep[0]) == skip_range[-1]:
-                    del mlp_outputs[(skip_start_t, self.block_idx)]
-                    print(
-                        f"Skip | Delete stored MLP output | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-            else:
-                raise ValueError(
-                    f"No stored MLP output found | t {int(org_timestep[0])} |[{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                )
         else:
             if self.use_ada_layer_norm_zero:
                 norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
@@ -1730,14 +1724,19 @@ class BasicTransformerBlock_(nn.Module):
                 ff_output = gate_mlp * ff_output
 
             if skip_next:
-                if mlp_outputs is not None:
-                    mlp_outputs[(int(org_timestep[0]), self.block_idx)] = ff_output
+                save_skip_output(
+                    timestep=int(org_timestep[0]),
+                    block_idx=self.block_idx,
+                    ff_output=ff_output,
+                    is_temporal=self.temporal,
+                    is_spatial=(not self.temporal),
+                )
 
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
-        return hidden_states, mlp_outputs
+        return hidden_states
 
     def dynamic_switch(self, x, to_spatial_shard: bool):
         if to_spatial_shard:
@@ -2065,28 +2064,13 @@ class BasicTransformerBlock(nn.Module):
         )
 
         if skip_mlp:
-            skip_start_t = skip_range[0]
-            ff_output = mlp_outputs.get((skip_start_t, self.block_idx), None) if mlp_outputs is not None else None
-
-            if ff_output is not None:
-                print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
-                if self.temporal:
-                    print(
-                        f"Skip | Using stored MLP output | Time | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-                else:
-                    print(
-                        f"Skip | Using stored MLP output | Spatial | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-                if int(org_timestep[0]) == skip_range[-1]:
-                    del mlp_outputs[(skip_start_t, self.block_idx)]
-                    print(
-                        f"Skip | Delete stored MLP output | t {int(org_timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-            else:
-                raise ValueError(
-                    f"No stored MLP output found | t {int(org_timestep[0])} |[{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                )
+            ff_output = get_skip_output(
+                skip_range,
+                timestep=int(org_timestep[0]),
+                block_idx=self.block_idx,
+                is_temporal=self.temporal,
+                is_spatial=(not self.temporal),
+            )
         else:
             # 4. Feed-forward
             if not self.use_ada_layer_norm_single:
@@ -2107,14 +2091,19 @@ class BasicTransformerBlock(nn.Module):
                 ff_output = gate_mlp * ff_output
 
             if skip_next:
-                if mlp_outputs is not None:
-                    mlp_outputs[(int(org_timestep[0]), self.block_idx)] = ff_output
+                save_skip_output(
+                    timestep=int(org_timestep[0]),
+                    block_idx=self.block_idx,
+                    ff_output=ff_output,
+                    is_temporal=self.temporal,
+                    is_spatial=(not self.temporal),
+                )
 
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
-        return hidden_states, mlp_outputs
+        return hidden_states
 
 
 class AdaLayerNormSingle(nn.Module):
@@ -2672,7 +2661,7 @@ class LatteT2V_skip_s_t(ModelMixin, ConfigMixin):
                         ).contiguous()
             else:
                 # TODO spatial block inference
-                hidden_states, self.spatial_mlp_outputs = spatial_block(
+                hidden_states = spatial_block(
                     hidden_states,
                     attention_mask_compress if i >= self.num_layers // 2 else attention_mask,
                     encoder_hidden_states_spatial,
@@ -2684,7 +2673,6 @@ class LatteT2V_skip_s_t(ModelMixin, ConfigMixin):
                     pos_hw,
                     hw,
                     org_timestep,
-                    mlp_outputs=self.spatial_mlp_outputs,
                     all_timesteps=all_timesteps,
                 )
 
@@ -2723,7 +2711,7 @@ class LatteT2V_skip_s_t(ModelMixin, ConfigMixin):
                         if i == 0:
                             hidden_states = hidden_states + temp_pos_embed
                         #  TODO time block inference
-                        hidden_states, self.temporal_mlp_outputs = temp_block(
+                        hidden_states = temp_block(
                             hidden_states,
                             None,  # attention_mask
                             None,  # encoder_hidden_states
@@ -2735,7 +2723,6 @@ class LatteT2V_skip_s_t(ModelMixin, ConfigMixin):
                             pos_t,
                             (frame,),
                             org_timestep,
-                            mlp_outputs=self.temporal_mlp_outputs,
                             all_timesteps=all_timesteps,
                         )
 

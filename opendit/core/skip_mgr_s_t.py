@@ -58,6 +58,9 @@ class SkipManager:
         self.mlp_spatial_skip_config = mlp_spatial_skip_config
         self.mlp_temporal_skip_config = mlp_temporal_skip_config
 
+        self.temporal_mlp_outputs = {}
+        self.spatial_mlp_outputs = {}
+
         if dist.get_rank() == 0:  # DEBUG
             # if True:
             print(
@@ -180,6 +183,71 @@ class SkipManager:
 
             return flag, count, next_flag, skip_range
 
+    def save_skip_output(self, timestep, block_idx, ff_output, is_temporal=False, is_spatial=False):
+        if is_temporal:
+            self.temporal_mlp_outputs[(timestep, block_idx)] = ff_output
+        if is_spatial:
+            self.spatial_mlp_outputs[(timestep, block_idx)] = ff_output
+
+    def get_skip_output(self, skip_range, timestep, block_idx, is_temporal=False, is_spatial=False):
+        skip_start_t = skip_range[0]
+        if is_temporal:
+            skip_output = (
+                self.temporal_mlp_outputs.get((skip_start_t, block_idx), None)
+                if self.temporal_mlp_outputs is not None
+                else None
+            )
+        if is_spatial:
+            skip_output = (
+                self.spatial_mlp_outputs.get((skip_start_t, block_idx), None)
+                if self.spatial_mlp_outputs is not None
+                else None
+            )
+
+        if skip_output is not None:
+            if timestep == skip_range[-1]:
+                print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
+                if is_temporal:
+                    del self.temporal_mlp_outputs[(skip_start_t, block_idx)]
+                if is_spatial:
+                    del self.spatial_mlp_outputs[(skip_start_t, block_idx)]
+        else:
+            raise ValueError(
+                f"No stored MLP output found | t {timestep} |[{skip_range[0]}, {skip_range[-1]}] | block {block_idx}"
+            )
+
+        # if skip_output is not None:
+        #     print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
+        #     if is_temporal:
+        #         print(
+        #             f"Skip | Using stored MLP output | Time | t {timestep} | [{skip_range[0]}, {skip_range[-1]}] | block {block_idx}"
+        #         )
+        #     else:
+        #         print(
+        #             f"Skip | Using stored MLP output | Spatial | t {timestep} | [{skip_range[0]}, {skip_range[-1]}] | block {block_idx}"
+        #         )
+
+        #     if timestep == skip_range[-1]:
+        #         if is_temporal:
+        #             del self.temporal_mlp_outputs[(skip_start_t, block_idx)]
+        #         if is_spatial:
+        #             del self.spatial_mlp_outputs[(skip_start_t, block_idx)]
+        #         print(
+        #             f"Skip | Delete stored MLP output | t {timestep} | [{skip_range[0]}, {skip_range[-1]}] | block {block_idx}"
+        #         )
+        # else:
+        #     raise ValueError(
+        #         f"No stored MLP output found | t {timestep} |[{skip_range[0]}, {skip_range[-1]}] | block {block_idx}"
+        #     )
+
+        return skip_output
+
+    def get_spatial_mlp_outputs(self):
+        return self.spatial_mlp_outputs
+
+    def get_temporal_mlp_outputs(self):
+        return self.temporal_mlp_outputs
+
 
 def set_skip_manager(
     steps: int = 100,
@@ -241,6 +309,14 @@ def if_skip_cross(timestep: int, count: int):
 
 def if_skip_temporal(timestep: int, count: int):
     return SKIP_MANAGER.if_skip_temporal(timestep, count)
+
+
+def save_skip_output(timestep: int, block_idx: int, ff_output, is_temporal=False, is_spatial=False):
+    return SKIP_MANAGER.save_skip_output(timestep, block_idx, ff_output, is_temporal, is_spatial)
+
+
+def get_skip_output(skip_range, timestep, block_idx: int, is_temporal=False, is_spatial=False):
+    return SKIP_MANAGER.get_skip_output(skip_range, timestep, block_idx, is_temporal, is_spatial)
 
 
 def if_skip_spatial(timestep: int, count: int, block_idx: int):

@@ -28,7 +28,15 @@ from opendit.core.comm import (
     split_sequence,
 )
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.core.skip_mgr_s_t import enable_skip, if_skip_cross, if_skip_mlp, if_skip_spatial, if_skip_temporal
+from opendit.core.skip_mgr_s_t import (
+    enable_skip,
+    get_skip_output,
+    if_skip_cross,
+    if_skip_mlp,
+    if_skip_spatial,
+    if_skip_temporal,
+    save_skip_output,
+)
 
 from .modules import (
     Attention,
@@ -115,7 +123,6 @@ class STDiT3Block(nn.Module):
         T=None,  # number of frames
         S=None,  # number of pixel patches
         timestep=None,
-        mlp_outputs=None,
         all_timesteps=None,
     ):
         # prepare modulate parameters
@@ -189,27 +196,13 @@ class STDiT3Block(nn.Module):
         )
 
         if skip_mlp:
-            skip_start_t = skip_range[0]
-            x_m_s = mlp_outputs.get((skip_start_t, self.block_idx), None) if mlp_outputs is not None else None
-            if x_m_s is not None:
-                print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
-                if self.temporal:
-                    print(
-                        f"Skip | Using stored MLP output | Time | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-                else:
-                    print(
-                        f"Skip | Using stored MLP output | Spatial | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-                if int(timestep[0]) == skip_range[-1]:
-                    del mlp_outputs[(skip_start_t, self.block_idx)]
-                    print(
-                        f"Skip | Delete stored MLP output | t {int(timestep[0])} | [{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                    )
-            else:
-                raise ValueError(
-                    f"No stored MLP output found | t {int(timestep[0])} |[{skip_range[0]}, {skip_range[-1]}] | block {self.block_idx}"
-                )
+            ff_output = get_skip_output(
+                skip_range,
+                timestep=int(timestep[0]),
+                block_idx=self.block_idx,
+                is_temporal=self.temporal,
+                is_spatial=(not self.temporal),
+            )
         else:
             # modulate (MLP)
             x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
@@ -226,13 +219,18 @@ class STDiT3Block(nn.Module):
                 x_m_s_zero = gate_mlp_zero * x_m
                 x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
             if skip_next:
-                if mlp_outputs is not None:
-                    mlp_outputs[(int(timestep[0]), self.block_idx)] = x_m_s
+                save_skip_output(
+                    timestep=int(timestep[0]),
+                    block_idx=self.block_idx,
+                    ff_output=x_m_s,
+                    is_temporal=self.temporal,
+                    is_spatial=(not self.temporal),
+                )
 
         # residual
         x = x + self.drop_path(x_m_s)
 
-        return x, mlp_outputs
+        return x
 
     def dynamic_switch(self, x, s, t, to_spatial_shard: bool):
         if to_spatial_shard:
@@ -511,7 +509,7 @@ class STDiT3(PreTrainedModel):
             # x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
             # x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
-            x, self.spatial_mlp_outputs = auto_grad_checkpoint(
+            x = auto_grad_checkpoint(
                 spatial_block,
                 x,
                 y,
@@ -522,11 +520,10 @@ class STDiT3(PreTrainedModel):
                 T,
                 S,
                 timestep,
-                mlp_outputs=self.spatial_mlp_outputs,
                 all_timesteps=all_timesteps,
             )
 
-            x, self.temporal_mlp_outputs = auto_grad_checkpoint(
+            x = auto_grad_checkpoint(
                 temporal_block,
                 x,
                 y,
@@ -537,7 +534,6 @@ class STDiT3(PreTrainedModel):
                 T,
                 S,
                 timestep,
-                mlp_outputs=self.temporal_mlp_outputs,
                 all_timesteps=all_timesteps,
             )
 

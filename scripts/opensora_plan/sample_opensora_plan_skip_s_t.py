@@ -72,12 +72,12 @@ def main(args):
     torch.backends.cudnn.allow_tf32 = True
 
     # == init distributed env ==
-    # if os.environ.get("LOCAL_RANK", None) is None:  # BUG
-    #     os.environ["RANK"] = "0"
-    #     os.environ["LOCAL_RANK"] = "0"
-    #     os.environ["WORLD_SIZE"] = "1"
-    #     os.environ["MASTER_ADDR"] = "127.0.0.1"
-    #     os.environ["MASTER_PORT"] = "29505"
+    if os.environ.get("LOCAL_RANK", None) is None:  # BUG
+        os.environ["RANK"] = "0"
+        os.environ["LOCAL_RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = "127.0.0.1"
+        os.environ["MASTER_PORT"] = "29505"
 
     colossalai.launch_from_torch({})
     coordinator = DistCoordinator()
