@@ -183,13 +183,18 @@ def main(args):
     condition_frame_edit = args.condition_frame_edit
     align = args.align
 
-    if args.mlp_skip:
-        s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
-        t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
-        save_dir = os.path.join(args.save_dir, f"mlp_skip_s_{s_len}_t_{t_len}")
+    # if args.mlp_skip:
+    #     s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
+    #     t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
+    #     save_dir = os.path.join(args.save_dir, f"mlp_skip_s_{s_len}_t_{t_len}")
 
-    else:
-        save_dir = args.save_dir
+    # else:
+    #     save_dir = args.save_dir
+
+    save_dir_name = os.path.splitext(os.path.basename(args.config))[0]
+    args.save_dir = os.path.join(args.save_dir, save_dir_name)
+    save_dir = args.save_dir
+
     print(f"save_dir | {save_dir}")
     os.makedirs(save_dir, exist_ok=True)
 

@@ -163,12 +163,16 @@ def main(args):
     ).to(device=device)
     # videogen_pipeline.enable_xformers_memory_efficient_attention()
 
-    if args.mlp_skip:
-        s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
-        t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
-        args.save_img_path = os.path.join(args.save_img_path, f"mlp_skip_s_{s_len}_t_{t_len}")
-    else:
-        args.save_img_path = args.save_img_path
+    # if args.mlp_skip:
+    #     s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
+    #     t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
+    #     args.save_img_path = os.path.join(args.save_img_path, f"mlp_skip_s_{s_len}_t_{t_len}")
+    # else:
+    #     args.save_img_path = args.save_img_path
+    # print(f"save_img_path | {args.save_img_path}")
+
+    save_dir_name = os.path.splitext(os.path.basename(args.config))[0]
+    args.save_img_path = os.path.join(args.save_img_path, save_dir_name)
     print(f"save_img_path | {args.save_img_path}")
 
     os.makedirs(args.save_img_path, exist_ok=True)

@@ -119,7 +119,6 @@ class SkipManager:
         # 判断是否spatial / temporal
         # 判断当前timestep是否在skip_config中
         # 判断前一个timestep是否在skip_config中
-
         def is_t_in_skip_config(all_timesteps, timestep, config):
             is_t_in_skip_config = False
             for key in config:
@@ -207,6 +206,7 @@ class SkipManager:
         if skip_output is not None:
             if timestep == skip_range[-1]:
                 print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
+                # TODO save memory
                 if is_temporal:
                     del self.temporal_mlp_outputs[(skip_start_t, block_idx)]
                 if is_spatial:
