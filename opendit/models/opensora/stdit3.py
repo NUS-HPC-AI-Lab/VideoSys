@@ -20,6 +20,7 @@ from transformers import PretrainedConfig, PreTrainedModel
 
 from opendit.core.comm import (
     all_to_all_with_pad,
+    conditional_parallel_gather,
     gather_sequence,
     get_spatial_pad,
     get_temporal_pad,
@@ -28,7 +29,14 @@ from opendit.core.comm import (
     split_sequence,
 )
 from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
+from opendit.core.parallel_mgr import (
+    enable_sequence_parallel,
+    get_data_parallel_group,
+    get_data_parallel_rank,
+    get_data_parallel_size,
+    get_sequence_parallel_group,
+)
+from opendit.utils.utils import split_batch
 
 from .modules import (
     Attention,
@@ -408,6 +416,11 @@ class STDiT3(PreTrainedModel):
         return y, y_lens
 
     def forward(self, x, timestep, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs):
+        # === Split batch ===
+        if get_data_parallel_size() > 1:
+            conditional = get_data_parallel_rank() == 0
+            x, timestep, y, x_mask, mask = split_batch(conditional, x, timestep, y, x_mask, mask)
+
         dtype = self.x_embedder.proj.weight.dtype
         B = x.size(0)
         x = x.to(dtype)
@@ -479,6 +492,11 @@ class STDiT3(PreTrainedModel):
 
         # cast to float32 for better accuracy
         x = x.to(torch.float32)
+
+        # === Gather Output ===
+        if get_data_parallel_size() > 1:
+            x = conditional_parallel_gather(x, get_data_parallel_group())
+
         return x
 
     def unpatchify(self, x, N_t, N_h, N_w, R_t, R_h, R_w):

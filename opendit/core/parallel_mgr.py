@@ -8,6 +8,7 @@ PARALLEL_MANAGER = None
 class ParallelManager(ProcessGroupMesh):
     def __init__(self, dp_size, sp_size, dp_axis, sp_axis):
         super().__init__(dp_size, sp_size)
+        self.dp_size = dp_size
         self.dp_axis = dp_axis
         self.dp_group: ProcessGroup = self.get_group_along_axis(self.dp_axis)
         self.dp_rank = dist.get_rank(self.dp_group)
@@ -26,6 +27,10 @@ def set_parallel_manager(dp_size, sp_size, dp_axis=0, sp_axis=1):
 
 def get_data_parallel_group():
     return PARALLEL_MANAGER.dp_group
+
+
+def get_data_parallel_size():
+    return PARALLEL_MANAGER.dp_size
 
 
 def get_data_parallel_rank():
