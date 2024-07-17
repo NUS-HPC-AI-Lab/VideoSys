@@ -42,7 +42,15 @@ from opendit.core.comm import (
     split_sequence,
 )
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.core.skip_mgr import enable_skip, if_skip_cross, if_skip_spatial, if_skip_temporal
+from opendit.core.skip_mgr_s_t import (
+    enable_skip,
+    get_skip_output,
+    if_skip_cross,
+    if_skip_mlp,
+    if_skip_spatial,
+    if_skip_temporal,
+    save_skip_output,
+)
 
 
 @maybe_allow_in_graph
@@ -339,6 +347,10 @@ class BasicTransformerBlock(nn.Module):
         self.spatial_last = None
         self.spatial_count = 0
         self.block_idx = block_idx
+        # mse
+        self.mlp_outputs = []
+        self.mlp_count = 0
+        self.temporal = False
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
@@ -362,6 +374,7 @@ class BasicTransformerBlock(nn.Module):
         class_labels: Optional[torch.LongTensor] = None,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
         org_timestep: Optional[torch.LongTensor] = None,
+        all_timesteps=None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
@@ -459,24 +472,53 @@ class BasicTransformerBlock(nn.Module):
 
         # 4. Feed-forward
         # i2vgen doesn't have this norm 🤷‍♂️
-        if self.norm_type == "ada_norm_continuous":
-            norm_hidden_states = self.norm3(hidden_states, added_cond_kwargs["pooled_text_emb"])
-        elif not self.norm_type == "ada_norm_single":
-            norm_hidden_states = self.norm3(hidden_states)
+        # TODO skip mlp
+        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
+            int(org_timestep[0]),
+            self.mlp_count,
+            self.block_idx,
+            all_timesteps.tolist(),
+            is_temporal=self.temporal,
+            is_spatial=(not self.temporal),
+        )
 
-        if self.norm_type == "ada_norm_zero":
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+        if skip_mlp:
+            ff_output = get_skip_output(
+                skip_range,
+                timestep=int(org_timestep[0]),
+                block_idx=self.block_idx,
+                is_temporal=self.temporal,
+                is_spatial=(not self.temporal),
+            )
+        else:
+            if self.norm_type == "ada_norm_continuous":
+                norm_hidden_states = self.norm3(hidden_states, added_cond_kwargs["pooled_text_emb"])
+            elif not self.norm_type == "ada_norm_single":
+                norm_hidden_states = self.norm3(hidden_states)
 
-        if self.norm_type == "ada_norm_single":
-            norm_hidden_states = self.norm2(hidden_states)
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
+            if self.norm_type == "ada_norm_zero":
+                norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
 
-        ff_output = self.ff(norm_hidden_states)
+            if self.norm_type == "ada_norm_single":
+                norm_hidden_states = self.norm2(hidden_states)
+                norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
 
-        if self.norm_type == "ada_norm_zero":
-            ff_output = gate_mlp.unsqueeze(1) * ff_output
-        elif self.norm_type == "ada_norm_single":
-            ff_output = gate_mlp * ff_output
+            ff_output = self.ff(norm_hidden_states)
+
+            if self.norm_type == "ada_norm_zero":
+                ff_output = gate_mlp.unsqueeze(1) * ff_output
+            elif self.norm_type == "ada_norm_single":
+                ff_output = gate_mlp * ff_output
+
+            if skip_next:
+                # spatial
+                save_skip_output(
+                    timestep=int(org_timestep[0]),
+                    block_idx=self.block_idx,
+                    ff_output=ff_output,
+                    is_temporal=self.temporal,
+                    is_spatial=(not self.temporal),
+                )
 
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
@@ -541,6 +583,7 @@ class BasicTransformerBlock_(nn.Module):
         attention_type: str = "default",
         positional_embeddings: Optional[str] = None,
         num_positional_embeddings: Optional[int] = None,
+        block_idx: Optional[int] = None,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -627,9 +670,13 @@ class BasicTransformerBlock_(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
+        self.temporal_count = 0
+
         # fvd
         self.last_out = None
-        self.count = 0
+        self.mlp_count = 0
+        self.temporal = True
+        self.block_idx = block_idx
 
     def set_last_out(self, last_out: torch.Tensor):
         self.last_out = last_out
@@ -649,6 +696,7 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs: Dict[str, Any] = None,
         class_labels: Optional[torch.LongTensor] = None,
         org_timestep: Optional[torch.LongTensor] = None,
+        all_timesteps=None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
@@ -661,7 +709,7 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        skip_temporal, self.count = if_skip_temporal(int(org_timestep[0]), self.count)
+        skip_temporal, self.temporal_count = if_skip_temporal(int(org_timestep[0]), self.temporal_count)
         if skip_temporal:
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
@@ -712,77 +760,107 @@ class BasicTransformerBlock_(nn.Module):
                 self.last_out = attn_output
 
         hidden_states = attn_output + hidden_states
-        if hidden_states.ndim == 4:
-            hidden_states = hidden_states.squeeze(1)
 
-        # 2.5 GLIGEN Control
-        if gligen_kwargs is not None:
-            hidden_states = self.fuser(hidden_states, gligen_kwargs["objs"])
+        # TODO skip mlp here
+        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
+            int(org_timestep[0]),
+            self.mlp_count,
+            self.block_idx,
+            all_timesteps.tolist(),
+            is_temporal=self.temporal,
+            is_spatial=(not self.temporal),
+        )
 
-        # # 3. Cross-Attention
-        # if self.attn2 is not None:
-        #     if self.use_ada_layer_norm:
-        #         norm_hidden_states = self.norm2(hidden_states, timestep)
-        #     elif self.use_ada_layer_norm_zero or self.use_layer_norm:
-        #         norm_hidden_states = self.norm2(hidden_states)
-        #     elif self.use_ada_layer_norm_single:
-        #         # For PixArt norm2 isn't applied here:
-        #         # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
-        #         norm_hidden_states = hidden_states
-        #     else:
-        #         raise ValueError("Incorrect norm")
-
-        #     if self.pos_embed is not None and self.use_ada_layer_norm_single is False:
-        #         norm_hidden_states = self.pos_embed(norm_hidden_states)
-
-        #     attn_output = self.attn2(
-        #         norm_hidden_states,
-        #         encoder_hidden_states=encoder_hidden_states,
-        #         attention_mask=encoder_attention_mask,
-        #         **cross_attention_kwargs,
-        #     )
-        #     hidden_states = attn_output + hidden_states
-
-        # 4. Feed-forward
-        # if not self.use_ada_layer_norm_single:
-        #     norm_hidden_states = self.norm3(hidden_states)
-
-        if self.use_ada_layer_norm_zero:
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-
-        if self.use_ada_layer_norm_single:
-            # norm_hidden_states = self.norm2(hidden_states)
-            norm_hidden_states = self.norm3(hidden_states)
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
-
-        if self._chunk_size is not None:
-            # "feed_forward_chunk_size" can be used to save memory
-            if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
-                raise ValueError(
-                    f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
-                )
-
-            num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
-            ff_output = torch.cat(
-                [
-                    self.ff(hid_slice, scale=lora_scale)
-                    for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)
-                ],
-                dim=self._chunk_dim,
+        if skip_mlp:
+            ff_output = get_skip_output(
+                skip_range,
+                timestep=int(org_timestep[0]),
+                block_idx=self.block_idx,
+                is_temporal=self.temporal,
+                is_spatial=(not self.temporal),
             )
         else:
-            ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+            if hidden_states.ndim == 4:
+                hidden_states = hidden_states.squeeze(1)
 
-        if self.use_ada_layer_norm_zero:
-            ff_output = gate_mlp.unsqueeze(1) * ff_output
-        elif self.use_ada_layer_norm_single:
-            ff_output = gate_mlp * ff_output
+            # 2.5 GLIGEN Control
+            if gligen_kwargs is not None:
+                hidden_states = self.fuser(hidden_states, gligen_kwargs["objs"])
+
+            if self.use_ada_layer_norm_zero:
+                norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+
+            if self.use_ada_layer_norm_single:
+                # norm_hidden_states = self.norm2(hidden_states)
+                norm_hidden_states = self.norm3(hidden_states)
+                norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
+
+            if self._chunk_size is not None:
+                # "feed_forward_chunk_size" can be used to save memory
+                if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
+                    raise ValueError(
+                        f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
+                    )
+
+                num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
+                ff_output = torch.cat(
+                    [
+                        self.ff(hid_slice, scale=lora_scale)
+                        for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)
+                    ],
+                    dim=self._chunk_dim,
+                )
+            else:
+                ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+
+            if self.use_ada_layer_norm_zero:
+                ff_output = gate_mlp.unsqueeze(1) * ff_output
+            elif self.use_ada_layer_norm_single:
+                ff_output = gate_mlp * ff_output
+
+            if skip_next:
+                # temporal
+                save_skip_output(
+                    timestep=int(org_timestep[0]),
+                    block_idx=self.block_idx,
+                    ff_output=ff_output,
+                    is_temporal=self.temporal,
+                    is_spatial=(not self.temporal),
+                )
 
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
         return hidden_states
+
+    # # 3. Cross-Attention
+    # if self.attn2 is not None:
+    #     if self.use_ada_layer_norm:
+    #         norm_hidden_states = self.norm2(hidden_states, timestep)
+    #     elif self.use_ada_layer_norm_zero or self.use_layer_norm:
+    #         norm_hidden_states = self.norm2(hidden_states)
+    #     elif self.use_ada_layer_norm_single:
+    #         # For PixArt norm2 isn't applied here:
+    #         # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
+    #         norm_hidden_states = hidden_states
+    #     else:
+    #         raise ValueError("Incorrect norm")
+
+    #     if self.pos_embed is not None and self.use_ada_layer_norm_single is False:
+    #         norm_hidden_states = self.pos_embed(norm_hidden_states)
+
+    #     attn_output = self.attn2(
+    #         norm_hidden_states,
+    #         encoder_hidden_states=encoder_hidden_states,
+    #         attention_mask=encoder_attention_mask,
+    #         **cross_attention_kwargs,
+    #     )
+    #     hidden_states = attn_output + hidden_states
+
+    # 4. Feed-forward
+    # if not self.use_ada_layer_norm_single:
+    #     norm_hidden_states = self.norm3(hidden_states)
 
     def dynamic_switch(self, x, to_spatial_shard: bool):
         if to_spatial_shard:
@@ -1037,6 +1115,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
                     attention_type=attention_type,
+                    block_idx=d,
                 )
                 for d in range(num_layers)
             ]
@@ -1081,6 +1160,10 @@ class LatteT2V(ModelMixin, ConfigMixin):
         temp_pos_embed = self.get_1d_sincos_temp_embed(inner_dim, video_length)  # 1152 hidden size
         self.register_buffer("temp_pos_embed", torch.from_numpy(temp_pos_embed).float().unsqueeze(0), persistent=False)
 
+        # TODO skip
+        self.spatial_mlp_outputs = {}
+        self.temporal_mlp_outputs = {}
+
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value
 
@@ -1088,6 +1171,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
         self,
         hidden_states: torch.Tensor,
         timestep: Optional[torch.LongTensor] = None,
+        all_timesteps=None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         added_cond_kwargs: Dict[str, torch.Tensor] = None,
         class_labels: Optional[torch.LongTensor] = None,
@@ -1290,6 +1374,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
             else:
+                # TODO spatial block inference
                 hidden_states = spatial_block(
                     hidden_states,
                     attention_mask,
@@ -1300,6 +1385,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     class_labels,
                     None,
                     org_timestep,
+                    all_timesteps=all_timesteps,
                 )
 
                 if enable_temporal_attentions:
@@ -1328,7 +1414,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     else:
                         if i == 0 and frame > 1:
                             hidden_states = hidden_states + temp_pos_embed
-
+                        #  TODO time block inference
                         hidden_states = temp_block(
                             hidden_states,
                             None,  # attention_mask
@@ -1338,6 +1424,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             cross_attention_kwargs,
                             class_labels,
                             org_timestep,
+                            all_timesteps=all_timesteps,
                         )
 
                         hidden_states = rearrange(

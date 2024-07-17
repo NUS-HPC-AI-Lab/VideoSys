@@ -31,7 +31,7 @@ from diffusers.utils import (
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.skip_mgr_s_t import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -731,6 +731,7 @@ class VideoGenPipeline(DiffusionPipeline):
                 # predict noise model_output
                 noise_pred = self.transformer(
                     latent_model_input,
+                    all_timesteps=timesteps,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
                     added_cond_kwargs=added_cond_kwargs,

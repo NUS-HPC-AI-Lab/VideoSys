@@ -9,6 +9,7 @@
 
 
 import argparse
+import json
 import os
 import time
 
@@ -20,8 +21,8 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
-from opendit.core.skip_mgr import set_skip_manager
-from opendit.models.opensora import OpenSoraVAE_V1_2, RFLOW_skip, STDiT3_XL_2_skip, T5Encoder, text_preprocessing
+from opendit.core.skip_mgr_s_t import set_skip_manager
+from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, T5Encoder, text_preprocessing
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
     add_watermark,
@@ -40,6 +41,14 @@ from opendit.models.opensora.inference_utils import (
     split_prompt,
 )
 from opendit.utils.utils import all_exists, create_logger, merge_args, set_seed, str_to_dtype
+
+
+# Convert namespace to dictionary if needed
+def args_to_dict(args):
+    if isinstance(args, dict):
+        return args
+    else:
+        return vars(args)
 
 
 def main(args):
@@ -89,7 +98,8 @@ def main(args):
         mlp_threshold=args.mlp_threshold,
         mlp_gap=args.mlp_gap,
         mlp_layer_range=args.mlp_layer_range,
-        mlp_skip_config=args.mlp_skip_config,
+        mlp_temporal_skip_config=args.mlp_temporal_skip_config,
+        mlp_spatial_skip_config=args.mlp_spatial_skip_config,
     )
 
     # == init logger ==
@@ -129,7 +139,7 @@ def main(args):
     input_size = (num_frames, *image_size)
     latent_size = vae.get_latent_size(input_size)
     model = (
-        STDiT3_XL_2_skip(
+        STDiT3_XL_2(
             from_pretrained="hpcai-tech/OpenSora-STDiT-v3",
             qk_norm=True,
             enable_flash_attn=True,
@@ -145,7 +155,7 @@ def main(args):
     text_encoder.y_embedder = model.y_embedder  # HACK: for classifier-free guidance
 
     # == build scheduler ==
-    scheduler = RFLOW_skip(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
+    scheduler = RFLOW(use_timestep_transform=True, num_sampling_steps=30, cfg_scale=7.0)
 
     # ======================================================
     # inference
@@ -174,13 +184,21 @@ def main(args):
     align = args.align
 
     if args.mlp_skip:
-        total_length = sum(len(v) for v in args.mlp_skip_config.values())
-        save_dir = os.path.join(args.save_dir, f"mlp_skip_{total_length}")
+        s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
+        t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
+        save_dir = os.path.join(args.save_dir, f"mlp_skip_s_{s_len}_t_{t_len}")
 
     else:
         save_dir = args.save_dir
     print(f"save_dir | {save_dir}")
     os.makedirs(save_dir, exist_ok=True)
+
+    # Save args to save_dir using json
+    args_path = os.path.join(save_dir, "args.json")
+    with open(args_path, "w") as f:
+        json.dump(args_to_dict(args), f, indent=4)
+    print(f"Arguments saved to {args_path}")
+
     prompt_as_path = args.prompt_as_path
 
     # == Iter over all samples ==
@@ -407,6 +425,8 @@ if __name__ == "__main__":
     parser.add_argument("--mlp_gap", type=int, nargs="+", help="MLP skip gap")
     parser.add_argument("--mlp_layer_range", type=int, nargs="+", help="MLP skip block size")
     parser.add_argument("--mlp_skip_config", nargs="+")
+    parser.add_argument("--mlp_temporal_skip_config", nargs="+")
+    parser.add_argument("--mlp_spatial_skip_config", nargs="+")
 
     # skip diffusion
     parser.add_argument(

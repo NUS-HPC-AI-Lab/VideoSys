@@ -149,7 +149,7 @@ class RFlowScheduler:
         return timepoints * original_samples + (1 - timepoints) * noise
 
 
-class RFLOW_skip_s_t:
+class RFLOW:
     def __init__(
         self,
         num_sampling_steps=10,

@@ -579,7 +579,7 @@ class STDiT3(PreTrainedModel):
         return x
 
 
-def STDiT3_XL_2_skip_s_t(from_pretrained=None, **kwargs):
+def STDiT3_XL_2(from_pretrained=None, **kwargs):
     if from_pretrained is not None and not os.path.isdir(from_pretrained):
         model = STDiT3.from_pretrained(from_pretrained, **kwargs)
     else:
