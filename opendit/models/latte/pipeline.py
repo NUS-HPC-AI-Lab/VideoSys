@@ -32,7 +32,7 @@ from diffusers.utils import (
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.skip_mgr_s_t import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -752,7 +752,6 @@ class LattePipeline(DiffusionPipeline):
                     noise_pred = noise_pred
 
                 # compute previous image: x_t -> x_t-1
-                # BUG compute output
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
                 # call the callback, if provided

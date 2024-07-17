@@ -1,5 +1,4 @@
 # path:
-save_img_path: "./samples/latte/"
 pretrained_model_path: "maxin-cn/Latte-1"
 
 # model config:
@@ -25,25 +24,21 @@ num_sampling_steps: 50
 enable_temporal_attentions: True
 enable_vae_temporal_decoder: True # use temporal vae decoder from SVD, maybe reduce the video flicker (It's not widely tested)
 
-text_prompt: [
-              'Yellow and black tropical fish dart through the sea.',
-              'An epic tornado attacking above aglowing city at night.',
-              'Slow pan upward of blazing oak fire in an indoor fireplace.',
-              'a cat wearing sunglasses and working as a lifeguard at pool.',
-              'Sunset over the sea.',
-              'A dog in astronaut suit and sunglasses floating in space.',
-              ]
-
-# fvd
-spatial_skip: True
+# pab
+spatial_broadcast: True
 spatial_threshold: [100, 800]
 spatial_gap: 2
 spatial_block: [0, 28]
-temporal_skip: True
+temporal_broadcast: True
 temporal_threshold: [100, 800]
 temporal_gap: 4
-cross_skip: True
+cross_broadcast: True
 cross_threshold: [80, 900]
 cross_gap: 7
 # diffusion_skip: False
 # diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
+
+# eval
+eval: True
+eval_dataset: ./evaluations/fastvideodiffusion/datasets/webvid_selected.csv
+save_img_path: "./evaluations/fastvideodiffusion/samples/latte/sample_pab/"

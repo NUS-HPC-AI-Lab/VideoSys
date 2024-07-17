@@ -1,0 +1,22 @@
+resolution: "480p"
+aspect_ratio: "9:16"
+num_frames: 48
+fps: 24
+frame_interval: 1
+
+seed: 42
+multi_resolution: "STDiT2"
+dtype: "bf16"
+condition_frame_length: 5
+align: 5
+num_sampling_steps: 30
+cfg_scale: 7.0
+aes: 6.5
+
+# speedup
+flash_attn: True
+
+# eval
+eval: True
+eval_dataset: ./evaluations/fastvideodiffusion/datasets/webvid_selected.csv
+save_dir: ./evaluations/fastvideodiffusion/samples/opensora/sample

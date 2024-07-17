@@ -56,16 +56,16 @@ from opendit.core.comm import (
     set_temporal_pad,
     split_sequence,
 )
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.core.skip_mgr_s_t import (
-    enable_skip,
+from opendit.core.pab_mgr import (
+    enable_pab,
     get_skip_output,
-    if_skip_cross,
+    if_broadcast_cross,
+    if_broadcast_spatial,
+    if_broadcast_temporal,
     if_skip_mlp,
-    if_skip_spatial,
-    if_skip_temporal,
     save_skip_output,
 )
+from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 
 if is_xformers_available():
     import xformers
@@ -1571,7 +1571,6 @@ class BasicTransformerBlock_(nn.Module):
         position_k: Optional[torch.LongTensor] = None,
         frame: int = None,
         org_timestep: Optional[torch.LongTensor] = None,
-        mlp_outputs=None,
         all_timesteps=None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
@@ -1584,8 +1583,8 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        skip_temporal, self.count = if_skip_temporal(int(org_timestep[0]), self.count)
-        if skip_temporal:
+        broadcast_temporal, self.count = if_broadcast_temporal(int(org_timestep[0]), self.count)
+        if broadcast_temporal:
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -1634,7 +1633,7 @@ class BasicTransformerBlock_(nn.Module):
             elif self.use_ada_layer_norm_single:
                 attn_output = gate_msa * attn_output
 
-            if enable_skip():
+            if enable_pab():
                 self.set_last_out(attn_output)
 
         hidden_states = attn_output + hidden_states
@@ -1731,6 +1730,37 @@ class BasicTransformerBlock_(nn.Module):
                     is_temporal=self.temporal,
                     is_spatial=(not self.temporal),
                 )
+
+        if self.use_ada_layer_norm_zero:
+            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+
+        if self.use_ada_layer_norm_single:
+            # norm_hidden_states = self.norm2(hidden_states)
+            norm_hidden_states = self.norm3(hidden_states)
+            norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
+
+        if self._chunk_size is not None:
+            # "feed_forward_chunk_size" can be used to save memory
+            if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
+                raise ValueError(
+                    f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
+                )
+
+            num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
+            ff_output = torch.cat(
+                [
+                    self.ff(hid_slice, scale=lora_scale)
+                    for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)
+                ],
+                dim=self._chunk_dim,
+            )
+        else:
+            ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+
+        if self.use_ada_layer_norm_zero:
+            ff_output = gate_mlp.unsqueeze(1) * ff_output
+        elif self.use_ada_layer_norm_single:
+            ff_output = gate_mlp * ff_output
 
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
@@ -1951,7 +1981,6 @@ class BasicTransformerBlock(nn.Module):
         position_k: Optional[torch.LongTensor] = None,
         hw: Tuple[int, int] = None,
         org_timestep: Optional[torch.LongTensor] = None,
-        mlp_outputs=None,
         all_timesteps=None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
@@ -1965,8 +1994,10 @@ class BasicTransformerBlock(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        skip_spatial, self.spatial_count = if_skip_spatial(int(org_timestep[0]), self.spatial_count, self.block_idx)
-        if skip_spatial:
+        broadcast_spatial, self.spatial_count = if_broadcast_spatial(
+            int(org_timestep[0]), self.spatial_count, self.block_idx
+        )
+        if broadcast_spatial:
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -2008,7 +2039,7 @@ class BasicTransformerBlock(nn.Module):
             elif self.use_ada_layer_norm_single:
                 attn_output = gate_msa * attn_output
 
-            if enable_skip():
+            if enable_pab():
                 self.set_spatial_last(attn_output)
 
         hidden_states = attn_output + hidden_states
@@ -2021,8 +2052,8 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Cross-Attention
         if self.attn2 is not None:
-            skip_cross, self.cross_count = if_skip_cross(int(org_timestep[0]), self.cross_count)
-            if skip_cross:
+            broadcast_cross, self.cross_count = if_broadcast_cross(int(org_timestep[0]), self.cross_count)
+            if broadcast_cross:
                 hidden_states = hidden_states + self.cross_last
             else:
                 if self.use_ada_layer_norm:
@@ -2050,7 +2081,7 @@ class BasicTransformerBlock(nn.Module):
                 )
                 hidden_states = attn_output + hidden_states
 
-                if enable_skip():
+                if enable_pab():
                     self.set_cross_last(attn_output)
 
         # TODO skip mlp here
@@ -2393,10 +2424,6 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
         self.gradient_checkpointing = False
 
-        # TODO skip
-        self.spatial_mlp_outputs = {}
-        self.temporal_mlp_outputs = {}
-
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value
 
@@ -2660,7 +2687,6 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
             else:
-                # TODO spatial block inference
                 hidden_states = spatial_block(
                     hidden_states,
                     attention_mask_compress if i >= self.num_layers // 2 else attention_mask,
@@ -2710,7 +2736,6 @@ class LatteT2V(ModelMixin, ConfigMixin):
                         # if i == 0 and not self.use_rope:
                         if i == 0:
                             hidden_states = hidden_states + temp_pos_embed
-                        #  TODO time block inference
                         hidden_states = temp_block(
                             hidden_states,
                             None,  # attention_mask

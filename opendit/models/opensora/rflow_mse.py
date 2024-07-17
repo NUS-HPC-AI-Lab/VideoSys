@@ -14,7 +14,7 @@ from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
-from opendit.core.skip_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 from opendit.diffusion.gaussian_diffusion import _extract_into_tensor
 
 
@@ -206,7 +206,8 @@ class RFLOW_mse:
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
             timesteps = [timestep_transform(t, additional_args, num_timesteps=self.num_timesteps) for t in timesteps]
-        # print(f'timesteps: {timesteps}')
+        print(f"timesteps: {timesteps}")
+        # exit()
         # TODO: jump diffusion steps
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
@@ -277,7 +278,9 @@ class RFLOW_mse:
                     temporal_mse.append((block_idx, l2_distance.item()))
                 all_temporal_mse[int(t[0].to(dtype).item())] = temporal_mse
 
-                print(f"Time step {i}, Spatial MSE: {spatial_mse}, Temporal MSE: {temporal_mse}")
+                print(
+                    f"Time step {int(t[0].to(dtype).item())}, Spatial MSE: {spatial_mse}, Temporal MSE: {temporal_mse}"
+                )
 
             # Update previous MLP outputs and delete current outputs
             prev_spatial_mlp_outputs = spatial_mlp_outputs

@@ -177,22 +177,3 @@ def auto_grad_checkpoint(module, *args, **kwargs):
         gc_step = module[0].grad_checkpointing_step
         return checkpoint_sequential(module, gc_step, *args, use_reentrant=False, **kwargs)
     return module(*args, **kwargs)
-
-
-# def auto_grad_checkpoint(module, *args, **kwargs):
-#     # Determine if grad_checkpointing is enabled
-#     if getattr(module, "grad_checkpointing", False):
-#         if not isinstance(module, Iterable):
-#             result = checkpoint(module, *args, use_reentrant=False, **kwargs)
-#         else:
-#             gc_step = module[0].grad_checkpointing_step
-#             result = checkpoint_sequential(module, gc_step, *args, use_reentrant=False, **kwargs)
-#     else:
-#         result = module(*args, **kwargs)
-
-#     is_mlp_outputs = kwargs.pop("mlp_outputs", None)
-
-#     if is_mlp_outputs is not None:
-#         result, mlp_outputs = result
-#         return result, mlp_outputs
-#     return result

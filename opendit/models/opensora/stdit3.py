@@ -27,16 +27,16 @@ from opendit.core.comm import (
     set_temporal_pad,
     split_sequence,
 )
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.core.skip_mgr_s_t import (
-    enable_skip,
+from opendit.core.pab_mgr import (
+    enable_pab,
     get_skip_output,
-    if_skip_cross,
+    if_broadcast_cross,
+    if_broadcast_spatial,
+    if_broadcast_temporal,
     if_skip_mlp,
-    if_skip_spatial,
-    if_skip_temporal,
     save_skip_output,
 )
+from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 
 from .modules import (
     Attention,
@@ -136,11 +136,11 @@ class STDiT3Block(nn.Module):
             ).chunk(6, dim=1)
 
         if self.temporal:
-            skip_attn, self.attn_count = if_skip_temporal(int(timestep[0]), self.attn_count)
+            broadcast_attn, self.attn_count = if_broadcast_temporal(int(timestep[0]), self.attn_count)
         else:
-            skip_attn, self.attn_count = if_skip_spatial(int(timestep[0]), self.attn_count, self.block_idx)
+            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count, self.block_idx)
 
-        if skip_attn:
+        if broadcast_attn:
             x_m_s = self.last_attn
         else:
             # modulate (attention)
@@ -169,23 +169,22 @@ class STDiT3Block(nn.Module):
                 x_m_s_zero = gate_msa_zero * x_m
                 x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
 
-            if enable_skip():
+            if enable_pab():
                 self.last_attn = x_m_s
 
         # residual
         x = x + self.drop_path(x_m_s)
 
         # cross attention
-        skip_cross, self.cross_count = if_skip_cross(int(timestep[0]), self.cross_count)
-        if skip_cross:
+        broadcast_cross, self.cross_count = if_broadcast_cross(int(timestep[0]), self.cross_count)
+        if broadcast_cross:
             x = x + self.last_cross
         else:
             x_cross = self.cross_attn(x, y, mask)
-            if enable_skip():
+            if enable_pab():
                 self.last_cross = x_cross
             x = x + x_cross
 
-        # TODO: skip MLP self.temporal=True (time block)
         skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
             int(timestep[0]),
             self.mlp_count,
@@ -196,7 +195,7 @@ class STDiT3Block(nn.Module):
         )
 
         if skip_mlp:
-            ff_output = get_skip_output(
+            x_m_s = get_skip_output(
                 skip_range,
                 timestep=int(timestep[0]),
                 block_idx=self.block_idx,
@@ -382,9 +381,6 @@ class STDiT3(PreTrainedModel):
                 for i in range(config.depth)
             ]
         )
-        # BUG mlp outputs for skip
-        self.spatial_mlp_outputs = {}
-        self.temporal_mlp_outputs = {}
         # final layer
         self.final_layer = T2IFinalLayer(config.hidden_size, np.prod(self.patch_size), self.out_channels)
 
@@ -506,9 +502,6 @@ class STDiT3(PreTrainedModel):
 
         # === blocks ===
         for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            # x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            # x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-
             x = auto_grad_checkpoint(
                 spatial_block,
                 x,

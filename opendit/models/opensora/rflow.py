@@ -13,7 +13,7 @@ from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
-from opendit.core.skip_mgr_s_t import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
 from opendit.diffusion.gaussian_diffusion import _extract_into_tensor
 
 
@@ -205,7 +205,7 @@ class RFLOW:
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
             timesteps = [timestep_transform(t, additional_args, num_timesteps=self.num_timesteps) for t in timesteps]
-        # print(f'timesteps: {timesteps}')
+        print(f"timesteps: {timesteps}")
         # TODO: jump diffusion steps
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
@@ -229,7 +229,7 @@ class RFLOW:
             noise_added = torch.zeros_like(mask, dtype=torch.bool)
             noise_added = noise_added | (mask == 1)
 
-        progress_wrap = tqdm if progress else (lambda x: x)
+        progress_wrap = tqdm if progress and dist.get_rank() == 0 else (lambda x: x)
 
         dtype = model.x_embedder.proj.weight.dtype
         all_timesteps = [int(t.to(dtype).item()) for t in timesteps]

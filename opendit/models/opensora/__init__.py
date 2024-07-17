@@ -7,10 +7,10 @@ from .vae import OpenSoraVAE_V1_2
 
 __all__ = [
     "RFLOW",
+    "STDiT3_XL_2",
     "T5Encoder",
     "text_preprocessing",
     "OpenSoraVAE_V1_2",
-    "RFLOW_mse",
-    "STDiT3_XL_2",
     "STDiT3_XL_2_mse",
+    "RFLOW_mse",
 ]

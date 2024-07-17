@@ -9,6 +9,7 @@
 
 
 import argparse
+import json
 import os
 import time
 
@@ -19,8 +20,8 @@ from colossalai.cluster import DistCoordinator
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
+from opendit.core.pab_mgr import set_pab_manager
 from opendit.core.parallel_mgr import enable_sequence_parallel, set_parallel_manager
-from opendit.core.skip_mgr import set_skip_manager
 from opendit.models.opensora import OpenSoraVAE_V1_2, RFLOW_mse, STDiT3_XL_2_mse, T5Encoder, text_preprocessing
 from opendit.models.opensora.datasets import get_image_size, get_num_frames, save_sample
 from opendit.models.opensora.inference_utils import (
@@ -40,6 +41,13 @@ from opendit.models.opensora.inference_utils import (
     split_prompt,
 )
 from opendit.utils.utils import all_exists, create_logger, merge_args, set_seed, str_to_dtype
+
+
+def args_to_dict(args):
+    if isinstance(args, dict):
+        return args
+    else:
+        return vars(args)
 
 
 def main(args):
@@ -69,28 +77,26 @@ def main(args):
     device = f"cuda:{torch.cuda.current_device()}"
     set_seed(seed=args.seed)
 
-    # == init fastvideodiffusion ==
-    set_skip_manager(
-        steps=args.num_sampling_steps,
-        cross_skip=args.cross_skip,
-        cross_threshold=args.cross_threshold,
-        cross_gap=args.cross_gap,
-        spatial_skip=args.spatial_skip,
-        spatial_threshold=args.spatial_threshold,
-        spatial_gap=args.spatial_gap,
-        spatial_block=args.spatial_block,
-        temporal_skip=args.temporal_skip,
-        temporal_threshold=args.temporal_threshold,
-        temporal_gap=args.temporal_gap,
-        diffusion_skip=args.diffusion_skip,
-        diffusion_skip_timestep=args.diffusion_skip_timestep,
-        # mlp
-        mlp_skip=args.mlp_skip,
-        mlp_threshold=args.mlp_threshold,
-        mlp_gap=args.mlp_gap,
-        mlp_layer_range=args.mlp_layer_range,
-        mlp_skip_config=args.mlp_skip_config,
-    )
+    # == init pab ==
+    if args.cross_broadcast or args.spatial_broadcast or args.temporal_broadcast:
+        set_pab_manager(
+            steps=args.num_sampling_steps,
+            cross_broadcast=args.cross_broadcast,
+            cross_threshold=args.cross_threshold,
+            cross_gap=args.cross_gap,
+            spatial_broadcast=args.spatial_broadcast,
+            spatial_threshold=args.spatial_threshold,
+            spatial_gap=args.spatial_gap,
+            temporal_broadcast=args.temporal_broadcast,
+            temporal_threshold=args.temporal_threshold,
+            temporal_gap=args.temporal_gap,
+            diffusion_skip=args.diffusion_skip,
+            diffusion_skip_timestep=args.diffusion_skip_timestep,
+            # mlp
+            mlp_skip=args.mlp_skip,
+            mlp_temporal_skip_config=args.mlp_temporal_skip_config,
+            mlp_spatial_skip_config=args.mlp_spatial_skip_config,
+        )
 
     # == init logger ==
     logger = create_logger()
@@ -103,7 +109,9 @@ def main(args):
     # ======================================================
     logger.info("Building models...")
     # == build text-encoder and vae ==
-    text_encoder = T5Encoder(from_pretrained="DeepFloyd/t5-v1_1-xxl", model_max_length=300, device=device)
+    text_encoder = T5Encoder(
+        from_pretrained="DeepFloyd/t5-v1_1-xxl", model_max_length=300, device=device, shardformer=args.enable_t5_speedup
+    )
     vae = (
         OpenSoraVAE_V1_2(
             from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
@@ -173,9 +181,27 @@ def main(args):
     condition_frame_edit = args.condition_frame_edit
     align = args.align
 
-    # == prepare save dir ==
-    save_dir = os.path.join(args.save_dir, "skip_mse")
+    # if args.mlp_skip:
+    #     s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
+    #     t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
+    #     save_dir = os.path.join(args.save_dir, f"mlp_skip_s_{s_len}_t_{t_len}")
+
+    # else:
+    #     save_dir = args.save_dir
+
+    save_dir_name = os.path.splitext(os.path.basename(args.config))[0]
+    args.save_dir = os.path.join(args.save_dir, save_dir_name)
+    save_dir = args.save_dir
+
+    print(f"save_dir | {save_dir}")
     os.makedirs(save_dir, exist_ok=True)
+
+    # Save args to save_dir using json
+    args_path = os.path.join(save_dir, "args.json")
+    with open(args_path, "w") as f:
+        json.dump(args_to_dict(args), f, indent=4)
+    print(f"Arguments saved to {args_path}")
+
     prompt_as_path = args.prompt_as_path
 
     # == Iter over all samples ==
@@ -348,6 +374,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=1024, type=int, help="seed for reproducibility")
     parser.add_argument("--batch-size", default=1, type=int, help="batch size")
     parser.add_argument("--flash-attn", action="store_true", help="enable flash attention")
+    parser.add_argument("--enable_t5_speedup", action="store_true", help="enable t5 speedup")
     parser.add_argument("--resolution", default=None, type=str, help="resolution")
     parser.add_argument("--multi-resolution", default=None, type=str, help="multi resolution")
     parser.add_argument("--dtype", default="bf16", type=str, help="data type")
@@ -386,27 +413,24 @@ if __name__ == "__main__":
     parser.add_argument("--flow", default=None, type=float, help="flow score")
     parser.add_argument("--camera-motion", default=None, type=str, help="camera motion")
 
-    # skip
-    parser.add_argument("--spatial_skip", action="store_true", help="Enable spatial attention skip")
+    # pab
+    parser.add_argument("--spatial_broadcast", action="store_true", help="Enable spatial attention skip")
     parser.add_argument(
         "--spatial_threshold", type=int, nargs=2, default=[540, 920], help="Spatial attention threshold"
     )
     parser.add_argument("--spatial_gap", type=int, default=2, help="Spatial attention gap")
-    parser.add_argument("--spatial_block", type=int, nargs=2, default=[0, 28], help="Spatial attention block size")
-    parser.add_argument("--temporal_skip", action="store_true", help="Enable temporal attention skip")
+    parser.add_argument("--temporal_broadcast", action="store_true", help="Enable temporal attention skip")
     parser.add_argument(
         "--temporal_threshold", type=int, nargs=2, default=[540, 960], help="Temporal attention threshold"
     )
     parser.add_argument("--temporal_gap", type=int, default=4, help="Temporal attention gap")
-    parser.add_argument("--cross_skip", action="store_true", help="Enable cross attention skip")
+    parser.add_argument("--cross_broadcast", action="store_true", help="Enable cross attention skip")
     parser.add_argument("--cross_threshold", type=int, nargs=2, default=[540, 960], help="Cross attention threshold")
     parser.add_argument("--cross_gap", type=int, default=6, help="Cross attention gap")
     # skip mlp
     parser.add_argument("--mlp_skip", action="store_true", help="Enable mlp skip")
-    parser.add_argument("--mlp_threshold", type=int, nargs="+", help="MLP skip layer")
-    parser.add_argument("--mlp_gap", type=int, nargs="+", help="MLP skip gap")
-    parser.add_argument("--mlp_layer_range", type=int, nargs="+", help="MLP skip block size")
-    parser.add_argument("--mlp_skip_config", nargs="+")
+    parser.add_argument("--mlp_temporal_skip_config", nargs="+")
+    parser.add_argument("--mlp_spatial_skip_config", nargs="+")
 
     # skip diffusion
     parser.add_argument(

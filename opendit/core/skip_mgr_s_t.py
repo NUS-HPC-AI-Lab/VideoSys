@@ -340,8 +340,7 @@ def get_diffusion_skip_timestep():
 
 
 def space_timesteps(time_steps, time_bins):
-    num_bins = len(time_bins)
-    bin_size = time_steps // num_bins
+    len(time_bins)
 
     result = []
 
