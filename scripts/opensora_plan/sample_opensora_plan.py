@@ -8,6 +8,7 @@
 # --------------------------------------------------------
 
 import argparse
+import json
 import math
 import os
 
@@ -32,7 +33,7 @@ from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
 from opendit.core.parallel_mgr import set_parallel_manager
-from opendit.core.skip_mgr import set_skip_manager
+from opendit.core.skip_mgr_s_t import set_skip_manager
 from opendit.models.opensora_plan import LatteT2V, VideoGenPipeline, ae_stride_config, getae_wrapper
 from opendit.utils.utils import merge_args, set_seed
 
@@ -56,6 +57,14 @@ def save_video_grid(video, nrow=None):
     return video_grid
 
 
+# Convert namespace to dictionary if needed
+def args_to_dict(args):
+    if isinstance(args, dict):
+        return args
+    else:
+        return vars(args)
+
+
 def main(args):
     set_seed(42)
     torch.set_grad_enabled(False)
@@ -63,6 +72,13 @@ def main(args):
     torch.backends.cudnn.allow_tf32 = True
 
     # == init distributed env ==
+    if os.environ.get("LOCAL_RANK", None) is None:  # BUG
+        os.environ["RANK"] = "0"
+        os.environ["LOCAL_RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = "127.0.0.1"
+        os.environ["MASTER_PORT"] = "29505"
+
     colossalai.launch_from_torch({})
     coordinator = DistCoordinator()
     set_parallel_manager(1, coordinator.world_size)
@@ -82,6 +98,13 @@ def main(args):
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
         diffusion_skip_timestep=args.diffusion_skip_timestep,
+        # mlp
+        mlp_skip=args.mlp_skip,
+        mlp_threshold=args.mlp_threshold,
+        mlp_gap=args.mlp_gap,
+        mlp_layer_range=args.mlp_layer_range,
+        mlp_temporal_skip_config=args.mlp_temporal_skip_config,
+        mlp_spatial_skip_config=args.mlp_spatial_skip_config,
     )
 
     vae = getae_wrapper(args.ae)(args.model_path, subfolder="vae", cache_dir=args.cache_dir).to(
@@ -140,7 +163,24 @@ def main(args):
     ).to(device=device)
     # videogen_pipeline.enable_xformers_memory_efficient_attention()
 
+    # if args.mlp_skip:
+    #     s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
+    #     t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
+    #     args.save_img_path = os.path.join(args.save_img_path, f"mlp_skip_s_{s_len}_t_{t_len}")
+    # else:
+    #     args.save_img_path = args.save_img_path
+    # print(f"save_img_path | {args.save_img_path}")
+
+    save_dir_name = os.path.splitext(os.path.basename(args.config))[0]
+    args.save_img_path = os.path.join(args.save_img_path, save_dir_name)
+    print(f"save_img_path | {args.save_img_path}")
+
     os.makedirs(args.save_img_path, exist_ok=True)
+
+    args_path = os.path.join(args.save_img_path, "args.json")
+    with open(args_path, "w") as f:
+        json.dump(args_to_dict(args), f, indent=4)
+    print(f"Arguments saved to {args_path}")
 
     video_grids = []
     if not isinstance(args.text_prompt, list):
@@ -253,6 +293,15 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument("--diffusion_skip_timestep", nargs="+")
+
+    # skip mlp
+    parser.add_argument("--mlp_skip", action="store_true", help="Enable mlp skip")
+    parser.add_argument("--mlp_threshold", type=int, nargs="+", help="MLP skip layer")
+    parser.add_argument("--mlp_gap", type=int, nargs="+", help="MLP skip gap")
+    parser.add_argument("--mlp_layer_range", type=int, nargs="+", help="MLP skip block size")
+    parser.add_argument("--mlp_skip_config", nargs="+")
+    parser.add_argument("--mlp_temporal_skip_config", nargs="+")
+    parser.add_argument("--mlp_spatial_skip_config", nargs="+")
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

@@ -170,6 +170,7 @@ def set_skip_manager(
     mlp_gap: int = 3,
     mlp_layer_range: list = [14, 15],
     mlp_skip_config: dict = None,
+    mlp_skip_timestep: list = None,
 ):
     global SKIP_MANAGER
     SKIP_MANAGER = SkipManager(

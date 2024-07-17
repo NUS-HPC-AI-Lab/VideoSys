@@ -8,6 +8,7 @@
 # --------------------------------------------------------
 
 import argparse
+import json
 import os
 
 import colossalai
@@ -32,9 +33,17 @@ from torchvision.utils import save_image
 from transformers import T5EncoderModel, T5Tokenizer
 
 from opendit.core.parallel_mgr import set_parallel_manager
-from opendit.core.skip_mgr import set_skip_manager
+from opendit.core.skip_mgr_s_t import set_skip_manager
 from opendit.models.latte import LattePipeline, LatteT2V
 from opendit.utils.utils import merge_args, set_seed
+
+
+# Convert namespace to dictionary if needed
+def args_to_dict(args):
+    if isinstance(args, dict):
+        return args
+    else:
+        return vars(args)
 
 
 def main(args):
@@ -44,8 +53,7 @@ def main(args):
     torch.backends.cudnn.allow_tf32 = True
 
     # == init distributed env ==
-    if os.environ.get("LOCAL_RANK", None) is None: # BUG
-        enable_sequence_parallelism = True
+    if os.environ.get("LOCAL_RANK", None) is None:  # BUG
         os.environ["RANK"] = "0"
         os.environ["LOCAL_RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
@@ -71,6 +79,13 @@ def main(args):
         temporal_gap=args.temporal_gap,
         diffusion_skip=args.diffusion_skip,
         diffusion_skip_timestep=args.diffusion_skip_timestep,
+        # mlp
+        mlp_skip=args.mlp_skip,
+        mlp_threshold=args.mlp_threshold,
+        mlp_gap=args.mlp_gap,
+        mlp_layer_range=args.mlp_layer_range,
+        mlp_temporal_skip_config=args.mlp_temporal_skip_config,
+        mlp_spatial_skip_config=args.mlp_spatial_skip_config,
     )
 
     transformer_model = LatteT2V.from_pretrained(
@@ -195,6 +210,25 @@ def main(args):
     if not os.path.exists(args.save_img_path):
         os.makedirs(args.save_img_path)
 
+    # if args.mlp_skip:
+    #     s_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_spatial_skip_config.values())
+    #     t_len = sum(len(config["block"]) * config["skip_count"] for config in args.mlp_temporal_skip_config.values())
+    #     args.save_img_path = os.path.join(args.save_img_path, f"skip_mlp_s_{s_len}_t_{t_len}")
+    # else:
+    #     args.save_img_path = args.save_img_path
+
+    save_dir_name = os.path.splitext(os.path.basename(args.config))[0]
+    args.save_img_path = os.path.join(args.save_img_path, save_dir_name)
+
+    print(f"save_dir | {args.save_img_path}")
+    os.makedirs(args.save_img_path, exist_ok=True)
+
+    # Save args to save_dir using json
+    args_path = os.path.join(args.save_img_path, "args.json")
+    with open(args_path, "w") as f:
+        json.dump(args_to_dict(args), f, indent=4)
+    print(f"Arguments saved to {args_path}")
+
     # video_grids = []
     for num_prompt, prompt in enumerate(args.text_prompt):
         print("Processing the ({}) prompt".format(prompt))
@@ -214,9 +248,10 @@ def main(args):
             if videos.shape[1] == 1:
                 save_image(videos[0][0], args.save_img_path + prompt.replace(" ", "_") + ".png")
             else:
-                imageio.mimwrite(
-                    args.save_img_path + prompt.replace(" ", "_") + "_%04d" % args.run_time + ".mp4", videos[0], fps=8
+                imageio_path = os.path.join(
+                    args.save_img_path, prompt.replace(" ", "_") + "_%04d" % args.run_time + ".mp4"
                 )
+                imageio.mimwrite(imageio_path, videos[0], fps=8)
 
 
 if __name__ == "__main__":
@@ -262,6 +297,14 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument("--diffusion_skip_timestep", nargs="+")
+    # skip mlp
+    parser.add_argument("--mlp_skip", action="store_true", help="Enable mlp skip")
+    parser.add_argument("--mlp_threshold", type=int, nargs="+", help="MLP skip layer")
+    parser.add_argument("--mlp_gap", type=int, nargs="+", help="MLP skip gap")
+    parser.add_argument("--mlp_layer_range", type=int, nargs="+", help="MLP skip block size")
+    parser.add_argument("--mlp_skip_config", nargs="+")
+    parser.add_argument("--mlp_temporal_skip_config", nargs="+")
+    parser.add_argument("--mlp_spatial_skip_config", nargs="+")
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

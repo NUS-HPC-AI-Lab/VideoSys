@@ -1,0 +1,3 @@
+[submodule "evaluations/pab/common_metrics_on_video_quality"]
+	path = evaluations/pab/common_metrics_on_video_quality
+	url = https://github.com/JunyaoHu/common_metrics_on_video_quality.git

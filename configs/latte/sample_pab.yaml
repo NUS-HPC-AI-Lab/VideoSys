@@ -1,0 +1,74 @@
+# path:
+save_img_path: "./samples/latte/"
+pretrained_model_path: "maxin-cn/Latte-1"
+
+# model config:
+model: LatteT2V
+video_length: 16
+image_size: [512, 512]
+# # beta schedule
+beta_start: 0.0001
+beta_end: 0.02
+beta_schedule: "linear"
+variance_type: "learned_range"
+
+# model speedup
+use_compile: False
+use_fp16: True
+
+# sample config:
+seed: 0
+run_time: 0
+guidance_scale: 7.5
+sample_method: 'DDIM'
+num_sampling_steps: 50
+enable_temporal_attentions: True
+enable_vae_temporal_decoder: True # use temporal vae decoder from SVD, maybe reduce the video flicker (It's not widely tested)
+
+text_prompt: [
+  "Time Lapse of the rising sun over a tree in an open rural landscape, with clouds in the blue sky beautifully playing with the rays of light",
+  "The vibrant beauty of a sunflower field. The sunflowers, with their bright yellow petals and dark brown centers, are in full bloom, creating a stunning contrast against the green leaves and stems. The sunflowers are arranged in neat rows, creating a sense of order and symmetry. The sun is shining brightly, casting a warm glow on the flowers and highlighting their intricate details. The video is shot from a low angle, looking up at the sunflowers, which adds a sense of grandeur and awe to the scene. The sunflowers are the main focus of the video, with no other objects or people present. The video is a celebration of nature's beauty and the simple joy of a sunny day in the countryside.",
+  "Snow falling over multiple houses and trees on winter landscape against night sky. christmas festivity and celebration concept.",
+  "A snowy forest landscape with a dirt road running through it. The road is flanked by trees covered in snow, and the ground is also covered in snow. The sun is shining, creating a bright and serene atmosphere. The road appears to be empty, and there are no people or animals visible in the video. The style of the video is a natural landscape shot, with a focus on the beauty of the snowy forest and the peacefulness of the road.",
+  "A serene night scene in a forested area. The first frame shows a tranquil lake reflecting the star-filled sky above. The second frame reveals a beautiful sunset, casting a warm glow over the landscape. The third frame showcases the night sky, filled with stars and a vibrant Milky Way galaxy. The video is a time-lapse, capturing the transition from day to night, with the lake and forest serving as a constant backdrop. The style of the video is naturalistic, emphasizing the beauty of the night sky and the peacefulness of the forest.",
+  'An epic tornado attacking above aglowing city at night.',
+  'Slow pan upward of blazing oak fire in an indoor fireplace.',
+  'Sunset over the sea.',
+  'A dog in astronaut suit and sunglasses floating in space.',
+  "The niagara river in new york has very rough white water that you aren't allowed raft or kayak",
+  "Peru - july 03, 2014: big wave world tour- wave rolling in off the coast of peru.",
+  "Waterfall names 'namtok chokkadin' at thong pha phum national park, kanchanaburi province, thailand, panning tilt up in low angle view",
+]
+
+# pab
+spatial_broadcast: True
+spatial_threshold: [100, 800]
+spatial_gap: 2
+temporal_broadcast: True
+temporal_threshold: [100, 800]
+temporal_gap: 4
+cross_broadcast: True
+cross_threshold: [80, 900]
+cross_gap: 7
+# diffusion_skip: True
+# diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
+
+
+# mlp skip
+mlp_skip: True
+
+mlp_spatial_skip_config: {
+720: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+640: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+560: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+480: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+400: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+}
+
+mlp_temporal_skip_config: {
+720: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+640: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+560: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+480: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+400: {'block': [0, 1, 2, 3, 4], 'skip_count': 2},
+}

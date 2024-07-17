@@ -1,84 +1,49 @@
-# OpenSora
+# Open-Sora
 
-We support text-to-video generation for OpenSora. Open-Sora is an open-source initiative dedicated to efficiently reproducing OpenAI's Sora which uses `DiT` model with `Spatial-Temporal Attention`.
-
-
-### Training
-
-You can train the OpenSora model by executing the following command. Model weights can be downloaded [here](https://github.com/hpcaitech/Open-Sora/tree/main?tab=readme-ov-file#model-weights).
-
-```shell
-# train with scipt
-bash scripts/opensora/train_opensora.sh
-# train with command line
-torchrun --standalone --nproc_per_node=2 scripts/opensora/train_opensora.py \
-    --batch_size 2 \
-    --mixed_precision bf16 \
-    --lr 2e-5 \
-    --grad_checkpoint \
-    --data_path "./videos/demo.csv" \
-    --model_pretrained_path "ckpt_path"
-```
-
-We disable all speedup methods by default. Here are details of some key arguments for training:
-
-- `--nproc_per_node`: The GPU number you want to use for the current node.
-- `--plugin`: The booster plugin used by ColossalAI, `zero2` and `ddp` are supported. The default value is `zero2`. Recommend to enable `zero2`.
-- `--mixed_precision`: The data type for mixed precision training. The default value is `bf16`.
-- `--grad_checkpoint`: Whether enable the gradient checkpointing. This saves the memory cost during training process. The default value is `False`. Recommend to enable.
-- `--enable_flashattn`: Whether enable the FlashAttention. This speeds up the training process. The default value is `False`. Recommend to enable.
-- `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the training process. The default value is `False`. Requires apex install.
-- `--load`: Load previous saved checkpoint dir and continue training.
+We support text-to-video generation for Open-Sora. Open-Sora is an open-source initiative dedicated to efficiently reproducing OpenAI's Sora which uses `DiT` model with `Spatial-Temporal Attention`.
 
 
-### Multi-Node Training
+## Inference
 
-To train OpenDiT on multiple nodes, you can use the following command:
-
-```
-colossalai run --nproc_per_node 8 --hostfile hostfile xx.py \
-    --XXX
-```
-
-And you need to create `hostfile` under the current dir. It should contain all IP address of your nodes and you need to make sure all nodes can be connected without password by ssh. An example of hostfile:
-
-```
-111.111.111.111 # ip of node1
-222.222.222.222 # ip of node2
-```
-
-Or you can use the standard `torchrun` to launch multi-node training as well.
-
-
-### Inference
-
-You can perform video inference as follows. Model weights can be downloaded [here](https://github.com/hpcaitech/Open-Sora/tree/main?tab=readme-ov-file#model-weights).
+You can perform video inference for Open-Sora(v1.2) as follows.
 
 ```shell
 # Use script
-bash scripts/opensora/sample_opensora.sh
+bash scripts/opensora/sample.sh
 # Use command line
-torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample.yaml
+torchrun --standalone --nproc_per_node=1 scripts/opensora/sample.py --config configs/opensora/sample.yaml
 ```
 
-We disable all speedup methods by default. Here are details of some key arguments for training:
+We disable some speedup methods by default. You can change settings in yaml config. Here are details of some key arguments:
 
-- `--nproc_per_node`: The GPU number you want to use for the current node.
+- `--nproc_per_node`: The GPU number you want to use for the current node. Multiple GPUs inference will enable Dynamic Sequence Parallel.
 - `--dtype`: The data type for sampling. The default value is `bf16`.
 - `--enable_flashattn`: Whether enable the FlashAttention. The default value is `False`. Recommend to enable.
 - `--text_speedup`: Whether enable the T5 encoder optimization. This speeds up the text encoder. The default value is `False`. Requires apex install.
 
-Inference tips: 1) EMA model requires quite long time to converge and produce meaningful results. So you can sample base model (`/epochXX-global_stepXX`) instead of ema model (`/epochXX-global_stepXX/ema.pt`) to check your training process. But ema model should be your final result. 2) Modify the text condition in `sample.py` which aligns with your datasets helps to produce better results in the early stage of training.
-
-
-### Low-Latency Inference with DSP
-
-You can perform low-latency video inference using our Dynamic Sequence Parallel (DSP) as follows.
+For more efficient inference, you can install flash attention by:
 
 ```shell
-torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample_speedup.yaml
+pip install flash-attn
 ```
 
-### Data Preparation
+### Inference with [PAB](./docs/pab.md)
 
-You can follow the [instruction](https://github.com/hpcaitech/Open-Sora/tree/release?tab=readme-ov-file#data-processing) to prepare the data for training.
+PAB provides more efficient inference at the cost of minor quality loss. You can run as follows:
+
+```shell
+# Use script
+bash scripts/opensora/sample_pab.sh
+# Use command line
+torchrun --standalone --nproc_per_node=8 scripts/opensora/sample.py --config configs/opensora/sample_pab.yaml
+```
+
+You can change settings in yaml config. Here are details of some key arguments for training:
+
+- `--nproc_per_node`: The GPU number you want to use for the current node. Multiple GPUs inference will enable Dynamic Sequence Parallel.
+
+For the more detailed args and usages related with PAB, please refer to [here](./docs/pab.md).
+
+### Training
+
+Training is under development now. Will be available soon.
