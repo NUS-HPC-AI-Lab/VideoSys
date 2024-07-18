@@ -12,21 +12,13 @@ import inspect
 import math
 import re
 import urllib.parse as ul
-from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.schedulers import PNDMScheduler
-from diffusers.utils import (
-    BACKENDS_MAPPING,
-    BaseOutput,
-    is_bs4_available,
-    is_ftfy_available,
-    logging,
-    replace_example_docstring,
-)
+from diffusers.utils import BACKENDS_MAPPING, is_bs4_available, is_ftfy_available, logging, replace_example_docstring
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
@@ -37,7 +29,7 @@ from opendit.core.pab_mgr import (
     skip_diffusion_timestep,
     update_steps,
 )
-from opendit.core.pipeline import VideoSysPipeline
+from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from opendit.utils.utils import save_video
 
 from .ae import ae_stride_config, getae_wrapper
@@ -130,11 +122,6 @@ class OpenSoraPlanConfig:
         # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config
-
-
-@dataclass
-class VideoPipelineOutput(BaseOutput):
-    video: torch.Tensor
 
 
 class OpenSoraPlanPipeline(VideoSysPipeline):
@@ -640,7 +627,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
         verbose: bool = False,
-    ) -> Union[VideoPipelineOutput, Tuple]:
+    ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
 
@@ -862,7 +849,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             video = video[:, :num_frames, :height, :width]
         else:
             video = latents
-            return VideoPipelineOutput(video=video)
+            return VideoSysPipelineOutput(video=video)
 
         # Offload all models
         self.maybe_free_model_hooks()
@@ -870,7 +857,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         if not return_dict:
             return (video,)
 
-        return VideoPipelineOutput(video=video)
+        return VideoSysPipelineOutput(video=video)
 
     def decode_latents(self, latents):
         video = self.vae.decode(latents)  # b t c h w

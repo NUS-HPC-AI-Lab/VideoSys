@@ -11,7 +11,6 @@ import html
 import inspect
 import re
 import urllib.parse as ul
-from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 import einops
@@ -20,7 +19,7 @@ import torch.distributed as dist
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
 from diffusers.schedulers import DDIMScheduler
-from diffusers.utils import BACKENDS_MAPPING, BaseOutput, is_bs4_available, is_ftfy_available, logging
+from diffusers.utils import BACKENDS_MAPPING, is_bs4_available, is_ftfy_available, logging
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
@@ -32,7 +31,7 @@ from opendit.core.pab_mgr import (
     skip_diffusion_timestep,
     update_steps,
 )
-from opendit.core.pipeline import VideoSysPipeline
+from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from opendit.utils.utils import save_video
 
 from .latte_t2v import LatteT2V
@@ -45,11 +44,6 @@ if is_ftfy_available():
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-
-@dataclass
-class VideoPipelineOutput(BaseOutput):
-    video: torch.Tensor
 
 
 class LattePABConfig(PABConfig):
@@ -628,7 +622,7 @@ class LattePipeline(VideoSysPipeline):
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
         verbose: bool = False,
-    ) -> Union[VideoPipelineOutput, Tuple]:
+    ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
 
@@ -855,7 +849,7 @@ class LattePipeline(VideoSysPipeline):
                     video = self.decode_latents(latents)
         else:
             video = latents
-            return VideoPipelineOutput(video=video)
+            return VideoSysPipelineOutput(video=video)
 
         # Offload all models
         self.maybe_free_model_hooks()
@@ -863,7 +857,7 @@ class LattePipeline(VideoSysPipeline):
         if not return_dict:
             return (video,)
 
-        return VideoPipelineOutput(video=video)
+        return VideoSysPipelineOutput(video=video)
 
     def decode_latents_image(self, latents):
         video_length = latents.shape[2]

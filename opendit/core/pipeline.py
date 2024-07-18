@@ -1,7 +1,9 @@
 from abc import abstractmethod
+from dataclasses import dataclass
 
 import torch
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+from diffusers.utils import BaseOutput
 
 
 class VideoSysPipeline(DiffusionPipeline):
@@ -25,3 +27,8 @@ class VideoSysPipeline(DiffusionPipeline):
         This is a wrapper for the generate method to support the diffusers usage.
         """
         return self.generate(*args, **kwargs)
+
+
+@dataclass
+class VideoSysPipelineOutput(BaseOutput):
+    video: torch.Tensor
