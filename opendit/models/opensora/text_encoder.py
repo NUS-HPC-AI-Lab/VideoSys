@@ -8,11 +8,14 @@
 # --------------------------------------------------------
 
 import html
+import os
 import re
 
 import ftfy
 import torch
 from transformers import AutoTokenizer, T5EncoderModel
+
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 
 class T5Embedder:
@@ -148,6 +151,12 @@ class T5Encoder:
 
         if shardformer:
             self.shardformer_t5()
+
+    def eval(self):
+        self.t5.model.eval()
+
+    def to(self, device):
+        self.t5.model.to(device)
 
     def shardformer_t5(self):
         from colossalai.shardformer import ShardConfig, ShardFormer
