@@ -35,15 +35,14 @@ def str_to_dtype(x: str):
         raise RuntimeError(f"Only fp32, fp16 and bf16 are supported, but got {x}")
 
 
-def split_batch(conditional: bool, *args):
+def batch_func(func, *args):
+    """
+    Apply a function to each element of a batch.
+    """
     batch = []
     for arg in args:
-        if isinstance(arg, torch.Tensor):
-            if arg.shape[0] == 2:
-                arg = arg[:1] if conditional else arg[1:]
-                batch.append(arg)
-            else:
-                batch.append(arg)
+        if isinstance(arg, torch.Tensor) and arg.shape[0] == 2:
+            batch.append(func(arg))
         else:
             batch.append(arg)
 

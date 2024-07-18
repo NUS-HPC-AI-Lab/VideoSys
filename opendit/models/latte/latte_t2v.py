@@ -9,6 +9,7 @@
 
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Dict, Optional, Tuple
 
 import torch
@@ -34,7 +35,6 @@ from torch import nn
 
 from opendit.core.comm import (
     all_to_all_with_pad,
-    conditional_parallel_gather,
     gather_sequence,
     get_spatial_pad,
     get_temporal_pad,
@@ -46,11 +46,10 @@ from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_sp
 from opendit.core.parallel_mgr import (
     enable_sequence_parallel,
     get_data_parallel_group,
-    get_data_parallel_rank,
     get_data_parallel_size,
     get_sequence_parallel_group,
 )
-from opendit.utils.utils import split_batch
+from opendit.utils.utils import batch_func
 
 
 @maybe_allow_in_graph
@@ -1149,7 +1148,6 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
         # 0. Split batch for data parallelism
         if get_data_parallel_size() > 1:
-            conditional = get_data_parallel_rank() == 0
             (
                 hidden_states,
                 timestep,
@@ -1158,8 +1156,8 @@ class LatteT2V(ModelMixin, ConfigMixin):
                 class_labels,
                 attention_mask,
                 encoder_attention_mask,
-            ) = split_batch(
-                conditional,
+            ) = batch_func(
+                partial(split_sequence, process_group=get_data_parallel_group(), dim=0),
                 hidden_states,
                 timestep,
                 encoder_hidden_states,
@@ -1410,7 +1408,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
         # 3. Gather batch for data parallelism
         if get_data_parallel_size() > 1:
-            output = conditional_parallel_gather(output, get_data_parallel_group())
+            output = gather_sequence(output, get_data_parallel_group(), dim=0)
 
         if not return_dict:
             return (output,)

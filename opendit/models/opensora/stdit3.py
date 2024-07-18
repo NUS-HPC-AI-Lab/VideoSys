@@ -9,6 +9,7 @@
 
 
 import os
+from functools import partial
 
 import numpy as np
 import torch
@@ -20,7 +21,6 @@ from transformers import PretrainedConfig, PreTrainedModel
 
 from opendit.core.comm import (
     all_to_all_with_pad,
-    conditional_parallel_gather,
     gather_sequence,
     get_spatial_pad,
     get_temporal_pad,
@@ -32,11 +32,10 @@ from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_sp
 from opendit.core.parallel_mgr import (
     enable_sequence_parallel,
     get_data_parallel_group,
-    get_data_parallel_rank,
     get_data_parallel_size,
     get_sequence_parallel_group,
 )
-from opendit.utils.utils import split_batch
+from opendit.utils.utils import batch_func
 
 from .modules import (
     Attention,
@@ -418,8 +417,9 @@ class STDiT3(PreTrainedModel):
     def forward(self, x, timestep, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs):
         # === Split batch ===
         if get_data_parallel_size() > 1:
-            conditional = get_data_parallel_rank() == 0
-            x, timestep, y, x_mask, mask = split_batch(conditional, x, timestep, y, x_mask, mask)
+            x, timestep, y, x_mask, mask = batch_func(
+                partial(split_sequence, process_group=get_data_parallel_group(), dim=0), x, timestep, y, x_mask, mask
+            )
 
         dtype = self.x_embedder.proj.weight.dtype
         B = x.size(0)
@@ -495,7 +495,7 @@ class STDiT3(PreTrainedModel):
 
         # === Gather Output ===
         if get_data_parallel_size() > 1:
-            x = conditional_parallel_gather(x, get_data_parallel_group())
+            x = gather_sequence(x, get_data_parallel_group(), dim=0)
 
         return x
 

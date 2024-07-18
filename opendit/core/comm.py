@@ -365,46 +365,6 @@ def gather_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):
     return _GatherForwardSplitBackward.apply(input_, process_group, dim, grad_scale, pad)
 
 
-# ======================================================
-# Conditional Parallel Gather
-# ======================================================
-
-
-def _conditional_parallel_gather_func(input_, pg):
-    # skip if only one rank involved
-    world_size = dist.get_world_size(pg)
-    assert world_size == 2, f"Currenly only support dp_size=2, but got {world_size}"
-
-    tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
-    torch.distributed.all_gather(tensor_list, input_, group=pg)
-
-    return torch.cat(tensor_list, dim=0)
-
-
-class _ConditionalParallelGather(torch.autograd.Function):
-    """
-    Gather the output of the model.
-
-    Args:
-        input_: input matrix.
-        process_group: parallel mode.
-    """
-
-    @staticmethod
-    def forward(ctx, input_, process_group):
-        ctx.process_group = process_group
-        return _conditional_parallel_gather_func(input_, process_group)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        # TODO: support backward
-        raise NotImplementedError("ConditionalParallelGather does not support backward.")
-
-
-def conditional_parallel_gather(input_, process_group):
-    return _ConditionalParallelGather.apply(input_, process_group)
-
-
 # ==============================
 # Pad
 # ==============================
