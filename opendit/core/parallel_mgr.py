@@ -20,8 +20,17 @@ class ParallelManager(ProcessGroupMesh):
         self.enable_sp = sp_size > 1
 
 
-def set_parallel_manager(dp_size, sp_size, dp_axis=0, sp_axis=1):
+def set_parallel_manager(world_size, dp_axis=0, sp_axis=1, enable_cp=True):
     global PARALLEL_MANAGER
+    if enable_cp:
+        if world_size % 2 != 0 or world_size < 2:
+            enable_cp = False
+            print(
+                "The world size must be even and greater than 2 for condition parallelism. Disabling condition parallelism."
+            )
+        else:
+            dp_size = 2
+            sp_size = world_size // 2
     PARALLEL_MANAGER = ParallelManager(dp_size, sp_size, dp_axis, sp_axis)
 
 
