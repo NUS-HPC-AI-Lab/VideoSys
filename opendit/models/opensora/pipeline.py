@@ -3,7 +3,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 from diffusers.models import AutoencoderKL
-from diffusers.utils import logging
 
 from opendit.core.pab_mgr import PABConfig, set_pab_manager
 from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
@@ -26,8 +25,6 @@ from .rflow import RFLOW
 from .stdit3 import STDiT3_XL_2
 from .text_encoder import T5Encoder, text_preprocessing
 from .vae import OpenSoraVAE_V1_2
-
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 class OpenSoraPABConfig(PABConfig):

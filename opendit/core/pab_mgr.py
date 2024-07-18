@@ -2,7 +2,8 @@ import random
 
 import numpy as np
 import torch
-import torch.distributed as dist
+
+from opendit.utils.logging import logger
 
 PAB_MANAGER = None
 
@@ -47,17 +48,11 @@ class PABManager:
     def __init__(self, config: PABConfig):
         self.config: PABConfig = config
 
-        if dist.get_rank() == 0:
-            print(
-                f"\n\
-Init SkipManager:\n\
-    steps={config.steps}\n\
-    cross_broadcast={config.cross_broadcast}, cross_threshold={config.cross_threshold}, cross_gap={config.cross_gap}\n\
-    spatial_broadcast={config.spatial_broadcast}, spatial_threshold={config.spatial_threshold}, spatial_gap={config.spatial_gap}\n\
-    temporal_broadcast={config.temporal_broadcast}, temporal_threshold={config.temporal_threshold}, temporal_gap={config.temporal_gap}\n\
-\n",
-                end="",
-            )
+        init_prompt = f"Init PABManager. steps: {config.steps}."
+        init_prompt += f" spatial_broadcast: {config.spatial_broadcast}, spatial_threshold: {config.spatial_threshold}, spatial_gap: {config.spatial_gap}."
+        init_prompt += f" temporal_broadcast: {config.temporal_broadcast}, temporal_threshold: {config.temporal_threshold}, temporal_gap: {config.temporal_gap}."
+        init_prompt += f" cross_broadcast: {config.cross_broadcast}, cross_threshold: {config.cross_threshold}, cross_gap: {config.cross_gap}."
+        logger.info(init_prompt)
 
     def if_broadcast_cross(self, timestep: int, count: int):
         if (

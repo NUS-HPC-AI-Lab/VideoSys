@@ -14,12 +14,13 @@ import urllib.parse as ul
 from typing import Callable, List, Optional, Tuple, Union
 
 import einops
+import ftfy
 import torch
 import torch.distributed as dist
+from bs4 import BeautifulSoup
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
 from diffusers.schedulers import DDIMScheduler
-from diffusers.utils import BACKENDS_MAPPING, is_bs4_available, is_ftfy_available, logging
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
@@ -32,18 +33,10 @@ from opendit.core.pab_mgr import (
     update_steps,
 )
 from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from opendit.utils.logging import logger
 from opendit.utils.utils import save_video
 
 from .latte_t2v import LatteT2V
-
-if is_bs4_available():
-    from bs4 import BeautifulSoup
-
-if is_ftfy_available():
-    import ftfy
-
-
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 class LattePABConfig(PABConfig):
@@ -437,16 +430,6 @@ class LattePipeline(VideoSysPipeline):
 
     # Copied from diffusers.pipelines.deepfloyd_if.pipeline_if.IFPipeline._text_preprocessing
     def _text_preprocessing(self, text, clean_caption=False):
-        if clean_caption and not is_bs4_available():
-            logger.warn(BACKENDS_MAPPING["bs4"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
-        if clean_caption and not is_ftfy_available():
-            logger.warn(BACKENDS_MAPPING["ftfy"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
         if not isinstance(text, (tuple, list)):
             text = [text]
 

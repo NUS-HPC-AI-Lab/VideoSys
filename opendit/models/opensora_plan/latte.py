@@ -36,7 +36,6 @@ from diffusers.models.attention_processor import (
     SpatialNorm,
     XFormersAttnAddedKVProcessor,
     XFormersAttnProcessor,
-    logger,
 )
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding, TimestepEmbedding, Timesteps
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
@@ -58,6 +57,7 @@ from opendit.core.comm import (
 )
 from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
+from opendit.utils.logging import logger
 
 if is_xformers_available():
     import xformers

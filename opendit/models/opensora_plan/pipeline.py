@@ -14,11 +14,13 @@ import re
 import urllib.parse as ul
 from typing import Callable, List, Optional, Tuple, Union
 
+import ftfy
 import torch
 import torch.distributed as dist
+from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.schedulers import PNDMScheduler
-from diffusers.utils import BACKENDS_MAPPING, is_bs4_available, is_ftfy_available, logging, replace_example_docstring
+from diffusers.utils import replace_example_docstring
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
@@ -30,18 +32,11 @@ from opendit.core.pab_mgr import (
     update_steps,
 )
 from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from opendit.utils.logging import logger
 from opendit.utils.utils import save_video
 
 from .ae import ae_stride_config, getae_wrapper
 from .latte import LatteT2V
-
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-if is_bs4_available():
-    from bs4 import BeautifulSoup
-
-if is_ftfy_available():
-    import ftfy
 
 EXAMPLE_DOC_STRING = """
     Examples:
@@ -441,16 +436,6 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
     # Copied from diffusers.pipelines.deepfloyd_if.pipeline_if.IFPipeline._text_preprocessing
     def _text_preprocessing(self, text, clean_caption=False):
-        if clean_caption and not is_bs4_available():
-            logger.warn(BACKENDS_MAPPING["bs4"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
-        if clean_caption and not is_ftfy_available():
-            logger.warn(BACKENDS_MAPPING["ftfy"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
         if not isinstance(text, (tuple, list)):
             text = [text]
 

@@ -6,6 +6,7 @@ import torch.distributed as dist
 from colossalai.cluster.process_group_mesh import ProcessGroupMesh
 from torch.distributed import ProcessGroup
 
+from opendit.utils.logging import init_dist_logger
 from opendit.utils.utils import set_seed
 
 PARALLEL_MANAGER = None
@@ -63,7 +64,7 @@ def get_parallel_manager():
 def initialize(seed: Optional[int] = None, sp_size: Optional[int] = None):
     if not dist.is_initialized():
         colossalai.launch_from_torch({})
-
+    init_dist_logger()
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
