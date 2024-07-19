@@ -27,6 +27,7 @@ from opendit.core.pab_mgr import (
     PABConfig,
     get_diffusion_skip,
     get_diffusion_skip_timestep,
+    set_pab_manager,
     skip_diffusion_timestep,
     update_steps,
 )
@@ -182,6 +183,10 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)
+
+        # pab
+        if config.enable_pab:
+            set_pab_manager(config.pab_config)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
