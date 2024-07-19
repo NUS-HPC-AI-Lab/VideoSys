@@ -20,7 +20,6 @@ import torch.distributed as dist
 from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.schedulers import PNDMScheduler
-from diffusers.utils import replace_example_docstring
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
@@ -591,8 +590,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         return latents
 
     @torch.no_grad()
-    @replace_example_docstring(EXAMPLE_DOC_STRING)
-    def __call__(
+    def generate(
         self,
         prompt: Union[str, List[str]] = None,
         negative_prompt: str = "",
