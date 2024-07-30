@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 from glob import glob
 
@@ -22,7 +21,8 @@ from opendit.datasets.dataloader import prepare_dataloader
 from opendit.datasets.image_transform import get_transforms_image
 from opendit.diffusion import create_diffusion
 from opendit.models.dit import DiT, DiT_models
-from opendit.utils.ckpt_utils import create_logger, load, record_model_param_shape, save
+from opendit.utils.ckpt_utils import load, record_model_param_shape, save
+from opendit.utils.logging import logger
 from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -53,14 +53,6 @@ def main(args):
     # Create an experiment folder
     experiment_dir = f"{args.outputs}/{experiment_index:03d}-{model_string_name}"
     dist.barrier()
-    if coordinator.is_master():
-        os.makedirs(experiment_dir, exist_ok=True)
-        with open(f"{experiment_dir}/config.txt", "w") as f:
-            json.dump(args.__dict__, f, indent=4)
-        logger = create_logger(experiment_dir)
-        logger.info(f"Experiment directory created at {experiment_dir}")
-    else:
-        logger = create_logger(None)
 
     # ==============================
     # Initialize Tensorboard
