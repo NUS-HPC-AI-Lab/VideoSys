@@ -16,7 +16,7 @@ from colossalai.checkpoint_io import GeneralCheckpointIO
 from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 from torchvision.datasets.utils import download_url
 
-from opendit.utils.utils import get_logger
+from opendit.utils.logging import logger
 
 hf_endpoint = os.environ.get("HF_ENDPOINT")
 if hf_endpoint is None:
@@ -52,7 +52,7 @@ def reparameter(ckpt, name=None, model=None):
     model_name = name
     name = os.path.basename(name)
     if not dist.is_initialized() or dist.get_rank() == 0:
-        get_logger().info("loading pretrained model: %s", model_name)
+        logger.info("loading pretrained model: %s", model_name)
     if name in ["DiT-XL-2-512x512.pt", "DiT-XL-2-256x256.pt"]:
         ckpt["x_embedder.proj.weight"] = ckpt["x_embedder.proj.weight"].unsqueeze(2)
         del ckpt["pos_embed"]
@@ -91,7 +91,7 @@ def reparameter(ckpt, name=None, model=None):
     # different text length
     if "y_embedder.y_embedding" in ckpt:
         if ckpt["y_embedder.y_embedding"].shape[0] < model.y_embedder.y_embedding.shape[0]:
-            get_logger().info(
+            logger.info(
                 "Extend y_embedding from %s to %s",
                 ckpt["y_embedder.y_embedding"].shape[0],
                 model.y_embedder.y_embedding.shape[0],
@@ -101,7 +101,7 @@ def reparameter(ckpt, name=None, model=None):
             new_y_embedding[:] = ckpt["y_embedder.y_embedding"][-1]
             ckpt["y_embedder.y_embedding"] = torch.cat([ckpt["y_embedder.y_embedding"], new_y_embedding], dim=0)
         elif ckpt["y_embedder.y_embedding"].shape[0] > model.y_embedder.y_embedding.shape[0]:
-            get_logger().info(
+            logger.info(
                 "Shrink y_embedding from %s to %s",
                 ckpt["y_embedder.y_embedding"].shape[0],
                 model.y_embedder.y_embedding.shape[0],
@@ -157,15 +157,15 @@ def load_checkpoint(model, ckpt_path, save_as_pt=False, model_name="model", stri
     if ckpt_path.endswith(".pt") or ckpt_path.endswith(".pth"):
         state_dict = find_model(ckpt_path, model=model)
         missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=strict)
-        get_logger().info("Missing keys: %s", missing_keys)
-        get_logger().info("Unexpected keys: %s", unexpected_keys)
+        logger.info("Missing keys: %s", missing_keys)
+        logger.info("Unexpected keys: %s", unexpected_keys)
     elif os.path.isdir(ckpt_path):
         load_from_sharded_state_dict(model, ckpt_path, model_name, strict=strict)
-        get_logger().info("Model checkpoint loaded from %s", ckpt_path)
+        logger.info("Model checkpoint loaded from %s", ckpt_path)
         if save_as_pt:
             save_path = os.path.join(ckpt_path, model_name + "_ckpt.pt")
             torch.save(model.state_dict(), save_path)
-            get_logger().info("Model checkpoint saved to %s", save_path)
+            logger.info("Model checkpoint saved to %s", save_path)
     else:
         raise ValueError(f"Invalid checkpoint path: {ckpt_path}")
 

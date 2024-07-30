@@ -11,61 +11,97 @@ import html
 import inspect
 import re
 import urllib.parse as ul
-from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 import einops
+import ftfy
 import torch
 import torch.distributed as dist
+from bs4 import BeautifulSoup
 from diffusers.image_processor import VaeImageProcessor
-from diffusers.models import AutoencoderKL, Transformer2DModel
-from diffusers.pipelines.pipeline_utils import DiffusionPipeline
-from diffusers.schedulers import DPMSolverMultistepScheduler
-from diffusers.utils import (
-    BACKENDS_MAPPING,
-    BaseOutput,
-    is_bs4_available,
-    is_ftfy_available,
-    logging,
-    replace_example_docstring,
-)
+from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
+from diffusers.schedulers import DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import (
+    PABConfig,
+    get_diffusion_skip,
+    get_diffusion_skip_timestep,
+    set_pab_manager,
+    skip_diffusion_timestep,
+    update_steps,
+)
+from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from opendit.utils.logging import logger
+from opendit.utils.utils import save_video
 
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-if is_bs4_available():
-    from bs4 import BeautifulSoup
-
-if is_ftfy_available():
-    import ftfy
-
-
-EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import PixArtAlphaPipeline
-
-        >>> # You can replace the checkpoint id with "PixArt-alpha/PixArt-XL-2-512x512" too.
-        >>> pipe = PixArtAlphaPipeline.from_pretrained("PixArt-alpha/PixArt-XL-2-1024-MS", torch_dtype=torch.float16)
-        >>> # Enable memory optimizations.
-        >>> pipe.enable_model_cpu_offload()
-
-        >>> prompt = "A small cactus with a happy face in the Sahara desert."
-        >>> image = pipe(prompt).images[0]
-        ```
-"""
+from .latte_t2v import LatteT2V
 
 
-@dataclass
-class VideoPipelineOutput(BaseOutput):
-    video: torch.Tensor
+class LattePABConfig(PABConfig):
+    def __init__(
+        self,
+        steps: int = 50,
+        spatial_broadcast: bool = True,
+        spatial_threshold: list = [100, 800],
+        spatial_gap: int = 2,
+        temporal_broadcast: bool = True,
+        temporal_threshold: list = [100, 850],
+        temporal_gap: int = 2,
+        cross_broadcast: bool = True,
+        cross_threshold: list = [100, 850],
+        cross_gap: int = 7,
+        diffusion_skip: bool = False,
+        diffusion_timestep_respacing: list = None,
+        diffusion_skip_timestep: list = None,
+    ):
+        super().__init__(
+            steps=steps,
+            spatial_broadcast=spatial_broadcast,
+            spatial_threshold=spatial_threshold,
+            spatial_gap=spatial_gap,
+            temporal_broadcast=temporal_broadcast,
+            temporal_threshold=temporal_threshold,
+            temporal_gap=temporal_gap,
+            cross_broadcast=cross_broadcast,
+            cross_threshold=cross_threshold,
+            cross_gap=cross_gap,
+            diffusion_skip=diffusion_skip,
+            diffusion_timestep_respacing=diffusion_timestep_respacing,
+            diffusion_skip_timestep=diffusion_skip_timestep,
+        )
 
 
-class LattePipeline(DiffusionPipeline):
+class LatteConfig:
+    def __init__(
+        self,
+        model_path: str = "maxin-cn/Latte-1",
+        enable_vae_temporal_decoder: bool = True,
+        # ======= scheduler ========
+        beta_start: float = 0.0001,
+        beta_end: float = 0.02,
+        beta_schedule: str = "linear",
+        variance_type: str = "learned_range",
+        # ======= pab ========
+        enable_pab: bool = False,
+        pab_config: PABConfig = LattePABConfig(),
+    ):
+        self.model_path = model_path
+        self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
+
+        # ======= scheduler ========
+        self.beta_start = beta_start
+        self.beta_end = beta_end
+        self.beta_schedule = beta_schedule
+        self.variance_type = variance_type
+
+        # ======= pab ========
+        self.enable_pab = enable_pab
+        self.pab_config = pab_config
+
+
+class LattePipeline(VideoSysPipeline):
     r"""
     Pipeline for text-to-image generation using PixArt-Alpha.
 
@@ -96,13 +132,53 @@ class LattePipeline(DiffusionPipeline):
 
     def __init__(
         self,
-        tokenizer: T5Tokenizer,
-        text_encoder: T5EncoderModel,
-        vae: AutoencoderKL,
-        transformer: Transformer2DModel,
-        scheduler: DPMSolverMultistepScheduler,
+        config: LatteConfig = LatteConfig(),
+        tokenizer: Optional[T5Tokenizer] = None,
+        text_encoder: Optional[T5EncoderModel] = None,
+        vae: Optional[AutoencoderKL] = None,
+        transformer: Optional[LatteT2V] = None,
+        scheduler: Optional[DDIMScheduler] = None,
+        device: torch.device = torch.device("cuda"),
+        dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
+        self._config = config
+
+        # initialize the model if not provided
+        if transformer is None:
+            transformer = LatteT2V.from_pretrained(config.model_path, subfolder="transformer", video_length=16).to(
+                dtype=dtype
+            )
+        if vae is None:
+            if config.enable_vae_temporal_decoder:
+                vae = AutoencoderKLTemporalDecoder.from_pretrained(
+                    config.model_path, subfolder="vae_temporal_decoder", torch_dtype=dtype
+                )
+            else:
+                vae = AutoencoderKL.from_pretrained(config.model_path, subfolder="vae", torch_dtype=dtype)
+        if tokenizer is None:
+            tokenizer = T5Tokenizer.from_pretrained(config.model_path, subfolder="tokenizer")
+        if text_encoder is None:
+            text_encoder = T5EncoderModel.from_pretrained(
+                config.model_path, subfolder="text_encoder", torch_dtype=dtype
+            )
+        if scheduler is None:
+            scheduler = DDIMScheduler.from_pretrained(
+                config.model_path,
+                subfolder="scheduler",
+                beta_start=config.beta_start,
+                beta_end=config.beta_end,
+                beta_schedule=config.beta_schedule,
+                variance_type=config.variance_type,
+                clip_sample=False,
+            )
+
+        # pab
+        if config.enable_pab:
+            set_pab_manager(config.pab_config)
+
+        # set eval and device
+        self.set_eval_and_device(device, text_encoder, vae, transformer)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
@@ -354,16 +430,6 @@ class LattePipeline(DiffusionPipeline):
 
     # Copied from diffusers.pipelines.deepfloyd_if.pipeline_if.IFPipeline._text_preprocessing
     def _text_preprocessing(self, text, clean_caption=False):
-        if clean_caption and not is_bs4_available():
-            logger.warn(BACKENDS_MAPPING["bs4"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
-        if clean_caption and not is_ftfy_available():
-            logger.warn(BACKENDS_MAPPING["ftfy"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
         if not isinstance(text, (tuple, list)):
             text = [text]
 
@@ -519,18 +585,13 @@ class LattePipeline(DiffusionPipeline):
         return latents
 
     @torch.no_grad()
-    @replace_example_docstring(EXAMPLE_DOC_STRING)
-    def __call__(
+    def generate(
         self,
-        prompt: Union[str, List[str]] = None,
+        prompt: str = None,
         negative_prompt: str = "",
-        num_inference_steps: int = 20,
-        timesteps: List[int] = None,
-        guidance_scale: float = 4.5,
+        num_inference_steps: int = 50,
+        guidance_scale: float = 7.5,
         num_images_per_prompt: Optional[int] = 1,
-        video_length: Optional[int] = None,
-        height: Optional[int] = None,
-        width: Optional[int] = None,
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
@@ -543,9 +604,8 @@ class LattePipeline(DiffusionPipeline):
         clean_caption: bool = True,
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
-        enable_vae_temporal_decoder: bool = False,
         verbose: bool = False,
-    ) -> Union[VideoPipelineOutput, Tuple]:
+    ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
 
@@ -616,8 +676,10 @@ class LattePipeline(DiffusionPipeline):
                 returned where the first element is a list with the generated images
         """
         # 1. Check inputs. Raise error if not correct
-        height = height or self.transformer.config.sample_size * self.vae_scale_factor
-        width = width or self.transformer.config.sample_size * self.vae_scale_factor
+        video_length = 16
+        height = 512
+        width = 512
+        update_steps(num_inference_steps)
         self.check_inputs(prompt, height, width, negative_prompt, callback_steps, prompt_embeds, negative_prompt_embeds)
 
         # 2. Default height and width to transformer
@@ -764,13 +826,13 @@ class LattePipeline(DiffusionPipeline):
             if latents.shape[2] == 1:  # image
                 video = self.decode_latents_image(latents)
             else:  # video
-                if enable_vae_temporal_decoder:
+                if self._config.enable_vae_temporal_decoder:
                     video = self.decode_latents_with_temporal_decoder(latents)
                 else:
                     video = self.decode_latents(latents)
         else:
             video = latents
-            return VideoPipelineOutput(video=video)
+            return VideoSysPipelineOutput(video=video)
 
         # Offload all models
         self.maybe_free_model_hooks()
@@ -778,7 +840,7 @@ class LattePipeline(DiffusionPipeline):
         if not return_dict:
             return (video,)
 
-        return VideoPipelineOutput(video=video)
+        return VideoSysPipelineOutput(video=video)
 
     def decode_latents_image(self, latents):
         video_length = latents.shape[2]
@@ -825,3 +887,6 @@ class LattePipeline(DiffusionPipeline):
         video = ((video / 2.0 + 0.5).clamp(0, 1) * 255).to(dtype=torch.uint8).cpu().contiguous()
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloa16
         return video
+
+    def save_video(self, video, output_path):
+        save_video(video, output_path, fps=8)

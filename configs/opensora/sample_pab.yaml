@@ -1,6 +1,6 @@
-resolution: "480p"
-aspect_ratio: "9:16"
-num_frames: 51
+resolution: "480p"   # 240p, 360p, 480p, 720p
+aspect_ratio: "9:16" # 9:16, 16:9, 3:4, 4:3, 1:1
+num_frames: 102      # 51 (2s), 102 (4s), 204 (8s), 408 (16s)
 fps: 24
 frame_interval: 1
 
@@ -35,13 +35,13 @@ enable_t5_speedup: True
 
 # pab
 spatial_broadcast: True
-spatial_threshold: [540, 940]
+spatial_threshold: [540, 920]
 spatial_gap: 2
 temporal_broadcast: True
-temporal_threshold: [540, 940]
+temporal_threshold: [540, 920]
 temporal_gap: 4
 cross_broadcast: True
-cross_threshold: [540, 940]
+cross_threshold: [540, 930]
 cross_gap: 6
 # diffusion_skip: True
 # diffusion_skip_timestep: [1,1,1,0,0,0,0,0,0,0]
