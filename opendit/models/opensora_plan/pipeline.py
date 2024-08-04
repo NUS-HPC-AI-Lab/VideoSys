@@ -12,34 +12,31 @@ import inspect
 import math
 import re
 import urllib.parse as ul
-from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
+import ftfy
 import torch
 import torch.distributed as dist
+from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL, Transformer2DModel
-from diffusers.pipelines.pipeline_utils import DiffusionPipeline
-from diffusers.schedulers import DPMSolverMultistepScheduler
-from diffusers.utils import (
-    BACKENDS_MAPPING,
-    BaseOutput,
-    is_bs4_available,
-    is_ftfy_available,
-    logging,
-    replace_example_docstring,
-)
+from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from opendit.core.pab_mgr import (
+    PABConfig,
+    get_diffusion_skip,
+    get_diffusion_skip_timestep,
+    set_pab_manager,
+    skip_diffusion_timestep,
+    update_steps,
+)
+from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from opendit.utils.logging import logger
+from opendit.utils.utils import save_video
 
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-if is_bs4_available():
-    from bs4 import BeautifulSoup
-
-if is_ftfy_available():
-    import ftfy
+from .ae import ae_stride_config, getae_wrapper
+from .latte import LatteT2V
 
 EXAMPLE_DOC_STRING = """
     Examples:
@@ -58,12 +55,71 @@ EXAMPLE_DOC_STRING = """
 """
 
 
-@dataclass
-class VideoPipelineOutput(BaseOutput):
-    video: torch.Tensor
+class OpenSoraPlanPABConfig(PABConfig):
+    def __init__(
+        self,
+        steps: int = 150,
+        spatial_broadcast: bool = True,
+        spatial_threshold: list = [100, 800],
+        spatial_gap: int = 2,
+        temporal_broadcast: bool = True,
+        temporal_threshold: list = [100, 750],
+        temporal_gap: int = 4,
+        cross_broadcast: bool = True,
+        cross_threshold: list = [100, 850],
+        cross_gap: int = 6,
+        diffusion_skip: bool = False,
+        diffusion_timestep_respacing: list = None,
+        diffusion_skip_timestep: list = None,
+    ):
+        super().__init__(
+            steps=steps,
+            spatial_broadcast=spatial_broadcast,
+            spatial_threshold=spatial_threshold,
+            spatial_gap=spatial_gap,
+            temporal_broadcast=temporal_broadcast,
+            temporal_threshold=temporal_threshold,
+            temporal_gap=temporal_gap,
+            cross_broadcast=cross_broadcast,
+            cross_threshold=cross_threshold,
+            cross_gap=cross_gap,
+            diffusion_skip=diffusion_skip,
+            diffusion_timestep_respacing=diffusion_timestep_respacing,
+            diffusion_skip_timestep=diffusion_skip_timestep,
+        )
 
 
-class VideoGenPipeline(DiffusionPipeline):
+class OpenSoraPlanConfig:
+    def __init__(
+        self,
+        model_path: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
+        num_frames: int = 65,
+        ae: str = "CausalVAEModel_4x8x8",
+        text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
+        # ======= vae =======
+        enable_tiling: bool = True,
+        tile_overlap_factor: float = 0.25,
+        # ======= pab ========
+        enable_pab: bool = False,
+        pab_config: PABConfig = OpenSoraPlanPABConfig(),
+    ):
+        self.model_path = model_path
+        assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
+        self.num_frames = num_frames
+        self.version = f"{num_frames}x512x512"
+        self.ae = ae
+        self.text_encoder = text_encoder
+
+        # ======= vae ========
+        self.enable_tiling = enable_tiling
+        self.tile_overlap_factor = tile_overlap_factor
+
+        # ======= pab ========
+        self.enable_pab = enable_pab
+        self.pab_config = pab_config
+
+
+class OpenSoraPlanPipeline(VideoSysPipeline):
     r"""
     Pipeline for text-to-image generation using PixArt-Alpha.
 
@@ -94,13 +150,43 @@ class VideoGenPipeline(DiffusionPipeline):
 
     def __init__(
         self,
-        tokenizer: T5Tokenizer,
-        text_encoder: T5EncoderModel,
-        vae: AutoencoderKL,
-        transformer: Transformer2DModel,
-        scheduler: DPMSolverMultistepScheduler,
+        config: OpenSoraPlanConfig = OpenSoraPlanConfig(),
+        tokenizer: Optional[T5Tokenizer] = None,
+        text_encoder: Optional[T5EncoderModel] = None,
+        vae: Optional[AutoencoderKL] = None,
+        transformer: Optional[Transformer2DModel] = None,
+        scheduler: Optional[PNDMScheduler] = None,
+        device: torch.device = torch.device("cuda"),
+        dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
+        self._config = config
+
+        # init
+        if tokenizer is None:
+            tokenizer = T5Tokenizer.from_pretrained(config.text_encoder)
+        if text_encoder is None:
+            text_encoder = T5EncoderModel.from_pretrained(config.text_encoder, torch_dtype=torch.float16)
+        if vae is None:
+            vae = getae_wrapper(config.ae)(config.model_path, subfolder="vae").to(dtype=dtype)
+        if transformer is None:
+            transformer = LatteT2V.from_pretrained(config.model_path, subfolder=config.version, torch_dtype=dtype)
+        if scheduler is None:
+            scheduler = PNDMScheduler()
+
+        # setting
+        if config.enable_tiling:
+            vae.vae.enable_tiling()
+            vae.vae.tile_overlap_factor = config.tile_overlap_factor
+        vae.vae_scale_factor = ae_stride_config[config.ae]
+        transformer.force_images = False
+
+        # set eval and device
+        self.set_eval_and_device(device, text_encoder, vae, transformer)
+
+        # pab
+        if config.enable_pab:
+            set_pab_manager(config.pab_config)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
@@ -354,16 +440,6 @@ class VideoGenPipeline(DiffusionPipeline):
 
     # Copied from diffusers.pipelines.deepfloyd_if.pipeline_if.IFPipeline._text_preprocessing
     def _text_preprocessing(self, text, clean_caption=False):
-        if clean_caption and not is_bs4_available():
-            logger.warn(BACKENDS_MAPPING["bs4"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
-        if clean_caption and not is_ftfy_available():
-            logger.warn(BACKENDS_MAPPING["ftfy"][-1].format("Setting `clean_caption=True`"))
-            logger.warn("Setting `clean_caption` to False...")
-            clean_caption = False
-
         if not isinstance(text, (tuple, list)):
             text = [text]
 
@@ -519,18 +595,13 @@ class VideoGenPipeline(DiffusionPipeline):
         return latents
 
     @torch.no_grad()
-    @replace_example_docstring(EXAMPLE_DOC_STRING)
-    def __call__(
+    def generate(
         self,
         prompt: Union[str, List[str]] = None,
         negative_prompt: str = "",
-        num_inference_steps: int = 20,
-        timesteps: List[int] = None,
-        guidance_scale: float = 4.5,
+        num_inference_steps: int = 150,
+        guidance_scale: float = 7.5,
         num_images_per_prompt: Optional[int] = 1,
-        num_frames: Optional[int] = None,
-        height: Optional[int] = None,
-        width: Optional[int] = None,
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
@@ -544,7 +615,7 @@ class VideoGenPipeline(DiffusionPipeline):
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
         verbose: bool = False,
-    ) -> Union[VideoPipelineOutput, Tuple]:
+    ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
 
@@ -615,8 +686,10 @@ class VideoGenPipeline(DiffusionPipeline):
                 returned where the first element is a list with the generated images
         """
         # 1. Check inputs. Raise error if not correct
-        # height = height or self.transformer.config.sample_size * self.vae_scale_factor
-        # width = width or self.transformer.config.sample_size * self.vae_scale_factor
+        height = 512
+        width = 512
+        num_frames = self._config.num_frames
+        update_steps(num_inference_steps)
         self.check_inputs(prompt, height, width, negative_prompt, callback_steps, prompt_embeds, negative_prompt_embeds)
 
         # 2. Default height and width to transformer
@@ -765,7 +838,7 @@ class VideoGenPipeline(DiffusionPipeline):
             video = video[:, :num_frames, :height, :width]
         else:
             video = latents
-            return VideoPipelineOutput(video=video)
+            return VideoSysPipelineOutput(video=video)
 
         # Offload all models
         self.maybe_free_model_hooks()
@@ -773,10 +846,13 @@ class VideoGenPipeline(DiffusionPipeline):
         if not return_dict:
             return (video,)
 
-        return VideoPipelineOutput(video=video)
+        return VideoSysPipelineOutput(video=video)
 
     def decode_latents(self, latents):
         video = self.vae.decode(latents)  # b t c h w
         # b t c h w -> b t h w c
         video = ((video / 2.0 + 0.5).clamp(0, 1) * 255).to(dtype=torch.uint8).cpu().permute(0, 1, 3, 4, 2).contiguous()
         return video
+
+    def save_video(self, video, output_path):
+        save_video(video, output_path, fps=24)

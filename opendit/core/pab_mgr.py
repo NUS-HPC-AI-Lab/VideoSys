@@ -2,28 +2,28 @@ import random
 
 import numpy as np
 import torch
-import torch.distributed as dist
+
+from opendit.utils.logging import logger
 
 PAB_MANAGER = None
 
 
-class PABManager:
+class PABConfig:
     def __init__(
         self,
-        steps: int = 100,
-        cross_broadcast: bool = False,
-        cross_threshold: list = [100, 900],
-        cross_gap: int = 5,
-        spatial_broadcast: bool = False,
-        spatial_threshold: list = [100, 900],
-        spatial_gap: int = 2,
-        temporal_broadcast: bool = False,
-        temporal_threshold: list = [100, 900],
-        temporal_gap: int = 3,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
-        # mlp
+        steps: int,
+        cross_broadcast: bool,
+        cross_threshold: list,
+        cross_gap: int,
+        spatial_broadcast: bool,
+        spatial_threshold: list,
+        spatial_gap: int,
+        temporal_broadcast: bool,
+        temporal_threshold: list,
+        temporal_gap: int,
+        diffusion_skip: bool,
+        diffusion_timestep_respacing: list,
+        diffusion_skip_timestep: list,
         mlp_skip: bool = False,
         mlp_spatial_skip_config: dict = None,
         mlp_temporal_skip_config: dict = None,
@@ -53,56 +53,54 @@ class PABManager:
         self.temporal_mlp_outputs = {}
         self.spatial_mlp_outputs = {}
 
-        if dist.get_rank() == 0:
-            print(
-                f"\n\
-Init SkipManager:\n\
-    steps={steps}\n\
-    cross_broadcast={cross_broadcast}, cross_threshold={cross_threshold}, cross_gap={cross_gap}\n\
-    spatial_broadcast={spatial_broadcast}, spatial_threshold={spatial_threshold}, spatial_gap={spatial_gap}\n\
-    temporal_broadcast={temporal_broadcast}, temporal_threshold={temporal_threshold}, temporal_gap={temporal_gap}\n\
-    mlp_skip={mlp_skip}\n\
-\n",
-                end="",
-            )
+
+class PABManager:
+    def __init__(self, config: PABConfig):
+        self.config: PABConfig = config
+
+        init_prompt = f"Init PABManager. steps: {config.steps}."
+        init_prompt += f" spatial_broadcast: {config.spatial_broadcast}, spatial_threshold: {config.spatial_threshold}, spatial_gap: {config.spatial_gap}."
+        init_prompt += f" temporal_broadcast: {config.temporal_broadcast}, temporal_threshold: {config.temporal_threshold}, temporal_gap: {config.temporal_gap}."
+        init_prompt += f" cross_broadcast: {config.cross_broadcast}, cross_threshold: {config.cross_threshold}, cross_gap: {config.cross_gap}."
+        logger.info(init_prompt)
 
     def if_broadcast_cross(self, timestep: int, count: int):
         if (
-            self.cross_broadcast
+            self.config.cross_broadcast
             and (timestep is not None)
-            and (count % self.cross_gap != 0)
-            and (self.cross_threshold[0] < timestep < self.cross_threshold[1])
+            and (count % self.config.cross_gap != 0)
+            and (self.config.cross_threshold[0] < timestep < self.config.cross_threshold[1])
         ):
             flag = True
         else:
             flag = False
-        count = (count + 1) % self.steps
+        count = (count + 1) % self.config.steps
         return flag, count
 
     def if_broadcast_temporal(self, timestep: int, count: int):
         if (
-            self.temporal_broadcast
+            self.config.temporal_broadcast
             and (timestep is not None)
-            and (count % self.temporal_gap != 0)
-            and (self.temporal_threshold[0] < timestep < self.temporal_threshold[1])
+            and (count % self.config.temporal_gap != 0)
+            and (self.config.temporal_threshold[0] < timestep < self.config.temporal_threshold[1])
         ):
             flag = True
         else:
             flag = False
-        count = (count + 1) % self.steps
+        count = (count + 1) % self.config.steps
         return flag, count
 
     def if_broadcast_spatial(self, timestep: int, count: int, block_idx: int):
         if (
-            self.spatial_broadcast
+            self.config.spatial_broadcast
             and (timestep is not None)
-            and (count % self.spatial_gap != 0)
-            and (self.spatial_threshold[0] < timestep < self.spatial_threshold[1])
+            and (count % self.config.spatial_gap != 0)
+            and (self.config.spatial_threshold[0] < timestep < self.config.spatial_threshold[1])
         ):
             flag = True
         else:
             flag = False
-        count = (count + 1) % self.steps
+        count = (count + 1) % self.config.steps
         return flag, count
 
     def if_skip_mlp(
@@ -239,50 +237,24 @@ Init SkipManager:\n\
         return self.temporal_mlp_outputs
 
 
-def set_pab_manager(
-    steps: int = 100,
-    cross_broadcast: bool = False,
-    cross_threshold: list = [100, 900],
-    cross_gap: int = 5,
-    spatial_broadcast: bool = False,
-    spatial_threshold: list = [100, 900],
-    spatial_gap: int = 2,
-    temporal_broadcast: bool = False,
-    temporal_threshold: list = [100, 900],
-    temporal_gap: int = 3,
-    diffusion_skip: bool = False,
-    diffusion_timestep_respacing: list = None,
-    diffusion_skip_timestep: list = None,
-    # mlp
-    mlp_skip: bool = False,
-    mlp_spatial_skip_config: dict = None,
-    mlp_temporal_skip_config: dict = None,
-):
+def set_pab_manager(config: PABConfig):
     global PAB_MANAGER
-    PAB_MANAGER = PABManager(
-        steps,
-        cross_broadcast,
-        cross_threshold,
-        cross_gap,
-        spatial_broadcast,
-        spatial_threshold,
-        spatial_gap,
-        temporal_broadcast,
-        temporal_threshold,
-        temporal_gap,
-        diffusion_skip,
-        diffusion_timestep_respacing,
-        diffusion_skip_timestep,
-        mlp_skip,
-        mlp_spatial_skip_config,
-        mlp_temporal_skip_config,
-    )
+    PAB_MANAGER = PABManager(config)
 
 
 def enable_pab():
     if PAB_MANAGER is None:
         return False
-    return PAB_MANAGER.cross_broadcast or PAB_MANAGER.spatial_broadcast or PAB_MANAGER.temporal_broadcast
+    return (
+        PAB_MANAGER.config.cross_broadcast
+        or PAB_MANAGER.config.spatial_broadcast
+        or PAB_MANAGER.config.temporal_broadcast
+    )
+
+
+def update_steps(steps: int):
+    if PAB_MANAGER is not None:
+        PAB_MANAGER.config.steps = steps
 
 
 def if_broadcast_cross(timestep: int, count: int):
@@ -316,15 +288,15 @@ def get_skip_output(skip_range, timestep, block_idx: int, is_temporal=False, is_
 
 
 def get_diffusion_skip():
-    return enable_pab() and PAB_MANAGER.diffusion_skip
+    return enable_pab() and PAB_MANAGER.config.diffusion_skip
 
 
 def get_diffusion_timestep_respacing():
-    return PAB_MANAGER.diffusion_timestep_respacing
+    return PAB_MANAGER.config.diffusion_timestep_respacing
 
 
 def get_diffusion_skip_timestep():
-    return enable_pab() and PAB_MANAGER.diffusion_skip_timestep
+    return enable_pab() and PAB_MANAGER.config.diffusion_skip_timestep
 
 
 def space_timesteps(time_steps, time_bins):

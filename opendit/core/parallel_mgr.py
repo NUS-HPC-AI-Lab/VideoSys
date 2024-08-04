@@ -1,6 +1,13 @@
+from typing import Optional
+
+import colossalai
+import torch
 import torch.distributed as dist
 from colossalai.cluster.process_group_mesh import ProcessGroupMesh
 from torch.distributed import ProcessGroup
+
+from opendit.utils.logging import init_dist_logger
+from opendit.utils.utils import set_seed
 
 PARALLEL_MANAGER = None
 
@@ -52,3 +59,24 @@ def enable_sequence_parallel():
 
 def get_parallel_manager():
     return PARALLEL_MANAGER
+
+
+def initialize(seed: Optional[int] = None, sp_size: Optional[int] = None):
+    if not dist.is_initialized():
+        colossalai.launch_from_torch({})
+        init_dist_logger()
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
+    if sp_size is None:
+        sp_size = dist.get_world_size()
+        dp_size = 1
+    else:
+        assert dist.get_world_size() % sp_size == 0, f"world_size {dist.get_world_size()} must be divisible by sp_size"
+        dp_size = dist.get_world_size() // sp_size
+
+    set_parallel_manager(dp_size, sp_size)
+
+    if seed is not None:
+        local_seed = seed + get_data_parallel_rank()
+        set_seed(local_seed)

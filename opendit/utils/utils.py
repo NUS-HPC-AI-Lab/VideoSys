@@ -1,7 +1,7 @@
-import logging
 import os
 import random
 
+import imageio
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -58,29 +58,11 @@ def all_exists(paths):
     return all(os.path.exists(path) for path in paths)
 
 
-def get_logger():
-    return logging.getLogger(__name__)
-
-
-def create_logger(logging_dir=None):
+def save_video(video, output_path, fps):
     """
-    Create a logger that writes to a log file and stdout.
+    Save a video to disk.
     """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     if dist.get_rank() == 0:
-        additional_args = dict()
-        if logging_dir is not None:
-            additional_args["handlers"] = [
-                logging.StreamHandler(),
-                logging.FileHandler(f"{logging_dir}/log.txt"),
-            ]
-        logging.basicConfig(
-            level=logging.INFO,
-            format="[\033[34m%(asctime)s\033[0m] %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            **additional_args,
-        )
-        logger = logging.getLogger(__name__)
-    else:  # dummy logger (does nothing)
-        logger = logging.getLogger(__name__)
-        logger.addHandler(logging.NullHandler())
-    return logger
+        imageio.mimwrite(output_path, video, fps=fps)
+    dist.barrier()

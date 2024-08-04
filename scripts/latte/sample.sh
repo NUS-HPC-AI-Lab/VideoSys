@@ -1,1 +1,2 @@
-torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py --config configs/latte/sample.yaml
+NUM_GPUS=1
+torchrun --standalone --nproc_per_node=$NUM_GPUS scripts/latte/sample.py
