@@ -205,8 +205,6 @@ class RFLOW:
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
             timesteps = [timestep_transform(t, additional_args, num_timesteps=self.num_timesteps) for t in timesteps]
-        print(f"timesteps: {timesteps}")
-        # TODO: jump diffusion steps
 
         if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
             orignal_timesteps = timesteps
