@@ -27,7 +27,15 @@ from opendit.core.comm import (
     set_temporal_pad,
     split_sequence,
 )
-from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
+from opendit.core.pab_mgr import (
+    enable_pab,
+    get_mlp_output,
+    if_broadcast_cross,
+    if_broadcast_mlp,
+    if_broadcast_spatial,
+    if_broadcast_temporal,
+    save_mlp_output,
+)
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 
 from .modules import (
@@ -84,12 +92,13 @@ class STDiT3Block(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
-        # fast video diffusion
+        # pab
         self.block_idx = block_idx
         self.attn_count = 0
         self.last_attn = None
         self.cross_count = 0
         self.last_cross = None
+        self.mlp_count = 0
 
     def t_mask_select(self, x_mask, x, masked_x, T, S):
         # x: [B, (T, S), C]
@@ -112,6 +121,7 @@ class STDiT3Block(nn.Module):
         T=None,  # number of frames
         S=None,  # number of pixel patches
         timestep=None,
+        all_timesteps=None,
     ):
         # prepare modulate parameters
         B, N, C = x.shape
@@ -123,12 +133,15 @@ class STDiT3Block(nn.Module):
                 self.scale_shift_table[None] + t0.reshape(B, 6, -1)
             ).chunk(6, dim=1)
 
-        if self.temporal:
-            broadcast_attn, self.attn_count = if_broadcast_temporal(int(timestep[0]), self.attn_count)
-        else:
-            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count, self.block_idx)
+        if enable_pab():
+            if self.temporal:
+                broadcast_attn, self.attn_count = if_broadcast_temporal(int(timestep[0]), self.attn_count)
+            else:
+                broadcast_attn, self.attn_count = if_broadcast_spatial(
+                    int(timestep[0]), self.attn_count, self.block_idx
+                )
 
-        if broadcast_attn:
+        if enable_pab() and broadcast_attn:
             x_m_s = self.last_attn
         else:
             # modulate (attention)
@@ -164,8 +177,10 @@ class STDiT3Block(nn.Module):
         x = x + self.drop_path(x_m_s)
 
         # cross attention
-        broadcast_cross, self.cross_count = if_broadcast_cross(int(timestep[0]), self.cross_count)
-        if broadcast_cross:
+        if enable_pab():
+            broadcast_cross, self.cross_count = if_broadcast_cross(int(timestep[0]), self.cross_count)
+
+        if enable_pab() and broadcast_cross:
             x = x + self.last_cross
         else:
             x_cross = self.cross_attn(x, y, mask)
@@ -173,20 +188,45 @@ class STDiT3Block(nn.Module):
                 self.last_cross = x_cross
             x = x + x_cross
 
-        # modulate (MLP)
-        x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
-        if x_mask is not None:
-            x_m_zero = t2i_modulate(self.norm2(x), shift_mlp_zero, scale_mlp_zero)
-            x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
+        if enable_pab():
+            broadcast_mlp, self.mlp_count, broadcast_next, skip_range = if_broadcast_mlp(
+                int(timestep[0]),
+                self.mlp_count,
+                self.block_idx,
+                all_timesteps,
+                is_temporal=self.temporal,
+            )
 
-        # MLP
-        x_m = self.mlp(x_m)
+        if enable_pab() and broadcast_mlp:
+            x_m_s = get_mlp_output(
+                skip_range,
+                timestep=int(timestep[0]),
+                block_idx=self.block_idx,
+                is_temporal=self.temporal,
+            )
+        else:
+            # modulate (MLP)
+            x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
+            if x_mask is not None:
+                x_m_zero = t2i_modulate(self.norm2(x), shift_mlp_zero, scale_mlp_zero)
+                x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
-        # modulate (MLP)
-        x_m_s = gate_mlp * x_m
-        if x_mask is not None:
-            x_m_s_zero = gate_mlp_zero * x_m
-            x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
+            # MLP
+            x_m = self.mlp(x_m)
+
+            # modulate (MLP)
+            x_m_s = gate_mlp * x_m
+            if x_mask is not None:
+                x_m_s_zero = gate_mlp_zero * x_m
+                x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
+
+            if enable_pab() and broadcast_next:
+                save_mlp_output(
+                    timestep=int(timestep[0]),
+                    block_idx=self.block_idx,
+                    ff_output=x_m_s,
+                    is_temporal=self.temporal,
+                )
 
         # residual
         x = x + self.drop_path(x_m_s)
@@ -343,7 +383,6 @@ class STDiT3(PreTrainedModel):
                 for i in range(config.depth)
             ]
         )
-
         # final layer
         self.final_layer = T2IFinalLayer(config.hidden_size, np.prod(self.patch_size), self.out_channels)
 
@@ -407,7 +446,9 @@ class STDiT3(PreTrainedModel):
             y = y.squeeze(1).view(1, -1, self.hidden_size)
         return y, y_lens
 
-    def forward(self, x, timestep, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs):
+    def forward(
+        self, x, timestep, all_timesteps, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
+    ):
         dtype = self.x_embedder.proj.weight.dtype
         B = x.size(0)
         x = x.to(dtype)
@@ -463,8 +504,33 @@ class STDiT3(PreTrainedModel):
 
         # === blocks ===
         for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+            x = auto_grad_checkpoint(
+                spatial_block,
+                x,
+                y,
+                t_mlp,
+                y_lens,
+                x_mask,
+                t0_mlp,
+                T,
+                S,
+                timestep,
+                all_timesteps=all_timesteps,
+            )
+
+            x = auto_grad_checkpoint(
+                temporal_block,
+                x,
+                y,
+                t_mlp,
+                y_lens,
+                x_mask,
+                t0_mlp,
+                T,
+                S,
+                timestep,
+                all_timesteps=all_timesteps,
+            )
 
         if enable_sequence_parallel():
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
