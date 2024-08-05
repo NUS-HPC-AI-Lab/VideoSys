@@ -43,12 +43,12 @@ from opendit.core.comm import (
 )
 from opendit.core.pab_mgr import (
     enable_pab,
-    get_skip_output,
+    get_mlp_output,
     if_broadcast_cross,
+    if_broadcast_mlp,
     if_broadcast_spatial,
     if_broadcast_temporal,
-    if_skip_mlp,
-    save_skip_output,
+    save_mlp_output,
 )
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 
@@ -341,16 +341,13 @@ class BasicTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
-        # fvd
+        # pab
         self.cross_last = None
         self.cross_count = 0
         self.spatial_last = None
         self.spatial_count = 0
         self.block_idx = block_idx
-        # mse
-        self.mlp_outputs = []
         self.mlp_count = 0
-        self.temporal = False
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
@@ -383,10 +380,12 @@ class BasicTransformerBlock(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        broadcast_spatial, self.spatial_count = if_broadcast_spatial(
-            int(org_timestep[0]), self.spatial_count, self.block_idx
-        )
-        if broadcast_spatial:
+        if enable_pab():
+            broadcast_spatial, self.spatial_count = if_broadcast_spatial(
+                int(org_timestep[0]), self.spatial_count, self.block_idx
+            )
+
+        if enable_pab() and broadcast_spatial:
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -474,23 +473,21 @@ class BasicTransformerBlock(nn.Module):
 
         # 4. Feed-forward
         # i2vgen doesn't have this norm 🤷‍♂️
-        # TODO skip mlp
-        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
-            int(org_timestep[0]),
-            self.mlp_count,
-            self.block_idx,
-            all_timesteps.tolist(),
-            is_temporal=self.temporal,
-            is_spatial=(not self.temporal),
-        )
+        if enable_pab():
+            broadcast_mlp, self.mlp_count, broadcast_next, broadcast_range = if_broadcast_mlp(
+                int(org_timestep[0]),
+                self.mlp_count,
+                self.block_idx,
+                all_timesteps.tolist(),
+                is_temporal=False,
+            )
 
-        if skip_mlp:
-            ff_output = get_skip_output(
-                skip_range,
+        if enable_pab() and broadcast_mlp:
+            ff_output = get_mlp_output(
+                broadcast_range,
                 timestep=int(org_timestep[0]),
                 block_idx=self.block_idx,
-                is_temporal=self.temporal,
-                is_spatial=(not self.temporal),
+                is_temporal=False,
             )
         else:
             if self.norm_type == "ada_norm_continuous":
@@ -512,14 +509,13 @@ class BasicTransformerBlock(nn.Module):
             elif self.norm_type == "ada_norm_single":
                 ff_output = gate_mlp * ff_output
 
-            if skip_next:
+            if enable_pab() and broadcast_next:
                 # spatial
-                save_skip_output(
+                save_mlp_output(
                     timestep=int(org_timestep[0]),
                     block_idx=self.block_idx,
                     ff_output=ff_output,
-                    is_temporal=self.temporal,
-                    is_spatial=(not self.temporal),
+                    is_temporal=False,
                 )
 
         hidden_states = ff_output + hidden_states
@@ -672,12 +668,10 @@ class BasicTransformerBlock_(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
-        # fvd
+        # pab
         self.last_out = None
         self.mlp_count = 0
-        self.temporal = True
         self.block_idx = block_idx
-        # fvd
         self.count = 0
 
     def set_last_out(self, last_out: torch.Tensor):
@@ -711,8 +705,10 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        broadcast_temporal, self.count = if_broadcast_temporal(int(org_timestep[0]), self.count)
-        if broadcast_temporal:
+        if enable_pab():
+            broadcast_temporal, self.count = if_broadcast_temporal(int(org_timestep[0]), self.count)
+
+        if enable_pab() and broadcast_temporal:
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -763,23 +759,21 @@ class BasicTransformerBlock_(nn.Module):
 
         hidden_states = attn_output + hidden_states
 
-        # TODO skip mlp here
-        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
-            int(org_timestep[0]),
-            self.mlp_count,
-            self.block_idx,
-            all_timesteps.tolist(),
-            is_temporal=self.temporal,
-            is_spatial=(not self.temporal),
-        )
+        if enable_pab():
+            broadcast_mlp, self.mlp_count, broadcast_next, broadcast_range = if_broadcast_mlp(
+                int(org_timestep[0]),
+                self.mlp_count,
+                self.block_idx,
+                all_timesteps.tolist(),
+                is_temporal=True,
+            )
 
-        if skip_mlp:
-            ff_output = get_skip_output(
-                skip_range,
+        if enable_pab() and broadcast_mlp:
+            ff_output = get_mlp_output(
+                broadcast_range,
                 timestep=int(org_timestep[0]),
                 block_idx=self.block_idx,
-                is_temporal=self.temporal,
-                is_spatial=(not self.temporal),
+                is_temporal=True,
             )
         else:
             if hidden_states.ndim == 4:
@@ -820,14 +814,12 @@ class BasicTransformerBlock_(nn.Module):
             elif self.use_ada_layer_norm_single:
                 ff_output = gate_mlp * ff_output
 
-            if skip_next:
-                # temporal
-                save_skip_output(
+            if enable_pab() and broadcast_next:
+                save_mlp_output(
                     timestep=int(org_timestep[0]),
                     block_idx=self.block_idx,
                     ff_output=ff_output,
-                    is_temporal=self.temporal,
-                    is_spatial=(not self.temporal),
+                    is_temporal=True,
                 )
 
         hidden_states = ff_output + hidden_states

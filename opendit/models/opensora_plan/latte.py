@@ -57,12 +57,12 @@ from opendit.core.comm import (
 )
 from opendit.core.pab_mgr import (
     enable_pab,
-    get_skip_output,
+    get_mlp_output,
     if_broadcast_cross,
+    if_broadcast_mlp,
     if_broadcast_spatial,
     if_broadcast_temporal,
-    if_skip_mlp,
-    save_skip_output,
+    save_mlp_output,
 )
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 from opendit.utils.logging import logger
@@ -1541,14 +1541,11 @@ class BasicTransformerBlock_(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
-        # fvd
+        # pab
         self.last_out = None
         self.count = 0
-
-        # mlp
         self.block_idx = block_idx
         self.temp_mlp_count = 0
-        self.temporal = True
 
     def set_last_out(self, last_out: torch.Tensor):
         self.last_out = last_out
@@ -1671,25 +1668,23 @@ class BasicTransformerBlock_(nn.Module):
         # 4. Feed-forward
         # if not self.use_ada_layer_norm_single:
         #     norm_hidden_states = self.norm3(hidden_states)
-        # TODO skip mlp
-        skip_mlp, self.temp_mlp_count, skip_next, skip_range = if_skip_mlp(
-            int(org_timestep[0]),
-            self.temp_mlp_count,
-            self.block_idx,
-            all_timesteps.tolist(),
-            is_temporal=self.temporal,
-            is_spatial=(not self.temporal),
-        )
 
-        if skip_mlp:
-            ff_output = get_skip_output(
-                skip_range,
-                timestep=int(org_timestep[0]),
-                block_idx=self.block_idx,
-                is_temporal=self.temporal,
-                is_spatial=(not self.temporal),
+        if enable_pab():
+            broadcast_mlp, self.temp_mlp_count, broadcast_next, broadcast_range = if_broadcast_mlp(
+                int(org_timestep[0]),
+                self.temp_mlp_count,
+                self.block_idx,
+                all_timesteps.tolist(),
+                is_temporal=True,
             )
 
+        if enable_pab() and broadcast_mlp:
+            ff_output = get_mlp_output(
+                broadcast_range,
+                timestep=int(org_timestep[0]),
+                block_idx=self.block_idx,
+                is_temporal=True,
+            )
         else:
             if self.use_ada_layer_norm_zero:
                 norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
@@ -1722,13 +1717,12 @@ class BasicTransformerBlock_(nn.Module):
             elif self.use_ada_layer_norm_single:
                 ff_output = gate_mlp * ff_output
 
-            if skip_next:
-                save_skip_output(
+            if enable_pab() and broadcast_next:
+                save_mlp_output(
                     timestep=int(org_timestep[0]),
                     block_idx=self.block_idx,
                     ff_output=ff_output,
-                    is_temporal=self.temporal,
-                    is_spatial=(not self.temporal),
+                    is_temporal=True,
                 )
 
         if self.use_ada_layer_norm_zero:
@@ -1946,16 +1940,13 @@ class BasicTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
-        # fvd
+        # pab
         self.cross_last = None
         self.cross_count = 0
         self.spatial_last = None
         self.spatial_count = 0
         self.block_idx = block_idx
-
-        # skip
         self.spatila_mlp_count = 0
-        self.temporal = False
 
     def set_cross_last(self, last_out: torch.Tensor):
         self.cross_last = last_out
@@ -2084,23 +2075,21 @@ class BasicTransformerBlock(nn.Module):
                 if enable_pab():
                     self.set_cross_last(attn_output)
 
-        # TODO skip mlp here
-        skip_mlp, self.spatila_mlp_count, skip_next, skip_range = if_skip_mlp(
-            int(org_timestep[0]),
-            self.spatila_mlp_count,
-            self.block_idx,
-            all_timesteps.tolist(),
-            is_temporal=self.temporal,
-            is_spatial=(not self.temporal),
-        )
+        if enable_pab():
+            broadcast_mlp, self.spatila_mlp_count, broadcast_next, broadcast_range = if_broadcast_mlp(
+                int(org_timestep[0]),
+                self.spatila_mlp_count,
+                self.block_idx,
+                all_timesteps.tolist(),
+                is_temporal=False,
+            )
 
-        if skip_mlp:
-            ff_output = get_skip_output(
-                skip_range,
+        if enable_pab() and broadcast_mlp:
+            ff_output = get_mlp_output(
+                broadcast_range,
                 timestep=int(org_timestep[0]),
                 block_idx=self.block_idx,
-                is_temporal=self.temporal,
-                is_spatial=(not self.temporal),
+                is_temporal=False,
             )
         else:
             # 4. Feed-forward
@@ -2121,13 +2110,12 @@ class BasicTransformerBlock(nn.Module):
             elif self.use_ada_layer_norm_single:
                 ff_output = gate_mlp * ff_output
 
-            if skip_next:
-                save_skip_output(
+            if enable_pab() and broadcast_next:
+                save_mlp_output(
                     timestep=int(org_timestep[0]),
                     block_idx=self.block_idx,
                     ff_output=ff_output,
-                    is_temporal=self.temporal,
-                    is_spatial=(not self.temporal),
+                    is_temporal=False,
                 )
 
         hidden_states = ff_output + hidden_states

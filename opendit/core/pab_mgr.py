@@ -103,82 +103,55 @@ class PABManager:
         count = (count + 1) % self.config.steps
         return flag, count
 
-    def if_skip_mlp(
-        self, timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False, is_spatial=False
-    ):
-        # timestep in skip_config? / previous timestep in skip_config?
-        def is_t_in_skip_config(all_timesteps, timestep, config):
-            is_t_in_skip_config = False
-            for key in config:
-                index = all_timesteps.index(key)
-                skip_range = all_timesteps[index : index + 1 + int(config[key]["skip_count"])]
-                if timestep in skip_range:
-                    is_t_in_skip_config = True
-                    skip_range = [all_timesteps[index], all_timesteps[index + int(config[key]["skip_count"])]]
-                    break
-            return is_t_in_skip_config, skip_range
+    @staticmethod
+    def _is_t_in_skip_config(all_timesteps, timestep, config):
+        is_t_in_skip_config = False
+        for key in config:
+            index = all_timesteps.index(key)
+            skip_range = all_timesteps[index : index + 1 + int(config[key]["skip_count"])]
+            if timestep in skip_range:
+                is_t_in_skip_config = True
+                skip_range = [all_timesteps[index], all_timesteps[index + int(config[key]["skip_count"])]]
+                break
+        return is_t_in_skip_config, skip_range
 
+    def if_skip_mlp(self, timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False):
         if is_temporal:
-            is_t_in_skip_config, skip_range = is_t_in_skip_config(
-                all_timesteps, timestep, self.config.mlp_temporal_skip_config
-            )
-            next_flag = False
-            if (
-                self.config.mlp_skip
-                and (timestep is not None)
-                and (timestep in self.config.mlp_temporal_skip_config)
-                and (block_idx in self.config.mlp_temporal_skip_config[timestep]["block"])
-            ):
-                flag = False
-                next_flag = True
-                count = count + 1
-            elif (
-                self.config.mlp_skip
-                and (timestep is not None)
-                and (is_t_in_skip_config)
-                and (block_idx in self.config.mlp_temporal_skip_config[skip_range[0]]["block"])
-            ):
-                flag = True
-                count = 0
-            else:
-                flag = False
+            cur_config = self.config.mlp_temporal_skip_config
+        else:
+            cur_config = self.config.mlp_spatial_skip_config
 
-            return flag, count, next_flag, skip_range
+        is_t_in_skip_config, skip_range = self._is_t_in_skip_config(all_timesteps, timestep, cur_config)
+        next_flag = False
+        if (
+            self.config.mlp_skip
+            and (timestep is not None)
+            and (timestep in cur_config)
+            and (block_idx in cur_config[timestep]["block"])
+        ):
+            flag = False
+            next_flag = True
+            count = count + 1
+        elif (
+            self.config.mlp_skip
+            and (timestep is not None)
+            and (is_t_in_skip_config)
+            and (block_idx in cur_config[skip_range[0]]["block"])
+        ):
+            flag = True
+            count = 0
+        else:
+            flag = False
 
-        elif is_spatial:
-            is_t_in_skip_config, skip_range = is_t_in_skip_config(
-                all_timesteps, timestep, self.config.mlp_spatial_skip_config
-            )
-            next_flag = False
-            if (
-                self.config.mlp_skip
-                and (timestep is not None)
-                and (timestep in self.config.mlp_spatial_skip_config)
-                and (block_idx in self.config.mlp_spatial_skip_config[timestep]["block"])
-            ):
-                flag = False
-                next_flag = True
-                count = count + 1
-            elif (
-                self.config.mlp_skip
-                and (timestep is not None)
-                and (is_t_in_skip_config)
-                and (block_idx in self.config.mlp_spatial_skip_config[skip_range[0]]["block"])
-            ):
-                flag = True
-                count = 0
-            else:
-                flag = False
+        return flag, count, next_flag, skip_range
 
-            return flag, count, next_flag, skip_range
-
-    def save_skip_output(self, timestep, block_idx, ff_output, is_temporal=False, is_spatial=False):
+    def save_skip_output(self, timestep, block_idx, ff_output, is_temporal=False):
         if is_temporal:
             self.config.temporal_mlp_outputs[(timestep, block_idx)] = ff_output
-        if is_spatial:
+        else:
             self.config.spatial_mlp_outputs[(timestep, block_idx)] = ff_output
 
-    def get_skip_output(self, skip_range, timestep, block_idx, is_temporal=False, is_spatial=False):
+    def get_mlp_output(self, skip_range, timestep, block_idx, is_temporal=False):
         skip_start_t = skip_range[0]
         if is_temporal:
             skip_output = (
@@ -186,7 +159,7 @@ class PABManager:
                 if self.config.temporal_mlp_outputs is not None
                 else None
             )
-        if is_spatial:
+        else:
             skip_output = (
                 self.config.spatial_mlp_outputs.get((skip_start_t, block_idx), None)
                 if self.config.spatial_mlp_outputs is not None
@@ -195,11 +168,10 @@ class PABManager:
 
         if skip_output is not None:
             if timestep == skip_range[-1]:
-                print(f"skip_range | [{skip_range[0]}, {skip_range[-1]}]")
-                # TODO save memory
+                # TODO: save memory
                 if is_temporal:
                     del self.config.temporal_mlp_outputs[(skip_start_t, block_idx)]
-                if is_spatial:
+                else:
                     del self.config.spatial_mlp_outputs[(skip_start_t, block_idx)]
         else:
             raise ValueError(
@@ -253,18 +225,18 @@ def if_broadcast_spatial(timestep: int, count: int, block_idx: int):
     return PAB_MANAGER.if_broadcast_spatial(timestep, count, block_idx)
 
 
-def if_skip_mlp(timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False, is_spatial=False):
+def if_broadcast_mlp(timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False):
     if not enable_pab():
         return False, count
-    return PAB_MANAGER.if_skip_mlp(timestep, count, block_idx, all_timesteps, is_temporal, is_spatial)
+    return PAB_MANAGER.if_skip_mlp(timestep, count, block_idx, all_timesteps, is_temporal)
 
 
-def save_skip_output(timestep: int, block_idx: int, ff_output, is_temporal=False, is_spatial=False):
-    return PAB_MANAGER.save_skip_output(timestep, block_idx, ff_output, is_temporal, is_spatial)
+def save_mlp_output(timestep: int, block_idx: int, ff_output, is_temporal=False):
+    return PAB_MANAGER.save_skip_output(timestep, block_idx, ff_output, is_temporal)
 
 
-def get_skip_output(skip_range, timestep, block_idx: int, is_temporal=False, is_spatial=False):
-    return PAB_MANAGER.get_skip_output(skip_range, timestep, block_idx, is_temporal, is_spatial)
+def get_mlp_output(skip_range, timestep, block_idx: int, is_temporal=False):
+    return PAB_MANAGER.get_mlp_output(skip_range, timestep, block_idx, is_temporal)
 
 
 def get_diffusion_skip():

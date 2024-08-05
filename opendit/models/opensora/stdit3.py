@@ -29,12 +29,12 @@ from opendit.core.comm import (
 )
 from opendit.core.pab_mgr import (
     enable_pab,
-    get_skip_output,
+    get_mlp_output,
     if_broadcast_cross,
+    if_broadcast_mlp,
     if_broadcast_spatial,
     if_broadcast_temporal,
-    if_skip_mlp,
-    save_skip_output,
+    save_mlp_output,
 )
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 
@@ -92,15 +92,13 @@ class STDiT3Block(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
-        # fast video diffusion
+        # pab
         self.block_idx = block_idx
         self.attn_count = 0
         self.last_attn = None
         self.cross_count = 0
         self.last_cross = None
-        # mlp
         self.mlp_count = 0
-        self.last_mlp = None
 
     def t_mask_select(self, x_mask, x, masked_x, T, S):
         # x: [B, (T, S), C]
@@ -135,12 +133,15 @@ class STDiT3Block(nn.Module):
                 self.scale_shift_table[None] + t0.reshape(B, 6, -1)
             ).chunk(6, dim=1)
 
-        if self.temporal:
-            broadcast_attn, self.attn_count = if_broadcast_temporal(int(timestep[0]), self.attn_count)
-        else:
-            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count, self.block_idx)
+        if enable_pab():
+            if self.temporal:
+                broadcast_attn, self.attn_count = if_broadcast_temporal(int(timestep[0]), self.attn_count)
+            else:
+                broadcast_attn, self.attn_count = if_broadcast_spatial(
+                    int(timestep[0]), self.attn_count, self.block_idx
+                )
 
-        if broadcast_attn:
+        if enable_pab() and broadcast_attn:
             x_m_s = self.last_attn
         else:
             # modulate (attention)
@@ -176,8 +177,10 @@ class STDiT3Block(nn.Module):
         x = x + self.drop_path(x_m_s)
 
         # cross attention
-        broadcast_cross, self.cross_count = if_broadcast_cross(int(timestep[0]), self.cross_count)
-        if broadcast_cross:
+        if enable_pab():
+            broadcast_cross, self.cross_count = if_broadcast_cross(int(timestep[0]), self.cross_count)
+
+        if enable_pab() and broadcast_cross:
             x = x + self.last_cross
         else:
             x_cross = self.cross_attn(x, y, mask)
@@ -185,22 +188,21 @@ class STDiT3Block(nn.Module):
                 self.last_cross = x_cross
             x = x + x_cross
 
-        skip_mlp, self.mlp_count, skip_next, skip_range = if_skip_mlp(
-            int(timestep[0]),
-            self.mlp_count,
-            self.block_idx,
-            all_timesteps,
-            is_temporal=self.temporal,
-            is_spatial=(not self.temporal),
-        )
+        if enable_pab():
+            broadcast_mlp, self.mlp_count, broadcast_next, skip_range = if_broadcast_mlp(
+                int(timestep[0]),
+                self.mlp_count,
+                self.block_idx,
+                all_timesteps,
+                is_temporal=self.temporal,
+            )
 
-        if skip_mlp:
-            x_m_s = get_skip_output(
+        if enable_pab() and broadcast_mlp:
+            x_m_s = get_mlp_output(
                 skip_range,
                 timestep=int(timestep[0]),
                 block_idx=self.block_idx,
                 is_temporal=self.temporal,
-                is_spatial=(not self.temporal),
             )
         else:
             # modulate (MLP)
@@ -217,13 +219,13 @@ class STDiT3Block(nn.Module):
             if x_mask is not None:
                 x_m_s_zero = gate_mlp_zero * x_m
                 x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
-            if skip_next:
-                save_skip_output(
+
+            if enable_pab() and broadcast_next:
+                save_mlp_output(
                     timestep=int(timestep[0]),
                     block_idx=self.block_idx,
                     ff_output=x_m_s,
                     is_temporal=self.temporal,
-                    is_spatial=(not self.temporal),
                 )
 
         # residual
