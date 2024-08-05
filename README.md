@@ -1,30 +1,3 @@
-## Install
-pip install -e .
-
-## Run
-normal:
-torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample.yaml
-skip:
-torchrun --standalone --nproc_per_node=1 scripts/opensora/sample_opensora.py --config configs/opensora/sample_skip.yaml
-
-## Description
-Main code modification is in opendit/modules/attn.py
-Control flag is also at the top this file.
-
-## Code format
-Recommend to commit code by PR.
-
-Need to install code formater
-```shell
-# these commands are executed under the Colossal-AI directory
-pip install pre-commit
-pre-commit install
-```
-
-
-
-
-
 <p align="center">
 <img width="200px" alt="OpenDiT" src="./assets/figures/logo.png?raw=true">
 </p>
