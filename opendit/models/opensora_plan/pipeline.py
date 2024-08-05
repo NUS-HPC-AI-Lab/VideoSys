@@ -71,6 +71,39 @@ class OpenSoraPlanPABConfig(PABConfig):
         diffusion_skip: bool = False,
         diffusion_timestep_respacing: list = None,
         diffusion_skip_timestep: list = None,
+        mlp_skip: bool = True,
+        mlp_spatial_skip_config: dict = {
+            738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            690: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            666: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            642: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            618: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            594: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            570: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            546: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            522: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            498: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            474: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            450: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            426: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+        },
+        mlp_temporal_skip_config: dict = {
+            738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            690: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            666: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            642: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            618: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            594: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            570: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            546: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            522: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            498: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            474: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            450: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            426: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+        },
     ):
         super().__init__(
             steps=steps,
@@ -86,6 +119,9 @@ class OpenSoraPlanPABConfig(PABConfig):
             diffusion_skip=diffusion_skip,
             diffusion_timestep_respacing=diffusion_timestep_respacing,
             diffusion_skip_timestep=diffusion_skip_timestep,
+            mlp_skip=mlp_skip,
+            mlp_spatial_skip_config=mlp_spatial_skip_config,
+            mlp_temporal_skip_config=mlp_temporal_skip_config,
         )
 
 
@@ -804,6 +840,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                 # predict noise model_output
                 noise_pred = self.transformer(
                     latent_model_input,
+                    all_timesteps=timesteps,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
                     added_cond_kwargs=added_cond_kwargs,
