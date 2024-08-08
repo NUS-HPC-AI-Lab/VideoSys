@@ -418,3 +418,121 @@ def all_to_all_with_pad(
         input_ = input_.narrow(gather_dim, 0, input_.size(gather_dim) - gather_pad)
 
     return input_
+
+
+# ======================================================
+# Halo Exchange
+# ======================================================
+
+
+def _halo_exchange_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
+    # skip if only one rank involved
+    world_size = dist.get_world_size(pg)
+    rank = dist.get_rank(pg)
+    rank_list = dist.get_process_group_ranks(pg)
+    input_.shape[dim] // world_size
+
+    dst_l = (rank - 1) % world_size
+    dst_r = (rank + 1) % world_size
+
+    send_l = input_.narrow(dim, 0, pad).contiguous()
+    send_r = input_.narrow(dim, input_.size(dim) - pad, pad).contiguous()
+    recv_l = torch.zeros_like(send_l)
+    recv_r = torch.zeros_like(send_r)
+
+    is_odd = rank % 2 == 1
+    dst_l = rank_list[dst_l]
+    dst_r = rank_list[dst_r]
+    if is_odd:
+        dist.send(send_l, dst_l, group=pg)
+        dist.send(send_r, dst_r, group=pg)
+    else:
+        dist.recv(recv_r, dst_r, group=pg)
+        dist.recv(recv_l, dst_l, group=pg)
+    if is_odd:
+        dist.recv(recv_r, dst_r, group=pg)
+        dist.recv(recv_l, dst_l, group=pg)
+    else:
+        dist.send(send_l, dst_l, group=pg)
+        dist.send(send_r, dst_r, group=pg)
+
+    if rank == 0:
+        output = torch.cat([input_, recv_r], dim=dim)
+    elif rank == world_size - 1:
+        output = torch.cat([recv_l, input_], dim=dim)
+    else:
+        output = torch.cat([recv_l, input_, recv_r], dim=dim)
+
+    return output
+
+
+class _HaloExchange(torch.autograd.Function):
+    """
+    Halo exchange.
+
+    Args:
+        input_: input matrix.
+        process_group: process group.
+        dim: dimension
+        pad: padding size
+    """
+
+    @staticmethod
+    def symbolic(graph, input_):
+        return _halo_exchange_func(input_)
+
+    @staticmethod
+    def forward(ctx, input_, process_group, dim, pad):
+        ctx.process_group = process_group
+        ctx.dim = dim
+        ctx.pad = pad
+        return _halo_exchange_func(input_, process_group, dim, pad)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        raise NotImplementedError("Halo exchange does not support backward now.")
+
+
+def halo_exchange(input_, process_group, dim, pad):
+    return _HaloExchange.apply(input_, process_group, dim, pad)
+
+
+# ======================================================
+# All Reduce
+# ======================================================
+
+
+def _all_reduce_func(input_, pg: dist.ProcessGroup, op: dist.ReduceOp):
+    dist.get_world_size(pg)
+    dist.get_rank(pg)
+    dist.all_reduce(input_, op=op, group=pg)
+    return input_
+
+
+class _AllReduce(torch.autograd.Function):
+    """
+    All reduce.
+
+    Args:
+        input_: input matrix.
+        process_group: process group.
+        op: reduce operation
+    """
+
+    @staticmethod
+    def symbolic(graph, input_):
+        return _all_reduce_func(input_)
+
+    @staticmethod
+    def forward(ctx, input_, process_group, op):
+        ctx.process_group = process_group
+        ctx.op = op
+        return _all_reduce_func(input_, process_group, op)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        raise NotImplementedError("All reduce does not support backward now.")
+
+
+def all_reduce(input_, process_group, op=dist.ReduceOp.SUM):
+    return _AllReduce.apply(input_, process_group, op)
