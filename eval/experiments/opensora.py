@@ -20,6 +20,6 @@ def eval_pab(prompt_list):
 
 if __name__ == "__main__":
     opendit.initialize(42)
-    prompt_list = read_prompt_list("vbench/VBench_full_info_test.json")
+    prompt_list = read_prompt_list("vbench/VBench_full_info.json")
     eval_base(prompt_list)
     eval_pab(prompt_list)
