@@ -4,9 +4,9 @@ from typing import Optional, Tuple, Union
 import torch
 from diffusers.models import AutoencoderKL
 
-from opendit.core.pab_mgr import PABConfig, set_pab_manager
-from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
-from opendit.utils.utils import save_video
+from deltadit.core.delta_mgr import DELTAConfig, set_delta_manager
+from deltadit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from deltadit.utils.utils import save_video
 
 from .datasets import get_image_size, get_num_frames
 from .inference_utils import (
@@ -27,37 +27,19 @@ from .text_encoder import T5Encoder, text_preprocessing
 from .vae import OpenSoraVAE_V1_2
 
 
-class OpenSoraPABConfig(PABConfig):
+class OpenSoraDELTAConfig(DELTAConfig):
     def __init__(
         self,
-        steps: int = 50,
-        spatial_broadcast: bool = True,
-        spatial_threshold: list = [540, 920],
-        spatial_gap: int = 2,
-        temporal_broadcast: bool = True,
-        temporal_threshold: list = [540, 920],
-        temporal_gap: int = 4,
-        cross_broadcast: bool = True,
-        cross_threshold: list = [540, 930],
-        cross_gap: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
+        steps: int = None,
+        delta_skip: bool = None,
+        delta_gap: int = None,
+        delta_threshold=None,
     ):
         super().__init__(
             steps=steps,
-            spatial_broadcast=spatial_broadcast,
-            spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
-            temporal_broadcast=temporal_broadcast,
-            temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
-            cross_broadcast=cross_broadcast,
-            cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
+            delta_skip=delta_skip,
+            delta_threshold=delta_threshold,
+            delta_gap=delta_gap,
         )
 
 
@@ -72,9 +54,9 @@ class OpenSoraConfig:
         cfg_scale: float = 7.0,
         # ======= vae ========
         tiling_size: int = 4,
-        # ======= pab ========
-        enable_pab: bool = False,
-        pab_config: PABConfig = OpenSoraPABConfig(),
+        # ======= delta ========
+        enable_delta: bool = False,
+        delta_config: DELTAConfig = OpenSoraDELTAConfig(),
     ):
         self.transformer = transformer
         self.vae = vae
@@ -87,9 +69,9 @@ class OpenSoraConfig:
         # ======= vae ========
         self.tiling_size = tiling_size
 
-        # ======= pab ========
-        self.enable_pab = enable_pab
-        self.pab_config = pab_config
+        # ======= delta ========
+        self.enable_delta = enable_delta
+        self.delta_config = delta_config
 
 
 class OpenSoraPipeline(VideoSysPipeline):
@@ -161,9 +143,9 @@ class OpenSoraPipeline(VideoSysPipeline):
                 use_timestep_transform=True, num_sampling_steps=config.num_sampling_steps, cfg_scale=config.cfg_scale
             )
 
-        # pab
-        if config.enable_pab:
-            set_pab_manager(config.pab_config)
+        # delta
+        if config.enable_delta:
+            set_delta_manager(config.delta_config)
 
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)

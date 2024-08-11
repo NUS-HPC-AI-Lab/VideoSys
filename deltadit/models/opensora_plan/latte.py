@@ -46,7 +46,7 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import nn
 
-from opendit.core.comm import (
+from deltadit.core.comm import (
     all_to_all_with_pad,
     gather_sequence,
     get_spatial_pad,
@@ -55,9 +55,9 @@ from opendit.core.comm import (
     set_temporal_pad,
     split_sequence,
 )
-from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
-from opendit.utils.logging import logger
+from deltadit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
+from deltadit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
+from deltadit.utils.logging import logger
 
 if is_xformers_available():
     import xformers

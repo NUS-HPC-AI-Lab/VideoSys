@@ -85,7 +85,7 @@ class LatteConfig:
         variance_type: str = "learned_range",
         # ======= pab ========
         enable_tgate: bool = False,
-        pab_config: TGATEConfig = LatteTGATEConfig(),
+        tgate_config: TGATEConfig = LatteTGATEConfig(),
     ):
         self.model_path = model_path
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
@@ -98,7 +98,7 @@ class LatteConfig:
 
         # ======= pab ========
         self.enable_tgate = enable_tgate
-        self.pab_config = pab_config
+        self.tgate_config = tgate_config
 
 
 class LattePipeline(VideoSysPipeline):
@@ -175,7 +175,7 @@ class LattePipeline(VideoSysPipeline):
 
         # pab
         if config.enable_tgate:
-            set_tgate_manager(config.pab_config)
+            set_tgate_manager(config.tgate_config)
 
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)
@@ -796,6 +796,7 @@ class LattePipeline(VideoSysPipeline):
                     latent_model_input,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
+                    timestep_index=i,
                     added_cond_kwargs=added_cond_kwargs,
                     enable_temporal_attentions=enable_temporal_attentions,
                     return_dict=False,

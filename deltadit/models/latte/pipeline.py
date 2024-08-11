@@ -24,17 +24,16 @@ from diffusers.schedulers import DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
+from deltadit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from deltadit.utils.logging import logger
+from deltadit.utils.utils import save_video
 from opendit.core.pab_mgr import (
     PABConfig,
     get_diffusion_skip,
     get_diffusion_skip_timestep,
-    set_pab_manager,
     skip_diffusion_timestep,
     update_steps,
 )
-from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
-from opendit.utils.logging import logger
-from opendit.utils.utils import save_video
 
 from .latte_t2v import LatteT2V
 
@@ -83,9 +82,9 @@ class LatteConfig:
         beta_end: float = 0.02,
         beta_schedule: str = "linear",
         variance_type: str = "learned_range",
-        # ======= pab ========
-        enable_pab: bool = False,
-        pab_config: PABConfig = LattePABConfig(),
+        # ======= delta ========
+        enable_delta: bool = False,
+        delta_config: PABConfig = LattePABConfig(),
     ):
         self.model_path = model_path
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
@@ -96,9 +95,9 @@ class LatteConfig:
         self.beta_schedule = beta_schedule
         self.variance_type = variance_type
 
-        # ======= pab ========
-        self.enable_pab = enable_pab
-        self.pab_config = pab_config
+        # ======= delta ========
+        self.enable_delta = enable_delta
+        self.delta_config = delta_config
 
 
 class LattePipeline(VideoSysPipeline):
@@ -173,9 +172,9 @@ class LattePipeline(VideoSysPipeline):
                 clip_sample=False,
             )
 
-        # pab
-        if config.enable_pab:
-            set_pab_manager(config.pab_config)
+        # delta
+        if config.enable_delta:
+            set_delta_manager(config.delta_config)
 
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)

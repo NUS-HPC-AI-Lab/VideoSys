@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 
-from opendit.modules.layers import LlamaRMSNorm
+from deltadit.modules.layers import LlamaRMSNorm
 
 
 class Attention(nn.Module):

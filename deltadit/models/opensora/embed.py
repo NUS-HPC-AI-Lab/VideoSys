@@ -22,7 +22,7 @@ import transformers
 from timm.models.vision_transformer import Mlp
 from transformers import AutoTokenizer, CLIPTextModel, CLIPTokenizer, T5EncoderModel
 
-from opendit.modules.embed import get_1d_sincos_pos_embed_from_grid, get_2d_sincos_pos_embed_from_grid
+from deltadit.modules.embed import get_1d_sincos_pos_embed_from_grid, get_2d_sincos_pos_embed_from_grid
 
 transformers.logging.set_verbosity_error()
 
@@ -282,8 +282,8 @@ class T5Encoder:
     def shardformer_t5(self):
         from colossalai.shardformer import ShardConfig, ShardFormer
 
-        from opendit.core.shardformer.t5.policy import T5EncoderPolicy
-        from opendit.utils.utils import requires_grad
+        from deltadit.core.shardformer.t5.policy import T5EncoderPolicy
+        from deltadit.utils.utils import requires_grad
 
         shard_config = ShardConfig(
             tensor_parallel_process_group=None,

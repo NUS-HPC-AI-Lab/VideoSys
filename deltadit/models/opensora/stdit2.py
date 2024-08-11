@@ -19,17 +19,17 @@ from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 from transformers import PretrainedConfig, PreTrainedModel
 
-from opendit.core.comm import all_to_all_comm, gather_sequence, split_sequence
-from opendit.core.parallel_mgr import (
+from deltadit.core.comm import all_to_all_comm, gather_sequence, split_sequence
+from deltadit.core.parallel_mgr import (
     get_sequence_parallel_group,
     get_sequence_parallel_size,
     is_sequence_parallelism_enable,
 )
-from opendit.models.opensora.ckpt_io import load_checkpoint
-from opendit.models.opensora.embed import CaptionEmbedder, PatchEmbed3D, TimestepEmbedder, get_2d_sincos_pos_embed
-from opendit.models.opensora.stdit import approx_gelu, t2i_modulate
-from opendit.modules.attn import Attention, MultiHeadCrossAttention
-from opendit.modules.layers import get_layernorm
+from deltadit.models.opensora.ckpt_io import load_checkpoint
+from deltadit.models.opensora.embed import CaptionEmbedder, PatchEmbed3D, TimestepEmbedder, get_2d_sincos_pos_embed
+from deltadit.models.opensora.stdit import approx_gelu, t2i_modulate
+from deltadit.modules.attn import Attention, MultiHeadCrossAttention
+from deltadit.modules.layers import get_layernorm
 
 
 class PositionEmbedding2D(nn.Module):

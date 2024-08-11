@@ -1,7 +1,9 @@
 import os
 
-import deltadit
-from deltadit import OpenSoraConfig, OpenSoraDELTAConfig, OpenSoraPipeline
+import torch
+
+import tgate
+from tgate import OpenSoraConfig, OpenSoraPipeline, OpenSoraTGATEConfig
 
 
 def run_base():
@@ -10,9 +12,9 @@ def run_base():
     os.environ["LOCAL_RANK"] = "0"
     os.environ["WORLD_SIZE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12356"
+    os.environ["MASTER_PORT"] = "12355"
 
-    deltadit.initialize(42)
+    tgate.initialize(42)
 
     config = OpenSoraConfig()
     pipeline = OpenSoraPipeline(config)
@@ -28,25 +30,35 @@ def run_pab():
     os.environ["LOCAL_RANK"] = "0"
     os.environ["WORLD_SIZE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12356"
+    os.environ["MASTER_PORT"] = "12355"
 
-    deltadit.initialize(42)
+    tgate.initialize(42)
 
-    delta_config = OpenSoraDELTAConfig(
-        delta_skip=True,
-        delta_threshold={(0, 10): [0, 9]},
-        # delta_threshold={(0,10):[0,9], (20,30):[9,28]},
-        delta_gap=2,
+    tgate_config = OpenSoraTGATEConfig(
+        spatial_broadcast=True,
+        spatial_threshold=[0, 12],
+        spatial_gap=2,
+        temporal_broadcast=True,
+        temporal_threshold=[0, 12],
+        temporal_gap=2,
+        cross_broadcast=True,
+        cross_threshold=[12, 30],
+        cross_gap=12,
     )
-
-    config = OpenSoraConfig(enable_delta=True, delta_config=delta_config)
+    # step 250 / m=100 / k=10
+    # opensora step=30 / m=12 / k=2
+    # latte step=50 / m=20 / k=2
+    config = OpenSoraConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPipeline(config)
 
     prompt = "Sunset over the sea."
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+    print(f"./outputs/{prompt}.mp4")
 
 
 if __name__ == "__main__":
+    torch.backends.cudnn.enabled = False
+
     # run_base()
     run_pab()

@@ -64,7 +64,7 @@ class OpenSoraPlanTGATEConfig(TGATEConfig):
         spatial_gap: int = 10,
         temporal_broadcast: bool = False,
         temporal_threshold: list = [100, 150],
-        temporal_gap: int = 4,
+        temporal_gap: int = 10,
         cross_broadcast: bool = True,
         cross_threshold: list = [90, 150],
         cross_gap: int = 60,
@@ -101,7 +101,7 @@ class OpenSoraPlanConfig:
         tile_overlap_factor: float = 0.25,
         # ======= pab ========
         enable_tgate: bool = False,
-        pab_config: TGATEConfig = OpenSoraPlanTGATEConfig(),
+        tgate_config: TGATEConfig = OpenSoraPlanTGATEConfig(),
     ):
         self.model_path = model_path
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
@@ -116,7 +116,7 @@ class OpenSoraPlanConfig:
 
         # ======= pab ========
         self.enable_tgate = enable_tgate
-        self.pab_config = pab_config
+        self.tgate_config = tgate_config
 
 
 class OpenSoraPlanPipeline(VideoSysPipeline):
@@ -186,7 +186,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
         # pab
         if config.enable_tgate:
-            set_tgate_manager(config.pab_config)
+            set_tgate_manager(config.tgate_config)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler

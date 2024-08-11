@@ -23,17 +23,16 @@ from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.pab_mgr import (
+from deltadit.core.pab_mgr import (
     PABConfig,
     get_diffusion_skip,
     get_diffusion_skip_timestep,
-    set_pab_manager,
     skip_diffusion_timestep,
     update_steps,
 )
-from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
-from opendit.utils.logging import logger
-from opendit.utils.utils import save_video
+from deltadit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from deltadit.utils.logging import logger
+from deltadit.utils.utils import save_video
 
 from .ae import ae_stride_config, getae_wrapper
 from .latte import LatteT2V
@@ -99,9 +98,9 @@ class OpenSoraPlanConfig:
         # ======= vae =======
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
-        # ======= pab ========
-        enable_pab: bool = False,
-        pab_config: PABConfig = OpenSoraPlanPABConfig(),
+        # ======= delta ========
+        enable_delta: bool = False,
+        delta_config: PABConfig = OpenSoraPlanPABConfig(),
     ):
         self.model_path = model_path
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
@@ -114,9 +113,9 @@ class OpenSoraPlanConfig:
         self.enable_tiling = enable_tiling
         self.tile_overlap_factor = tile_overlap_factor
 
-        # ======= pab ========
-        self.enable_pab = enable_pab
-        self.pab_config = pab_config
+        # ======= delta ========
+        self.enable_delta = enable_delta
+        self.delta_config = delta_config
 
 
 class OpenSoraPlanPipeline(VideoSysPipeline):
@@ -184,9 +183,9 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)
 
-        # pab
-        if config.enable_pab:
-            set_pab_manager(config.pab_config)
+        # delta
+        if config.enable_delta:
+            set_delta_manager(config.delta_config)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler

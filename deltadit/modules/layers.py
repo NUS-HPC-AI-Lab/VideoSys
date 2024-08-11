@@ -33,7 +33,7 @@ def modulate(norm_func, x, shift, scale, use_kernel=False):
     x = norm_func(x.to(torch.float32)).to(dtype)
     if use_kernel:
         try:
-            from opendit.kernels.fused_modulate import fused_modulate
+            from deltadit.kernels.fused_modulate import fused_modulate
 
             x = fused_modulate(x, scale, shift)
         except ImportError:

@@ -55,42 +55,68 @@ class TGATEManager:
         logger.info(init_prompt)
 
     def if_broadcast_cross(self, timestep: int, count: int):
-        if (
-            self.config.cross_broadcast
-            and (timestep is not None)
-            and (count % self.config.cross_gap != 0)
-            and (self.config.cross_threshold[0] < timestep < self.config.cross_threshold[1])
-        ):
-            flag = True
+        if self.config.cross_threshold[0] < timestep < self.config.cross_threshold[1]:
+            if count == (self.config.cross_threshold[0] + 1):
+                count = count - self.config.cross_threshold[0]
+            if (
+                self.config.cross_broadcast
+                and (timestep is not None)
+                and (count % self.config.cross_gap != 0)
+                and (self.config.cross_threshold[0] < timestep < self.config.cross_threshold[1])
+            ):
+                flag = True
+            else:
+                flag = False
+            count = (count + 1) % self.config.steps
         else:
             flag = False
-        count = (count + 1) % self.config.steps
+            count = 0
+            count = (count + 1) % self.config.steps
         return flag, count
 
     def if_broadcast_temporal(self, timestep: int, count: int):
-        if (
-            self.config.temporal_broadcast
-            and (timestep is not None)
-            and (count % self.config.temporal_gap != 0)
-            and (self.config.temporal_threshold[0] < timestep < self.config.temporal_threshold[1])
-        ):
-            flag = True
+        if self.config.temporal_threshold[0] < timestep < self.config.temporal_threshold[1]:
+            if count == (self.config.temporal_threshold[0] + 1):
+                count = count - self.config.temporal_threshold[0]
+            if (
+                self.config.temporal_broadcast
+                and (timestep is not None)
+                and (count % self.config.temporal_gap != 0)
+                and (self.config.temporal_threshold[0] < timestep < self.config.temporal_threshold[1])
+            ):
+                flag = True
+            else:
+                flag = False
+            count = (count + 1) % self.config.steps
         else:
             flag = False
-        count = (count + 1) % self.config.steps
+            count = 0
+            count = (count + 1) % self.config.steps
         return flag, count
 
     def if_broadcast_spatial(self, timestep: int, count: int, block_idx: int):
-        if (
-            self.config.spatial_broadcast
-            and (timestep is not None)
-            and (count % self.config.spatial_gap != 0)
-            and (self.config.spatial_threshold[0] < timestep < self.config.spatial_threshold[1])
-        ):
-            flag = True
+        if self.config.spatial_threshold[0] < timestep < self.config.spatial_threshold[1]:
+            if count == (self.config.spatial_threshold[0] + 1):
+                count = count - self.config.spatial_threshold[0]
+            if (
+                self.config.spatial_broadcast
+                and (timestep is not None)
+                and (count % self.config.spatial_gap != 0)
+                and (self.config.spatial_threshold[0] < timestep < self.config.spatial_threshold[1])
+            ):
+                flag = True
+                # print(f"spatial | timestep: {timestep} | block {block_idx} | count {count} | jump")
+            else:
+                flag = False
+                # print(f"spatial | timestep: {timestep} | block {block_idx} | count {count} | save")
+                # print('===========================')
+            count = (count + 1) % self.config.steps
         else:
             flag = False
-        count = (count + 1) % self.config.steps
+            count = 0
+            # print(f"spatial | timestep: {timestep} | block {block_idx} | count {count} | save")
+            # print('===========================')
+            count = (count + 1) % self.config.steps
         return flag, count
 
 

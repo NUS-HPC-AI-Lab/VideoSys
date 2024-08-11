@@ -1,7 +1,9 @@
+# Usage: torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py
+
 import os
 
 import tgate
-from tgate import OpenSoraPlanConfig, OpenSoraPlanPipeline
+from tgate import LatteConfig, LattePipeline, LatteTGATEConfig
 
 
 def run_base():
@@ -14,12 +16,8 @@ def run_base():
 
     tgate.initialize(42)
 
-    # --gate_step 15 \
-    # --sa_interval 3 \
-    # --ca_interval 1 \
-
-    config = OpenSoraPlanConfig()
-    pipeline = OpenSoraPlanPipeline(config)
+    config = LatteConfig()
+    pipeline = LattePipeline(config)
 
     prompt = "Sunset over the sea."
     video = pipeline.generate(prompt).video[0]
@@ -36,8 +34,22 @@ def run_pab():
 
     tgate.initialize(42)
 
-    config = OpenSoraPlanConfig(enable_tgate=True)
-    pipeline = OpenSoraPlanPipeline(config)
+    tgate_config = LatteTGATEConfig(
+        spatial_broadcast=True,
+        spatial_threshold=[0, 20],
+        spatial_gap=2,
+        temporal_broadcast=True,
+        temporal_threshold=[0, 20],
+        temporal_gap=2,
+        cross_broadcast=True,
+        cross_threshold=[30, 50],
+        cross_gap=20,
+    )
+    # step 250 / m=100 / k=10
+    # opensora step=30 / m=12 / k=2
+    # latte step=50 / m=20 / k=2
+    config = LatteConfig(enable_tgate=True, tgate_config=tgate_config)
+    pipeline = LattePipeline(config)
 
     prompt = "Sunset over the sea."
     video = pipeline.generate(prompt).video[0]

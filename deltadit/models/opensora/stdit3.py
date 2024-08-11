@@ -18,7 +18,7 @@ from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 from transformers import PretrainedConfig, PreTrainedModel
 
-from opendit.core.comm import (
+from deltadit.core.comm import (
     all_to_all_with_pad,
     gather_sequence,
     get_spatial_pad,
@@ -27,8 +27,17 @@ from opendit.core.comm import (
     set_temporal_pad,
     split_sequence,
 )
-from opendit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
+from deltadit.core.delta_mgr import (
+    get_cache,
+    if_skip_block,
+    if_skip_delta,
+    is_skip_first_block,
+    is_skip_last_block,
+    save_end_cache,
+    save_start_cache,
+)
+from deltadit.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
+from deltadit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
 
 from .modules import (
     Attention,
@@ -407,7 +416,9 @@ class STDiT3(PreTrainedModel):
             y = y.squeeze(1).view(1, -1, self.hidden_size)
         return y, y_lens
 
-    def forward(self, x, timestep, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs):
+    def forward(
+        self, x, timestep, timestep_index, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
+    ):
         dtype = self.x_embedder.proj.weight.dtype
         B = x.size(0)
         x = x.to(dtype)
@@ -467,21 +478,30 @@ class STDiT3(PreTrainedModel):
             x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         # TODO add skip block delta dit
-        # block_id, timestep->block_id
-        # {100:[0:15], 150:[8:20], 300:[13:28]}
-        for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            # t block
-            # how to retain x - x_raw
-            # jump=Ture, interval [0,15] ->
+        # block_id->timestep
+        # {(0,10):[0:9], (20,30):[9:28]}
+        if if_skip_delta(timestep_index, count=0):
+            for block_id, (spatial_block, temporal_block) in enumerate(zip(self.spatial_blocks, self.temporal_blocks)):
+                if if_skip_block(timestep_index, block_id):
+                    continue
+                elif is_skip_last_block():
+                    x = x + get_cache()
+                else:
+                    x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+                    x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
-            block_id = 0
-            x_raw = x
-            if block_id in skip_interval:
+        else:
+            for block_id, (spatial_block, temporal_block) in enumerate(zip(self.spatial_blocks, self.temporal_blocks)):
                 x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
                 x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            x - x_raw
+                if is_skip_first_block(block_id):
+                    save_start_cache(block_id, x)
+                elif is_skip_last_block(block_id):
+                    save_end_cache(block_id, x)
+
+        # for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
+        #     x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+        #     x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         if enable_sequence_parallel():
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)

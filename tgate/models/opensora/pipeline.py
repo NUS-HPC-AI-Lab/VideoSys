@@ -74,7 +74,7 @@ class OpenSoraConfig:
         tiling_size: int = 4,
         # ======= pab ========
         enable_tgate: bool = False,
-        pab_config: TGATEConfig = OpenSoraTGATEConfig(),
+        tgate_config: TGATEConfig = OpenSoraTGATEConfig(),
     ):
         self.transformer = transformer
         self.vae = vae
@@ -89,7 +89,7 @@ class OpenSoraConfig:
 
         # ======= pab ========
         self.enable_tgate = enable_tgate
-        self.pab_config = pab_config
+        self.tgate_config = tgate_config
 
 
 class OpenSoraPipeline(VideoSysPipeline):
@@ -163,7 +163,7 @@ class OpenSoraPipeline(VideoSysPipeline):
 
         # pab
         if config.enable_tgate:
-            set_tgate_manager(config.pab_config)
+            set_tgate_manager(config.tgate_config)
 
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)
@@ -375,7 +375,10 @@ class OpenSoraPipeline(VideoSysPipeline):
                 progress=verbose,
                 mask=masks,
             )
-            samples = self.vae.decode(samples.to(self._dtype), num_frames=num_frames)
+            try:
+                samples = self.vae.decode(samples.to(self._dtype), num_frames=num_frames)
+            except Exception as e:
+                print(f"Error occurred: {e}")
             video_clips.append(samples)
 
         for i in range(1, loop):

@@ -14,9 +14,9 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from timm.models.vision_transformer import Mlp, PatchEmbed
 
-from opendit.modules.attn import Attention
-from opendit.modules.embed import LabelEmbedder, TimestepEmbedder, get_2d_sincos_pos_embed
-from opendit.modules.layers import FinalLayer, get_layernorm, modulate
+from deltadit.modules.attn import Attention
+from deltadit.modules.embed import LabelEmbedder, TimestepEmbedder, get_2d_sincos_pos_embed
+from deltadit.modules.layers import FinalLayer, get_layernorm, modulate
 
 
 class DiTBlock(nn.Module):

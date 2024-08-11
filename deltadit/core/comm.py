@@ -7,7 +7,7 @@ from einops import rearrange
 from torch import Tensor
 from torch.distributed import ProcessGroup
 
-from opendit.core.parallel_mgr import get_sequence_parallel_size
+from deltadit.core.parallel_mgr import get_sequence_parallel_size
 
 # ======================================================
 # Model

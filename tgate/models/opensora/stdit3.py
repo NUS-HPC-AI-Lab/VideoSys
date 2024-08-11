@@ -112,6 +112,7 @@ class STDiT3Block(nn.Module):
         T=None,  # number of frames
         S=None,  # number of pixel patches
         timestep=None,
+        timestep_index=None,
     ):
         # prepare modulate parameters
         B, N, C = x.shape
@@ -124,9 +125,9 @@ class STDiT3Block(nn.Module):
             ).chunk(6, dim=1)
 
         if self.temporal:
-            broadcast_attn, self.attn_count = if_broadcast_temporal(int(timestep[0]), self.attn_count)
+            broadcast_attn, self.attn_count = if_broadcast_temporal(timestep_index, self.attn_count)
         else:
-            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count, self.block_idx)
+            broadcast_attn, self.attn_count = if_broadcast_spatial(timestep_index, self.attn_count, self.block_idx)
 
         if broadcast_attn:
             x_m_s = self.last_attn
@@ -164,7 +165,7 @@ class STDiT3Block(nn.Module):
         x = x + self.drop_path(x_m_s)
 
         # cross attention
-        broadcast_cross, self.cross_count = if_broadcast_cross(int(timestep[0]), self.cross_count)
+        broadcast_cross, self.cross_count = if_broadcast_cross(timestep_index, self.cross_count)
         if broadcast_cross:
             x = x + self.last_cross
         else:
@@ -407,7 +408,9 @@ class STDiT3(PreTrainedModel):
             y = y.squeeze(1).view(1, -1, self.hidden_size)
         return y, y_lens
 
-    def forward(self, x, timestep, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs):
+    def forward(
+        self, x, timestep, timestep_index, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
+    ):
         dtype = self.x_embedder.proj.weight.dtype
         B = x.size(0)
         x = x.to(dtype)
@@ -463,8 +466,10 @@ class STDiT3(PreTrainedModel):
 
         # === blocks ===
         for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+            x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep, timestep_index)
+            x = auto_grad_checkpoint(
+                temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep, timestep_index
+            )
 
         if enable_sequence_parallel():
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)

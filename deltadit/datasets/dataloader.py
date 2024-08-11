@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from opendit.core.parallel_mgr import ParallelManager
+from deltadit.core.parallel_mgr import ParallelManager
 
 
 class StatefulDistributedSampler(DistributedSampler):

@@ -13,8 +13,8 @@ from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
-from opendit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
-from opendit.diffusion.gaussian_diffusion import _extract_into_tensor
+from deltadit.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
+from deltadit.diffusion.gaussian_diffusion import _extract_into_tensor
 
 
 def mean_flat(tensor: torch.Tensor, mask=None):
@@ -247,7 +247,7 @@ class RFLOW:
             # classifier-free guidance
             z_in = torch.cat([z, z], 0)
             t = torch.cat([t, t], 0)
-            pred = model(z_in, t, **model_args).chunk(2, dim=1)[0]
+            pred = model(z_in, t, i, **model_args).chunk(2, dim=1)[0]
             pred_cond, pred_uncond = pred.chunk(2, dim=0)
             v_pred = pred_uncond + guidance_scale * (pred_cond - pred_uncond)
 

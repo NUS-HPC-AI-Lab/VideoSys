@@ -81,9 +81,9 @@ class DiagonalGaussianDistribution(object):
 
 def resolve_str_to_obj(str_val, append=True):
     if append:
-        str_val = "opendit.models.opensora_plan.modules." + str_val
+        str_val = "deltadit.models.opensora_plan.modules." + str_val
     if "opensora.models.ae.videobase." in str_val:
-        str_val = str_val.replace("opensora.models.ae.videobase.", "opendit.models.opensora_plan.")
+        str_val = str_val.replace("opensora.models.ae.videobase.", "deltadit.models.opensora_plan.")
     module_name, class_name = str_val.rsplit(".", 1)
     module = importlib.import_module(module_name)
     return getattr(module, class_name)

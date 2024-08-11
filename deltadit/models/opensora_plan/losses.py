@@ -21,7 +21,7 @@ from torch import nn
 from torchvision import models
 from tqdm import tqdm
 
-from opendit.models.opensora_plan.modules.normalize import ActNorm
+from deltadit.models.opensora_plan.modules.normalize import ActNorm
 
 URL_MAP = {"vgg_lpips": "https://heibox.uni-heidelberg.de/f/607503859c864bc1b30b/?dl=1"}
 

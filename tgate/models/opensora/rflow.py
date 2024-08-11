@@ -247,7 +247,7 @@ class RFLOW:
             # classifier-free guidance
             z_in = torch.cat([z, z], 0)
             t = torch.cat([t, t], 0)
-            pred = model(z_in, t, **model_args).chunk(2, dim=1)[0]
+            pred = model(z_in, t, i, **model_args).chunk(2, dim=1)[0]
             pred_cond, pred_uncond = pred.chunk(2, dim=0)
             v_pred = pred_uncond + guidance_scale * (pred_cond - pred_uncond)
 

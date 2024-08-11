@@ -362,6 +362,7 @@ class BasicTransformerBlock(nn.Module):
         class_labels: Optional[torch.LongTensor] = None,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
         org_timestep: Optional[torch.LongTensor] = None,
+        timestep_index: Optional[int] = None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
@@ -370,9 +371,7 @@ class BasicTransformerBlock(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        broadcast_spatial, self.spatial_count = if_broadcast_spatial(
-            int(org_timestep[0]), self.spatial_count, self.block_idx
-        )
+        broadcast_spatial, self.spatial_count = if_broadcast_spatial(timestep_index, self.spatial_count, self.block_idx)
         if broadcast_spatial:
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
@@ -427,7 +426,7 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Cross-Attention
         if self.attn2 is not None:
-            broadcast_cross, self.cross_count = if_broadcast_cross(int(org_timestep[0]), self.cross_count)
+            broadcast_cross, self.cross_count = if_broadcast_cross(timestep_index, self.cross_count)
             if broadcast_cross:
                 hidden_states = hidden_states + self.cross_last
             else:
@@ -651,6 +650,7 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs: Dict[str, Any] = None,
         class_labels: Optional[torch.LongTensor] = None,
         org_timestep: Optional[torch.LongTensor] = None,
+        timestep_index: Optional[int] = None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
@@ -663,7 +663,7 @@ class BasicTransformerBlock_(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        broadcast_temporal, self.count = if_broadcast_temporal(int(org_timestep[0]), self.count)
+        broadcast_temporal, self.count = if_broadcast_temporal(timestep_index, self.count)
         if broadcast_temporal:
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
@@ -1090,6 +1090,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
         self,
         hidden_states: torch.Tensor,
         timestep: Optional[torch.LongTensor] = None,
+        timestep_index=None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         added_cond_kwargs: Dict[str, torch.Tensor] = None,
         class_labels: Optional[torch.LongTensor] = None,
@@ -1302,6 +1303,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                     class_labels,
                     None,
                     org_timestep,
+                    timestep_index=timestep_index,
                 )
 
                 if enable_temporal_attentions:
@@ -1340,6 +1342,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             cross_attention_kwargs,
                             class_labels,
                             org_timestep,
+                            timestep_index=timestep_index,
                         )
 
                         hidden_states = rearrange(

@@ -161,8 +161,8 @@ class T5Encoder:
     def shardformer_t5(self):
         from colossalai.shardformer import ShardConfig, ShardFormer
 
-        from opendit.core.shardformer.t5.policy import T5EncoderPolicy
-        from opendit.utils.utils import requires_grad
+        from deltadit.core.shardformer.t5.policy import T5EncoderPolicy
+        from deltadit.utils.utils import requires_grad
 
         shard_config = ShardConfig(
             tensor_parallel_process_group=None,

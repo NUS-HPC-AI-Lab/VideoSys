@@ -6,8 +6,8 @@ import torch.distributed as dist
 from colossalai.cluster.process_group_mesh import ProcessGroupMesh
 from torch.distributed import ProcessGroup
 
-from opendit.utils.logging import init_dist_logger
-from opendit.utils.utils import set_seed
+from deltadit.utils.logging import init_dist_logger
+from deltadit.utils.utils import set_seed
 
 PARALLEL_MANAGER = None
 
