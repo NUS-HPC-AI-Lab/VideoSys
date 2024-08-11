@@ -651,8 +651,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         clean_caption: bool = True,
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
-        verbose: bool = False,
-        progress: bool = True,
+        verbose: bool = True,
     ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -804,7 +803,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
             self.scheduler.set_timesteps(num_inference_steps, device=device)
 
-        progress_wrap = tqdm.tqdm if progress and dist.get_rank() == 0 else (lambda x: x)
+        progress_wrap = tqdm.tqdm if verbose and dist.get_rank() == 0 else (lambda x: x)
         for i, t in progress_wrap(list(enumerate(timesteps))):
             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
