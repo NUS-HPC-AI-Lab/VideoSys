@@ -33,8 +33,9 @@ def run_pab():
     deltadit.initialize(42)
 
     delta_config = OpenSoraDELTAConfig(
+        steps=10,
         delta_skip=True,
-        delta_threshold={(0, 10): [0, 9]},
+        delta_threshold={(0, 10): [0, 1]},
         # delta_threshold={(0,10):[0,9], (20,30):[9,28]},
         delta_gap=2,
     )

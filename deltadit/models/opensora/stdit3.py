@@ -473,14 +473,10 @@ class STDiT3(PreTrainedModel):
         x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
 
         # === blocks ===
-        for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-            x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-
         # TODO add skip block delta dit
         # block_id->timestep
         # {(0,10):[0:9], (20,30):[9:28]}
-        if if_skip_delta(timestep_index, count=0):
+        if if_skip_delta(timestep_index):
             for block_id, (spatial_block, temporal_block) in enumerate(zip(self.spatial_blocks, self.temporal_blocks)):
                 if if_skip_block(timestep_index, block_id):
                     continue
@@ -492,11 +488,13 @@ class STDiT3(PreTrainedModel):
 
         else:
             for block_id, (spatial_block, temporal_block) in enumerate(zip(self.spatial_blocks, self.temporal_blocks)):
-                x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
-                x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
                 if is_skip_first_block(block_id):
                     save_start_cache(block_id, x)
-                elif is_skip_last_block(block_id):
+
+                x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+                x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+
+                if is_skip_last_block(block_id):
                     save_end_cache(block_id, x)
 
         # for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):

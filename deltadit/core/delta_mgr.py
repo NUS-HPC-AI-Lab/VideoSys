@@ -39,33 +39,30 @@ class DELTAConfig:
 class DELTAManager:
     def __init__(self, config: DELTAConfig):
         self.config: DELTAConfig = config
-
         self.cache = {self.config.start_block_id: None, self.config.end_block_id: None}
+        self.count = 0
 
         init_prompt = f"Init DELTAManager. steps: {config.steps}."
         init_prompt += f" delta_skip: {config.delta_skip}, delta_threshold: {config.delta_threshold}, delta_gap: {config.delta_gap}."
         logger.info(init_prompt)
 
-    def if_skip_delta(self, timestep: int, count: int):
+    def if_skip_delta(self, timestep: int):
         self.config.setup(timestep)
+        # NOTE
         if (
             self.config.delta_skip
             and (timestep is not None)
-            and (count % self.config.delta_gap != 0)
+            and (self.count % self.config.delta_gap != 0)
             and (self.is_t_in_intervals(timestep))
         ):
             flag = True
         else:
             flag = False
-        count = (count + 1) % self.config.steps
-        return flag, count
+        self.count = (self.count + 1) % self.config.steps
+        return flag
 
     def if_skip_block(self, t, block_id):
-        if (
-            (t is not None)
-            and (t % self.config.delta_gap != 0)
-            and (self.is_t_in_intervals(t, self.config.time_intervals))
-        ):
+        if (t is not None) and (self.count % self.config.delta_gap != 0) and (self.is_t_in_intervals(t)):
             if self.config.start_block_id <= block_id <= self.config.end_block_id:
                 flag = True
             else:
@@ -98,6 +95,8 @@ class DELTAManager:
     def is_skip_last_block(self, block_id):
         if self.config.end_block_id is not None and block_id == self.config.end_block_id:
             return True
+        else:
+            return False
 
     def is_skip_first_block(self, block_id):
         if self.config.start_block_id is not None and block_id == self.config.start_block_id:
@@ -120,10 +119,10 @@ def update_steps(steps: int):
         DELTA_MANAGER.config.steps = steps
 
 
-def if_skip_delta(timestep: int, count: int):
+def if_skip_delta(timestep: int):
     if not enable_delta():
-        return False, count
-    return DELTA_MANAGER.if_skip_delta(timestep, count)
+        return False
+    return DELTA_MANAGER.if_skip_delta(timestep)
 
 
 def if_skip_block(t, block_id):
