@@ -1,9 +1,18 @@
-import opendit
-from opendit import OpenSoraConfig, OpenSoraPipeline
+import os
+
+import deltadit
+from deltadit import OpenSoraConfig, OpenSoraPipeline
 
 
 def run_base():
-    opendit.initialize(42)
+    # Manually set environment variables for single GPU debugging
+    os.environ["RANK"] = "0"
+    os.environ["LOCAL_RANK"] = "0"
+    os.environ["WORLD_SIZE"] = "1"
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12356"
+
+    deltadit.initialize(42)
 
     config = OpenSoraConfig()
     pipeline = OpenSoraPipeline(config)
@@ -14,8 +23,8 @@ def run_base():
 
 
 def run_pab():
-    opendit.initialize(42)
-    # user如何加入自己的参数？
+    deltadit.initialize(42)
+
     config = OpenSoraConfig(enable_pab=True)
     pipeline = OpenSoraPipeline(config)
 

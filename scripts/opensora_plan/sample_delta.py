@@ -1,7 +1,7 @@
 import os
 
-import opendit
-from opendit import OpenSoraPlanConfig, OpenSoraPlanPipeline
+import deltadit
+from deltadit import OpenSoraPlanConfig, OpenSoraPlanPipeline
 
 
 def run_base():
@@ -12,7 +12,11 @@ def run_base():
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
 
-    opendit.initialize(42)
+    deltadit.initialize(42)
+
+    # --gate_step 15 \
+    # --sa_interval 3 \
+    # --ca_interval 1 \
 
     config = OpenSoraPlanConfig()
     pipeline = OpenSoraPlanPipeline(config)
@@ -23,7 +27,14 @@ def run_base():
 
 
 def run_pab():
-    opendit.initialize(42)
+    # Manually set environment variables for single GPU debugging
+    os.environ["RANK"] = "0"
+    os.environ["LOCAL_RANK"] = "0"
+    os.environ["WORLD_SIZE"] = "1"
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+
+    deltadit.initialize(42)
 
     config = OpenSoraPlanConfig(enable_pab=True)
     pipeline = OpenSoraPlanPipeline(config)
@@ -34,5 +45,5 @@ def run_pab():
 
 
 if __name__ == "__main__":
-    run_base()
-    # run_pab()
+    # run_base()
+    run_pab()

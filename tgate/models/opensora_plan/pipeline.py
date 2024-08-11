@@ -23,17 +23,17 @@ from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.pab_mgr import (
-    PABConfig,
+from tgate.core.pab_mgr import (
+    TGATEConfig,
     get_diffusion_skip,
     get_diffusion_skip_timestep,
-    set_pab_manager,
+    set_tgate_manager,
     skip_diffusion_timestep,
     update_steps,
 )
-from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
-from opendit.utils.logging import logger
-from opendit.utils.utils import save_video
+from tgate.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from tgate.utils.logging import logger
+from tgate.utils.utils import save_video
 
 from .ae import ae_stride_config, getae_wrapper
 from .latte import LatteT2V
@@ -55,19 +55,19 @@ EXAMPLE_DOC_STRING = """
 """
 
 
-class OpenSoraPlanPABConfig(PABConfig):
+class OpenSoraPlanTGATEConfig(TGATEConfig):
     def __init__(
         self,
         steps: int = 150,
         spatial_broadcast: bool = True,
-        spatial_threshold: list = [100, 800],
-        spatial_gap: int = 2,
-        temporal_broadcast: bool = True,
-        temporal_threshold: list = [100, 750],
+        spatial_threshold: list = [0, 90],
+        spatial_gap: int = 10,
+        temporal_broadcast: bool = False,
+        temporal_threshold: list = [100, 150],
         temporal_gap: int = 4,
         cross_broadcast: bool = True,
-        cross_threshold: list = [100, 850],
-        cross_gap: int = 6,
+        cross_threshold: list = [90, 150],
+        cross_gap: int = 60,
         diffusion_skip: bool = False,
         diffusion_timestep_respacing: list = None,
         diffusion_skip_timestep: list = None,
@@ -100,8 +100,8 @@ class OpenSoraPlanConfig:
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
         # ======= pab ========
-        enable_pab: bool = False,
-        pab_config: PABConfig = OpenSoraPlanPABConfig(),
+        enable_tgate: bool = False,
+        pab_config: TGATEConfig = OpenSoraPlanTGATEConfig(),
     ):
         self.model_path = model_path
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
@@ -115,7 +115,7 @@ class OpenSoraPlanConfig:
         self.tile_overlap_factor = tile_overlap_factor
 
         # ======= pab ========
-        self.enable_pab = enable_pab
+        self.enable_tgate = enable_tgate
         self.pab_config = pab_config
 
 
@@ -185,8 +185,8 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         self.set_eval_and_device(device, text_encoder, vae, transformer)
 
         # pab
-        if config.enable_pab:
-            set_pab_manager(config.pab_config)
+        if config.enable_tgate:
+            set_tgate_manager(config.pab_config)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
@@ -806,6 +806,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                     latent_model_input,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
+                    timestep_index=i,
                     added_cond_kwargs=added_cond_kwargs,
                     enable_temporal_attentions=enable_temporal_attentions,
                     return_dict=False,
