@@ -68,35 +68,3 @@ if __name__ == "__main__":
 
     # run_base()
     run_pab()
-
-
-#         "prompt_en": "Yellow and black tropical fish dart through the sea.",
-#         "dimension": [
-#             "subject_consistency",
-#             "dynamic_degree",
-#             "motion_smoothness"
-#         ]
-#     },    {
-#         "prompt_en": "Little fancy carp or koi fish swimming and play in pond at the garden while raining",
-#         "dimension": [
-#             "subject_consistency",
-#             "dynamic_degree",
-#             "motion_smoothness"
-#         ]
-#     },
-#     {
-#         "prompt_en": "a bear hunting for prey",
-#         "dimension": [
-#             "subject_consistency",
-#             "dynamic_degree",
-#             "motion_smoothness"
-#         ]
-#     },
-#     {
-#         "prompt_en": "a bear climbing a tree",
-#         "dimension": [
-#             "subject_consistency",
-#             "dynamic_degree",
-#             "motion_smoothness"
-#         ]
-#     },
