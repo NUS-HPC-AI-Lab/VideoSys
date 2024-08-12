@@ -1190,8 +1190,8 @@ class AttnProcessor2_0:
             elif len(last_shape) == 1:
                 encoder_hidden_states = hidden_states.permute(0, 2, 1)
                 if last_shape[0] % 2 == 1:
-                    first_frame_tagte = encoder_hidden_states[:, :, :1].repeat((1, 1, attn.kernel_size - 1))
-                    encoder_hidden_states = torch.concatenate((first_frame_tagte, encoder_hidden_states), dim=2)
+                    first_frame_pad = encoder_hidden_states[:, :, :1].repeat((1, 1, attn.kernel_size - 1))
+                    encoder_hidden_states = torch.concatenate((first_frame_pad, encoder_hidden_states), dim=2)
                 encoder_hidden_states = attn.sr(encoder_hidden_states).permute(0, 2, 1)
             else:
                 raise NotImplementedError(f"NotImplementedError with last_shape {last_shape}")
@@ -1919,17 +1919,16 @@ class BasicTransformerBlock(nn.Module):
 
         broadcast_spatial, self.spatial_count = if_broadcast_spatial(timestep_index, self.spatial_count, self.block_idx)
         if broadcast_spatial:
-            if self.block_idx == 1:
-                print(f"time {timestep_index} | block {self.block_idx} | spatial | skip")
-
+            # if self.block_idx == 1:
+            # print(f"time {timestep_index} | block {self.block_idx} | spatial | skip")
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
                 self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
             ).chunk(6, dim=1)
         else:
-            if self.block_idx == 1:
-                print(f"time {timestep_index} | block {self.block_idx} | spatial | compute")
+            # if self.block_idx == 1:
+            # print(f"time {timestep_index} | block {self.block_idx} | spatial | compute")
             if self.use_ada_layer_norm:
                 norm_hidden_states = self.norm1(hidden_states, timestep)
             elif self.use_ada_layer_norm_zero:
@@ -1980,12 +1979,12 @@ class BasicTransformerBlock(nn.Module):
         if self.attn2 is not None:
             broadcast_cross, self.cross_count = if_broadcast_cross(timestep_index, self.cross_count)
             if broadcast_cross:
-                if self.block_idx == 1:
-                    print(f"time {timestep_index} | block {self.block_idx} | cross | skip")
+                # if self.block_idx == 1:
+                # print(f"time {timestep_index} | block {self.block_idx} | cross | skip")
                 hidden_states = hidden_states + self.cross_last
             else:
-                if self.block_idx == 1:
-                    print(f"time {timestep_index} | block {self.block_idx} | cross | compute")
+                # if self.block_idx == 1:
+                # print(f"time {timestep_index} | block {self.block_idx} | cross | compute")
                 if self.use_ada_layer_norm:
                     norm_hidden_states = self.norm2(hidden_states, timestep)
                 elif self.use_ada_layer_norm_zero or self.use_layer_norm:

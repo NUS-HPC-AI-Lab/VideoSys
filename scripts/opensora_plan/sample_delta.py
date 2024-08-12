@@ -39,10 +39,8 @@ def run_pab():
     delta_config = OpenSoraPlanDELTAConfig(
         steps=10,
         delta_skip=True,
-        delta_threshold={(0, 6): [0, 2], (24, 30): [25, 27]},
-        # delta_threshold={(0, 10): [0, 9]},
-        # delta_threshold={(0,10):[0, 9], (20,30):[9,27]},
-        # delta_threshold={(0,10):[9, 27], (20,30):[9,27]},
+        delta_threshold={(0, 1): [0, 2]},
+        # delta_threshold={(0, 6): [0, 2], (24, 30): [25, 27]},
         delta_gap=2,
     )
     config = OpenSoraPlanConfig(enable_delta=True, delta_config=delta_config)
@@ -50,7 +48,10 @@ def run_pab():
 
     prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+
+    save_path = f"./outputs/opensora_plan_delta_{config.delta_config.delta_skip}_{prompt.replace(' ', '_')}_delta_threshold_{config.delta_config.delta_threshold}_delta_gap_{config.delta_config.delta_gap}.mp4"
+    pipeline.save_video(video, save_path)
+    print(f"Saved video to {save_path}")
 
 
 if __name__ == "__main__":

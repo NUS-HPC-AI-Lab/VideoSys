@@ -30,7 +30,7 @@ def run_pab():
     os.environ["LOCAL_RANK"] = "0"
     os.environ["WORLD_SIZE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    os.environ["MASTER_PORT"] = "12358"
 
     tgate.initialize(42)
 

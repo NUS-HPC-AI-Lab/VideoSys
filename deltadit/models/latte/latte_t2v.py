@@ -1241,6 +1241,8 @@ class LatteT2V(ModelMixin, ConfigMixin):
         else:
             temp_pos_embed = self.temp_pos_embed
 
+        if timestep_index == 47:
+            print("debug")
         if if_skip_delta(timestep_index):
             print(f"t: {timestep_index} | skip")
             for i, (spatial_block, temp_block) in enumerate(

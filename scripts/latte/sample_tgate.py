@@ -43,7 +43,7 @@ def run_pab():
         temporal_gap=2,
         cross_broadcast=True,
         cross_threshold=[20, 50],
-        cross_gap=20,
+        cross_gap=30,
     )
     # step 250 / m=100 / k=10
     # opensora step=30 / m=12 / k=2
