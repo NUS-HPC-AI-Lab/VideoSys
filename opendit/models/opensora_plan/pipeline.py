@@ -756,7 +756,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             clean_caption=clean_caption,
             mask_feature=mask_feature,
         )
-        if do_classifier_free_guidance:  # NOTE concat negative prompt to prompt
+        if do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
 
         # 4. Prepare timesteps
