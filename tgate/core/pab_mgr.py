@@ -39,6 +39,10 @@ class TGATEConfig:
         self.temporal_threshold = temporal_threshold
         self.temporal_gap = temporal_gap
 
+        self.gate_step = temporal_threshold[1]
+
+        # assert self.gate_step == spatial_threshold[1] == cross_threshold[0] == temporal_threshold[1]
+
         self.diffusion_skip = diffusion_skip
         self.diffusion_timestep_respacing = diffusion_timestep_respacing
         self.diffusion_skip_timestep = diffusion_skip_timestep
@@ -55,6 +59,14 @@ class TGATEManager:
         logger.info(init_prompt)
 
     def if_broadcast_cross(self, timestep: int, count: int):
+        if timestep <= self.config.cross_threshold[0]:
+            flag = False
+        else:
+            flag = True
+
+        count = (count + 1) % self.config.steps
+        return flag, count
+
         if self.config.cross_threshold[0] < timestep < self.config.cross_threshold[1]:
             if count == (self.config.cross_threshold[0] + 1):
                 count = count - self.config.cross_threshold[0]
@@ -156,6 +168,10 @@ def if_broadcast_spatial(timestep: int, count: int, block_idx: int):
     if not enable_tgate():
         return False, count
     return PAB_MANAGER.if_broadcast_spatial(timestep, count, block_idx)
+
+
+def get_gate_step():
+    return PAB_MANAGER.config.gate_step
 
 
 def get_diffusion_skip():

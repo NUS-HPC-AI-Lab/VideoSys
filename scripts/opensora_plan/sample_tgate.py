@@ -23,7 +23,7 @@ def run_base():
     config = OpenSoraPlanConfig()
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -49,15 +49,18 @@ def run_pab():
         cross_threshold=[90, 150],
         cross_gap=60,
     )
-    # step 150 / m=90 / k=6
-    # step=30 / m=12 / k=1
+    # step=150 / m=90 / k=6
+    # step=30 / m=12 / k=2
     # step=50 / m=20 / k=2
     config = OpenSoraPlanConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+
+    save_path = f"./outputs/opensora_plan_{prompt.replace(' ', '_')}_spatial_{config.tgate_config.spatial_threshold}_cross_{config.tgate_config.cross_threshold}_tgate.mp4"
+    pipeline.save_video(video, save_path)
+    print(f"Saved video to {save_path}")
 
 
 if __name__ == "__main__":
@@ -65,3 +68,35 @@ if __name__ == "__main__":
 
     # run_base()
     run_pab()
+
+
+#         "prompt_en": "Yellow and black tropical fish dart through the sea.",
+#         "dimension": [
+#             "subject_consistency",
+#             "dynamic_degree",
+#             "motion_smoothness"
+#         ]
+#     },    {
+#         "prompt_en": "Little fancy carp or koi fish swimming and play in pond at the garden while raining",
+#         "dimension": [
+#             "subject_consistency",
+#             "dynamic_degree",
+#             "motion_smoothness"
+#         ]
+#     },
+#     {
+#         "prompt_en": "a bear hunting for prey",
+#         "dimension": [
+#             "subject_consistency",
+#             "dynamic_degree",
+#             "motion_smoothness"
+#         ]
+#     },
+#     {
+#         "prompt_en": "a bear climbing a tree",
+#         "dimension": [
+#             "subject_consistency",
+#             "dynamic_degree",
+#             "motion_smoothness"
+#         ]
+#     },

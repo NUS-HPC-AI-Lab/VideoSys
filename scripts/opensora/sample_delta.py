@@ -17,7 +17,7 @@ def run_base():
     config = OpenSoraConfig()
     pipeline = OpenSoraPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -45,7 +45,7 @@ def run_pab():
     config = OpenSoraConfig(enable_delta=True, delta_config=delta_config)
     pipeline = OpenSoraPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
     print(f"Done ./outputs/{prompt}.mp4")

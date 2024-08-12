@@ -19,7 +19,7 @@ def run_base():
     config = OpenSoraConfig()
     pipeline = OpenSoraPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -51,10 +51,12 @@ def run_pab():
     config = OpenSoraConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
-    print(f"./outputs/{prompt}.mp4")
+
+    save_path = f"./outputs/opensora_{prompt.replace(' ', '_')}_spatial_{config.tgate_config.spatial_threshold}_cross_{config.tgate_config.cross_threshold}_tgate.mp4"
+    pipeline.save_video(video, save_path)
+    print(f"Saved video to {save_path}")
 
 
 if __name__ == "__main__":

@@ -780,6 +780,14 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+
+                # if do_classifier_free_guidance and (i < get_gate_step()):
+                # if do_classifier_free_guidance:
+                #     latent_model_input = torch.cat([latents] * 2)
+                # else:
+                #     latent_model_input = latents
+                #     prompt_embeds = negative_prompt_embeds if do_classifier_free_guidance else prompt_embeds
+
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 current_timestep = t
@@ -813,6 +821,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                 )[0]
 
                 # perform guidance
+                # if do_classifier_free_guidance and (i < get_gate_step()):
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
