@@ -623,7 +623,7 @@ class LattePipeline(VideoSysPipeline):
         clean_caption: bool = True,
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
-        verbose: bool = False,
+        verbose: bool = True,
     ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
