@@ -15,7 +15,7 @@ def run_base():
 
 def run_pab():
     opendit.initialize(42)
-    # user如何加入自己的参数？
+
     config = OpenSoraConfig(enable_pab=True)
     pipeline = OpenSoraPipeline(config)
 

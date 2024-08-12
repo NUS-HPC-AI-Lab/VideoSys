@@ -64,9 +64,9 @@ def get_parallel_manager():
 def initialize(seed: Optional[int] = None, sp_size: Optional[int] = None):
     if not dist.is_initialized():
         colossalai.launch_from_torch({})
-    init_dist_logger()
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+        init_dist_logger()
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
 
     if sp_size is None:
         sp_size = dist.get_world_size()

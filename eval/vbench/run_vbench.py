@@ -1,15 +1,53 @@
+import argparse
+import os
+
 import torch
 from vbench import VBench
 
-full_info_path = "/data/xuanlei/Lumiere-exp/eval/vbench/VBench_test.json"
+full_info_path = "./vbench/VBench_full_info_test.json"
+
+dimensions = [
+    "subject_consistency",
+    "imaging_quality",
+    "background_consistency",
+    "motion_smoothness",
+    "overall_consistency",
+    "human_action",
+    "multiple_objects",
+    "spatial_relationship",
+    "object_class",
+    "color",
+    "aesthetic_quality",
+    "appearance_style",
+    "temporal_flickering",
+    "scene",
+    "temporal_style",
+    "dynamic_degree",
+]
 
 
-my_VBench = VBench(torch.device("cuda"), full_info_path, "vbench_out")
-my_VBench.evaluate(
-    videos_path="/data/xuanlei/Lumiere-exp/eval/videos",
-    name="temporal_flickering",
-    local=False,
-    read_frame=False,
-    dimension_list=["temporal_flickering"],
-    mode="vbench_standard",
-)
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--video_path", required=True, type=str)
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    save_path = os.path.join("./vbench_out", os.path.basename(args.video_path))
+
+    kwargs = {}
+    kwargs["imaging_quality_preprocessing_mode"] = "longer"  # use VBench/evaluate.py default
+
+    for dimension in dimensions:
+        my_VBench = VBench(torch.device("cuda"), full_info_path, save_path)
+        my_VBench.evaluate(
+            videos_path=args.video_path,
+            name=dimension,
+            local=False,
+            read_frame=False,
+            dimension_list=[dimension],
+            mode="vbench_standard",
+            **kwargs,
+        )

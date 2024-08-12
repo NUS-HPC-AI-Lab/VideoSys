@@ -32,17 +32,28 @@ class OpenSoraPABConfig(PABConfig):
         self,
         steps: int = 50,
         spatial_broadcast: bool = True,
-        spatial_threshold: list = [540, 920],
+        spatial_threshold: list = [450, 930],
         spatial_gap: int = 2,
         temporal_broadcast: bool = True,
-        temporal_threshold: list = [540, 920],
+        temporal_threshold: list = [450, 930],
         temporal_gap: int = 4,
         cross_broadcast: bool = True,
-        cross_threshold: list = [540, 930],
+        cross_threshold: list = [450, 930],
         cross_gap: int = 6,
         diffusion_skip: bool = False,
         diffusion_timestep_respacing: list = None,
         diffusion_skip_timestep: list = None,
+        mlp_skip: bool = True,
+        mlp_spatial_skip_config: dict = {
+            676: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
+            788: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
+            864: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
+        },
+        mlp_temporal_skip_config: dict = {
+            676: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
+            788: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
+            864: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
+        },
     ):
         super().__init__(
             steps=steps,
@@ -58,6 +69,9 @@ class OpenSoraPABConfig(PABConfig):
             diffusion_skip=diffusion_skip,
             diffusion_timestep_respacing=diffusion_timestep_respacing,
             diffusion_skip_timestep=diffusion_skip_timestep,
+            mlp_skip=mlp_skip,
+            mlp_spatial_skip_config=mlp_spatial_skip_config,
+            mlp_temporal_skip_config=mlp_temporal_skip_config,
         )
 
 

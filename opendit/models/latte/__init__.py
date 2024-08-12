@@ -1,7 +1,7 @@
-from .latte_t2v import LatteT2V
-from .pipeline import LattePipeline
+from .pipeline import LatteConfig, LattePABConfig, LattePipeline
 
 __all__ = [
-    "LatteT2V",
     "LattePipeline",
+    "LattePABConfig",
+    "LatteConfig",
 ]
