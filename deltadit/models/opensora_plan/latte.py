@@ -65,6 +65,15 @@ if is_xformers_available():
 else:
     xformers = None
 
+from deltadit.core.delta_mgr import (
+    get_cache,
+    if_skip_delta,
+    if_skip_middle_block,
+    is_skip_first_block,
+    is_skip_last_block,
+    save_end_cache,
+    save_start_cache,
+)
 
 SPATIAL_LIST = []
 TEMPROAL_LIST = []
@@ -2348,6 +2357,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
         self,
         hidden_states: torch.Tensor,
         timestep: Optional[torch.LongTensor] = None,
+        timestep_index=None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         added_cond_kwargs: Dict[str, torch.Tensor] = None,
         class_labels: Optional[torch.LongTensor] = None,
@@ -2506,123 +2516,39 @@ class LatteT2V(ModelMixin, ConfigMixin):
         else:
             temp_pos_embed = self.temp_pos_embed
 
-        for i, (spatial_block, temp_block) in enumerate(zip(self.transformer_blocks, self.temporal_transformer_blocks)):
-            if self.training and self.gradient_checkpointing:
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    spatial_block,
-                    hidden_states,
-                    attention_mask_compress if i >= self.num_layers // 2 else attention_mask,
-                    encoder_hidden_states_spatial,
-                    encoder_attention_mask,
-                    timestep_spatial,
-                    cross_attention_kwargs,
-                    class_labels,
-                    pos_hw,
-                    pos_hw,
-                    hw,
-                    use_reentrant=False,
-                )
-
-                if enable_temporal_attentions:
-                    hidden_states = rearrange(hidden_states, "(b f) t d -> (b t) f d", b=input_batch_size).contiguous()
-
-                    if use_image_num != 0:  # image-video joitn training
-                        hidden_states_video = hidden_states[:, :frame, ...]
-                        hidden_states_image = hidden_states[:, frame:, ...]
-
-                        # if i == 0 and not self.use_rope:
-                        if i == 0:
-                            hidden_states_video = hidden_states_video + temp_pos_embed
-
-                        hidden_states_video = torch.utils.checkpoint.checkpoint(
-                            temp_block,
-                            hidden_states_video,
-                            None,  # attention_mask
-                            None,  # encoder_hidden_states
-                            None,  # encoder_attention_mask
-                            timestep_temp,
-                            cross_attention_kwargs,
-                            class_labels,
-                            pos_t,
-                            pos_t,
-                            (frame,),
-                            use_reentrant=False,
-                        )
-
-                        hidden_states = torch.cat([hidden_states_video, hidden_states_image], dim=1)
+        # === blocks ===
+        # BUG jump here
+        if if_skip_delta(timestep_index):
+            print(f"t: {timestep_index} | skip")
+            for i, (spatial_block, temp_block) in enumerate(
+                zip(self.transformer_blocks, self.temporal_transformer_blocks)
+            ):
+                if if_skip_middle_block(timestep_index, i):
+                    print(f"block_id: {i} | skip block")
+                    continue
+                elif is_skip_last_block(i):
+                    print(f"block_id: {i} | add cache")
+                    hidden_states = hidden_states + get_cache()
+                else:
+                    hidden_states = spatial_block(  # NOTE skip block here
+                        hidden_states,
+                        attention_mask_compress if i >= self.num_layers // 2 else attention_mask,
+                        encoder_hidden_states_spatial,
+                        encoder_attention_mask,
+                        timestep_spatial,
+                        cross_attention_kwargs,
+                        class_labels,
+                        pos_hw,
+                        pos_hw,
+                        hw,
+                        org_timestep,
+                    )
+                    if enable_temporal_attentions:
+                        # b c f h w, f = 16 + 4
                         hidden_states = rearrange(
-                            hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
+                            hidden_states, "(b f) t d -> (b t) f d", b=input_batch_size
                         ).contiguous()
 
-                    else:
-                        # if i == 0 and not self.use_rope:
-                        if i == 0:
-                            hidden_states = hidden_states + temp_pos_embed
-
-                        hidden_states = torch.utils.checkpoint.checkpoint(
-                            temp_block,
-                            hidden_states,
-                            None,  # attention_mask
-                            None,  # encoder_hidden_states
-                            None,  # encoder_attention_mask
-                            timestep_temp,
-                            cross_attention_kwargs,
-                            class_labels,
-                            pos_t,
-                            pos_t,
-                            (frame,),
-                            use_reentrant=False,
-                        )
-
-                        hidden_states = rearrange(
-                            hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
-                        ).contiguous()
-            else:
-                hidden_states = spatial_block(  # NOTE skip block here
-                    hidden_states,
-                    attention_mask_compress if i >= self.num_layers // 2 else attention_mask,
-                    encoder_hidden_states_spatial,
-                    encoder_attention_mask,
-                    timestep_spatial,
-                    cross_attention_kwargs,
-                    class_labels,
-                    pos_hw,
-                    pos_hw,
-                    hw,
-                    org_timestep,
-                )
-
-                if enable_temporal_attentions:
-                    # b c f h w, f = 16 + 4
-                    hidden_states = rearrange(hidden_states, "(b f) t d -> (b t) f d", b=input_batch_size).contiguous()
-
-                    if use_image_num != 0 and self.training:
-                        hidden_states_video = hidden_states[:, :frame, ...]
-                        hidden_states_image = hidden_states[:, frame:, ...]
-
-                        # if i == 0 and not self.use_rope:
-                        #     hidden_states_video = hidden_states_video + temp_pos_embed
-
-                        hidden_states_video = temp_block(
-                            hidden_states_video,
-                            None,  # attention_mask
-                            None,  # encoder_hidden_states
-                            None,  # encoder_attention_mask
-                            timestep_temp,
-                            cross_attention_kwargs,
-                            class_labels,
-                            pos_t,
-                            pos_t,
-                            (frame,),
-                            org_timestep,
-                        )
-
-                        hidden_states = torch.cat([hidden_states_video, hidden_states_image], dim=1)
-                        hidden_states = rearrange(
-                            hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
-                        ).contiguous()
-
-                    else:
                         # if i == 0 and not self.use_rope:
                         if i == 0:
                             hidden_states = hidden_states + temp_pos_embed
@@ -2644,6 +2570,55 @@ class LatteT2V(ModelMixin, ConfigMixin):
                         hidden_states = rearrange(
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
+        else:
+            print(f"t: {timestep_index} | keep")
+            for i, (spatial_block, temp_block) in enumerate(
+                zip(self.transformer_blocks, self.temporal_transformer_blocks)
+            ):
+                if is_skip_first_block(i):
+                    save_start_cache(i, hidden_states)
+                    print(f"block_id: {i} | save_start_cache")
+
+                hidden_states = spatial_block(  # NOTE skip block here
+                    hidden_states,
+                    attention_mask_compress if i >= self.num_layers // 2 else attention_mask,
+                    encoder_hidden_states_spatial,
+                    encoder_attention_mask,
+                    timestep_spatial,
+                    cross_attention_kwargs,
+                    class_labels,
+                    pos_hw,
+                    pos_hw,
+                    hw,
+                    org_timestep,
+                )
+                if enable_temporal_attentions:
+                    # b c f h w, f = 16 + 4
+                    hidden_states = rearrange(hidden_states, "(b f) t d -> (b t) f d", b=input_batch_size).contiguous()
+
+                    # if i == 0 and not self.use_rope:
+                    if i == 0:
+                        hidden_states = hidden_states + temp_pos_embed
+
+                    hidden_states = temp_block(
+                        hidden_states,
+                        None,  # attention_mask
+                        None,  # encoder_hidden_states
+                        None,  # encoder_attention_mask
+                        timestep_temp,
+                        cross_attention_kwargs,
+                        class_labels,
+                        pos_t,
+                        pos_t,
+                        (frame,),
+                        org_timestep,
+                    )
+
+                    hidden_states = rearrange(hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size).contiguous()
+
+                if is_skip_last_block(i):
+                    save_end_cache(i, hidden_states)
+                    print(f"block_id: {i} | save_end_cache")
 
         if enable_sequence_parallel():
             hidden_states = self.gather_from_second_dim(hidden_states, input_batch_size)

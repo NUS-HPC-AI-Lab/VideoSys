@@ -29,8 +29,8 @@ from deltadit.core.comm import (
 )
 from deltadit.core.delta_mgr import (
     get_cache,
-    if_skip_block,
     if_skip_delta,
+    if_skip_middle_block,
     is_skip_first_block,
     is_skip_last_block,
     save_end_cache,
@@ -476,26 +476,41 @@ class STDiT3(PreTrainedModel):
         # TODO add skip block delta dit
         # block_id->timestep
         # {(0,10):[0:9], (20,30):[9:28]}
+
+        # for t in range(30):
+        #     if if_skip_delta(t):
+        #         print(f"timestep_index: {t} | skip")
+        #     else:
+        #         print(f"timestep_index: {t} | keep")
+
         if if_skip_delta(timestep_index):
+            print(f"t: {timestep_index} | skip")
             for block_id, (spatial_block, temporal_block) in enumerate(zip(self.spatial_blocks, self.temporal_blocks)):
-                if if_skip_block(timestep_index, block_id):
+                if block_id == 27:
+                    print("block_id: 27")
+                if if_skip_middle_block(timestep_index, block_id):
+                    print(f"block_id: {block_id} | skip")
                     continue
-                elif is_skip_last_block():
+                elif is_skip_last_block(block_id):
+                    print(f"block_id: {block_id} | add cache")
                     x = x + get_cache()
                 else:
                     x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
                     x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         else:
+            print(f"t: {timestep_index} | keep")
             for block_id, (spatial_block, temporal_block) in enumerate(zip(self.spatial_blocks, self.temporal_blocks)):
                 if is_skip_first_block(block_id):
                     save_start_cache(block_id, x)
+                    print(f"block_id: {block_id} | save_start_cache")
 
                 x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
                 x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
                 if is_skip_last_block(block_id):
                     save_end_cache(block_id, x)
+                    print(f"block_id: {block_id} | save_end_cache")
 
         # for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
         #     x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)

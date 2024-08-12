@@ -24,6 +24,7 @@ from diffusers.schedulers import DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
+from deltadit.core.delta_mgr import DELTAConfig, set_delta_manager
 from deltadit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from deltadit.utils.logging import logger
 from deltadit.utils.utils import save_video
@@ -38,37 +39,19 @@ from opendit.core.pab_mgr import (
 from .latte_t2v import LatteT2V
 
 
-class LattePABConfig(PABConfig):
+class LatteDELTAConfig(DELTAConfig):
     def __init__(
         self,
-        steps: int = 50,
-        spatial_broadcast: bool = True,
-        spatial_threshold: list = [100, 800],
-        spatial_gap: int = 2,
-        temporal_broadcast: bool = True,
-        temporal_threshold: list = [100, 850],
-        temporal_gap: int = 2,
-        cross_broadcast: bool = True,
-        cross_threshold: list = [100, 850],
-        cross_gap: int = 7,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
+        steps: int = None,
+        delta_skip: bool = None,
+        delta_gap: int = None,
+        delta_threshold=None,
     ):
         super().__init__(
             steps=steps,
-            spatial_broadcast=spatial_broadcast,
-            spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
-            temporal_broadcast=temporal_broadcast,
-            temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
-            cross_broadcast=cross_broadcast,
-            cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
+            delta_skip=delta_skip,
+            delta_threshold=delta_threshold,
+            delta_gap=delta_gap,
         )
 
 
@@ -84,7 +67,7 @@ class LatteConfig:
         variance_type: str = "learned_range",
         # ======= delta ========
         enable_delta: bool = False,
-        delta_config: PABConfig = LattePABConfig(),
+        delta_config: PABConfig = LatteDELTAConfig(),
     ):
         self.model_path = model_path
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
@@ -795,6 +778,7 @@ class LattePipeline(VideoSysPipeline):
                     latent_model_input,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
+                    timestep_index=i,
                     added_cond_kwargs=added_cond_kwargs,
                     enable_temporal_attentions=enable_temporal_attentions,
                     return_dict=False,

@@ -23,6 +23,7 @@ from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
+from deltadit.core.delta_mgr import DELTAConfig, set_delta_manager
 from deltadit.core.pab_mgr import (
     PABConfig,
     get_diffusion_skip,
@@ -54,37 +55,19 @@ EXAMPLE_DOC_STRING = """
 """
 
 
-class OpenSoraPlanPABConfig(PABConfig):
+class OpenSoraPlanDELTAConfig(DELTAConfig):
     def __init__(
         self,
-        steps: int = 150,
-        spatial_broadcast: bool = True,
-        spatial_threshold: list = [100, 800],
-        spatial_gap: int = 2,
-        temporal_broadcast: bool = True,
-        temporal_threshold: list = [100, 750],
-        temporal_gap: int = 4,
-        cross_broadcast: bool = True,
-        cross_threshold: list = [100, 850],
-        cross_gap: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
+        steps: int = None,
+        delta_skip: bool = None,
+        delta_gap: int = None,
+        delta_threshold=None,
     ):
         super().__init__(
             steps=steps,
-            spatial_broadcast=spatial_broadcast,
-            spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
-            temporal_broadcast=temporal_broadcast,
-            temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
-            cross_broadcast=cross_broadcast,
-            cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
+            delta_skip=delta_skip,
+            delta_threshold=delta_threshold,
+            delta_gap=delta_gap,
         )
 
 
@@ -100,7 +83,7 @@ class OpenSoraPlanConfig:
         tile_overlap_factor: float = 0.25,
         # ======= delta ========
         enable_delta: bool = False,
-        delta_config: PABConfig = OpenSoraPlanPABConfig(),
+        delta_config: PABConfig = OpenSoraPlanDELTAConfig(),
     ):
         self.model_path = model_path
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
@@ -805,6 +788,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                     latent_model_input,
                     encoder_hidden_states=prompt_embeds,
                     timestep=current_timestep,
+                    timestep_index=i,
                     added_cond_kwargs=added_cond_kwargs,
                     enable_temporal_attentions=enable_temporal_attentions,
                     return_dict=False,
