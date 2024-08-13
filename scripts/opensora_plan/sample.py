@@ -11,7 +11,7 @@ def run_base():
     config = OpenSoraPlanConfig()
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -28,11 +28,11 @@ def run_pab():
     config = OpenSoraPlanConfig(enable_pab=True)
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 if __name__ == "__main__":
-    run_base()
-    # run_pab() # 02:52
+    # run_base() 03:39
+    run_pab()  # 02:51

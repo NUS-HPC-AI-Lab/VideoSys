@@ -21,7 +21,7 @@ def run_base():
     config = OpenSoraPlanConfig()
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -46,7 +46,7 @@ def run_pab():
     config = OpenSoraPlanConfig(enable_delta=True, delta_config=delta_config)
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
 
     save_path = f"./outputs/opensora_plan_delta_{config.delta_config.delta_skip}_{prompt.replace(' ', '_')}_delta_threshold_{config.delta_config.delta_threshold}_delta_gap_{config.delta_config.delta_gap}.mp4"

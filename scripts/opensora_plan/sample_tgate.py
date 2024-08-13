@@ -21,7 +21,7 @@ def run_base():
     config = OpenSoraPlanConfig()
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -32,7 +32,7 @@ def run_pab():
     os.environ["LOCAL_RANK"] = "0"
     os.environ["WORLD_SIZE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    os.environ["MASTER_PORT"] = "12358"
 
     tgate.initialize(42)
 
@@ -53,7 +53,7 @@ def run_pab():
     config = OpenSoraPlanConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
 
     save_path = f"./outputs/opensora_plan_{prompt.replace(' ', '_')}_spatial_{config.tgate_config.spatial_threshold}_cross_{config.tgate_config.cross_threshold}_tgate.mp4"
@@ -63,8 +63,9 @@ def run_pab():
 
 if __name__ == "__main__":
     # torch.backends.cudnn.enabled = False
-    run_base()  # 03:17
-    # run_pab() # enable_tgate=True 02:04    # enable_tgate=False 03:17
+    # run_base()  # 03:30
+    run_pab()  # enable_tgate=True 02:37    # enable_tgate=False 03:30
+
 
 # base 快一点
 # opnedit base 时间 和 run_base时间一致

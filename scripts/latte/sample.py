@@ -10,7 +10,7 @@ def run_base():
     config = LatteConfig()
     pipeline = LattePipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -21,7 +21,7 @@ def run_pab():
     config = LatteConfig(enable_pab=True)
     pipeline = LattePipeline(config)
 
-    prompt = "Yellow and black tropical fish dart through the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
