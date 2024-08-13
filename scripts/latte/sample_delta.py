@@ -37,7 +37,8 @@ def run_pab():
     delta_config = LatteDELTAConfig(
         steps=10,
         delta_skip=True,
-        delta_threshold={(0, 1): [0, 1]},
+        delta_threshold={(0, 1): [0, 5]},
+        # delta_threshold={(0, 1): [0, 1]},
         delta_gap=2,
     )
     # step 250 / m=100 / k=10
@@ -46,7 +47,7 @@ def run_pab():
     config = LatteConfig(enable_delta=True, delta_config=delta_config)
     pipeline = LattePipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
 
     save_path = f"./outputs/latte_delta_{config.delta_config.delta_skip}_{prompt.replace(' ', '_')}_delta_threshold_{config.delta_config.delta_threshold}_delta_gap_{config.delta_config.delta_gap}.mp4"

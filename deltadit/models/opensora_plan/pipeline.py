@@ -816,7 +816,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                         callback(step_idx, t, latents)
 
         if not output_type == "latents":
-            video = self.decode_latents(latents)
+            video = self.decode_latents(latents)  # torch.Size([1, 4, 17, 64, 64])
             video = video[:, :num_frames, :height, :width]
         else:
             video = latents

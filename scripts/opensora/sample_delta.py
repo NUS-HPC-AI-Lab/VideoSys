@@ -35,7 +35,7 @@ def run_pab():
     delta_config = OpenSoraDELTAConfig(
         steps=10,
         delta_skip=True,
-        delta_threshold={(0, 3): [0, 5]},
+        delta_threshold={(0, 5): [0, 5]},
         delta_gap=2,
     )
 

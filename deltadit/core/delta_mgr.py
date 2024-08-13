@@ -55,7 +55,7 @@ class DELTAManager:
         self.config.setup(timestep)
         # NOTE
         if self.config.current_interval is None:
-            print("No skip interval")
+            # print("No skip interval")
             self.count = 1
         else:
             self.count = timestep - self.config.current_interval[0] + 1

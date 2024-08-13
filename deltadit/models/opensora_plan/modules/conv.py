@@ -99,4 +99,4 @@ class CausalConv3d(nn.Module):
         # 1 + 16   16 as video, 1 as image
         first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.time_kernel_size - 1, 1, 1))  # b c t h w
         x = torch.concatenate((first_frame_pad, x), dim=2)  # 3 + 16
-        return self.conv(x)
+        return self.conv(x)  # BUG torch.Size([1, 512, 33, 128, 128])

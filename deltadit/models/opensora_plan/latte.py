@@ -2571,7 +2571,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
         else:
-            print(f"t: {timestep_index} | keep")
+            # print(f"t: {timestep_index} | keep")
             for i, (spatial_block, temp_block) in enumerate(
                 zip(self.transformer_blocks, self.temporal_transformer_blocks)
             ):
