@@ -10,7 +10,7 @@ def attention_ablation_func(pab_kwargs, prompt_list, output_dir):
     config = OpenSoraConfig(enable_pab=True, pab_config=pab_config)
     pipeline = OpenSoraPipeline(config)
 
-    generate_func(pipeline, prompt_list, output_dir, loop=1)
+    generate_func(pipeline, prompt_list, output_dir)
 
 
 def main(prompt_list):
@@ -24,7 +24,7 @@ def main(prompt_list):
             "cross_broadcast": False,
             "mlp_skip": False,
         }
-        output_dir = f"./samples/spatial_g{gap}"
+        output_dir = f"./samples/attention_ablation/spatial_g{gap}"
         attention_ablation_func(pab_kwargs, prompt_list, output_dir)
 
     # temporal
@@ -37,7 +37,7 @@ def main(prompt_list):
             "cross_broadcast": False,
             "mlp_skip": False,
         }
-        output_dir = f"./samples/temporal_g{gap}"
+        output_dir = f"./samples/attention_ablation/temporal_g{gap}"
         attention_ablation_func(pab_kwargs, prompt_list, output_dir)
 
     # cross
@@ -50,7 +50,7 @@ def main(prompt_list):
             "cross_gap": gap,
             "mlp_skip": False,
         }
-        output_dir = f"./samples/cross_g{gap}"
+        output_dir = f"./samples/attention_ablation/cross_g{gap}"
         attention_ablation_func(pab_kwargs, prompt_list, output_dir)
 
 
