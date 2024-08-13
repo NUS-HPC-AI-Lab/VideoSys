@@ -13,7 +13,7 @@ def eval_opensora(prompt_list):
         temporal_gap=2,
         cross_broadcast=True,
         cross_threshold=[12, 30],
-        cross_gap=12,
+        cross_gap=18,
     )
     config = OpenSoraConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPipeline(config)
@@ -23,16 +23,16 @@ def eval_opensora(prompt_list):
 def eval_opensoraplan(prompt_list):
     tgate_config = OpenSoraPlanTGATEConfig(
         spatial_broadcast=True,
-        spatial_threshold=[0, 90],
-        spatial_gap=6,
+        spatial_threshold=[0, 60],
+        spatial_gap=2,
         temporal_broadcast=True,
-        temporal_threshold=[0, 90],
-        temporal_gap=6,
+        temporal_threshold=[0, 60],
+        temporal_gap=2,
         cross_broadcast=True,
-        cross_threshold=[90, 150],
-        cross_gap=60,
+        cross_threshold=[60, 150],
+        cross_gap=90,
     )
-    config = OpenSoraPlanConfig(enable_tgate=False, tgate_config=tgate_config)
+    config = OpenSoraPlanConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPlanPipeline(config)
     generate_func(pipeline, prompt_list, "./samples/tgate_opensoraplan")
 
