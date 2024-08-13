@@ -10,7 +10,7 @@ def wo_spatial(prompt_list):
     config = OpenSoraConfig(enable_pab=True, pab_config=pab_config)
     pipeline = OpenSoraPipeline(config)
 
-    generate_func(pipeline, prompt_list, "./samples/wo_spatial", loop=1)
+    generate_func(pipeline, prompt_list, "./samples/wo_spatial")
 
 
 def wo_temporal(prompt_list):
@@ -18,7 +18,7 @@ def wo_temporal(prompt_list):
     config = OpenSoraConfig(enable_pab=True, pab_config=pab_config)
     pipeline = OpenSoraPipeline(config)
 
-    generate_func(pipeline, prompt_list, "./samples/wo_temporal", loop=1)
+    generate_func(pipeline, prompt_list, "./samples/wo_temporal")
 
 
 def wo_cross(prompt_list):
@@ -26,7 +26,7 @@ def wo_cross(prompt_list):
     config = OpenSoraConfig(enable_pab=True, pab_config=pab_config)
     pipeline = OpenSoraPipeline(config)
 
-    generate_func(pipeline, prompt_list, "./samples/wo_cross", loop=1)
+    generate_func(pipeline, prompt_list, "./samples/wo_cross")
 
 
 def wo_mlp(prompt_list):
@@ -39,7 +39,7 @@ def wo_mlp(prompt_list):
 
 if __name__ == "__main__":
     opendit.initialize(42)
-    prompt_list = read_prompt_list("vbench/VBench_full_info_test.json")
+    prompt_list = read_prompt_list("vbench/VBench_full_info.json")
     wo_spatial(prompt_list)
     wo_temporal(prompt_list)
     wo_cross(prompt_list)
