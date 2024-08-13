@@ -37,8 +37,7 @@ def run_pab():
     delta_config = LatteDELTAConfig(
         steps=10,
         delta_skip=True,
-        delta_threshold={(0, 1): [0, 5]},
-        # delta_threshold={(0, 1): [0, 1]},
+        delta_threshold={(0, 1): [0, 1]},
         delta_gap=2,
     )
     # step 250 / m=100 / k=10

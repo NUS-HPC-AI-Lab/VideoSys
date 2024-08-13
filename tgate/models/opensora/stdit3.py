@@ -167,6 +167,7 @@ class STDiT3Block(nn.Module):
         # cross attention
         broadcast_cross, self.cross_count = if_broadcast_cross(timestep_index, self.cross_count)
         if broadcast_cross:
+            # print(f"broadcast cross | {self.block_idx} | t {timestep_index}")
             x = x + self.last_cross
         else:
             x_cross = self.cross_attn(x, y, mask)

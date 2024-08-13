@@ -1,7 +1,5 @@
 import os
 
-import torch
-
 import tgate
 from tgate import OpenSoraConfig, OpenSoraPipeline, OpenSoraTGATEConfig
 
@@ -43,7 +41,7 @@ def run_pab():
         temporal_gap=2,
         cross_broadcast=True,
         cross_threshold=[12, 30],
-        cross_gap=12,
+        cross_gap=18,
     )
     # step 250 / m=100 / k=10
     # opensora step=30 / m=12 / k=2
@@ -60,7 +58,7 @@ def run_pab():
 
 
 if __name__ == "__main__":
-    torch.backends.cudnn.enabled = False
+    # torch.backends.cudnn.enabled = False
 
-    # run_base()
-    run_pab()
+    # run_base() # 01:17
+    run_pab()  # enable_tgate=False 01:17    # enable_tgate=True 01:07

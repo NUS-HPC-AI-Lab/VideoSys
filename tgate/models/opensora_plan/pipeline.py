@@ -22,7 +22,7 @@ from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from tgate.core.pab_mgr import TGATEConfig, set_tgate_manager, update_steps
+from tgate.core.pab_mgr import TGATEConfig, enable_tgate, get_gate_step, set_tgate_manager, update_steps
 from tgate.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from tgate.utils.logging import logger
 from tgate.utils.utils import save_video
@@ -751,12 +751,14 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             for i, t in enumerate(timesteps):
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
-                # if do_classifier_free_guidance and (i < get_gate_step()):
-                # if do_classifier_free_guidance:
-                #     latent_model_input = torch.cat([latents] * 2)
-                # else:
-                #     latent_model_input = latents
-                #     prompt_embeds = negative_prompt_embeds if do_classifier_free_guidance else prompt_embeds
+                if enable_tgate():
+                    if do_classifier_free_guidance and (i < get_gate_step()):
+                        latent_model_input = torch.cat([latents] * 2)
+                    else:
+                        latent_model_input = latents
+                        prompt_embeds = negative_prompt_embeds if do_classifier_free_guidance else prompt_embeds
+                else:
+                    latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
@@ -791,9 +793,14 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                 )[0]
 
                 # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+                if enable_tgate():
+                    if do_classifier_free_guidance and (i < get_gate_step()):
+                        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+                else:
+                    if do_classifier_free_guidance:
+                        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
                 # learned sigma
                 if self.transformer.config.out_channels // 2 == latent_channels:

@@ -50,10 +50,10 @@ def run_pab():
     # step=150 / m=90 / k=6
     # step=30 / m=12 / k=2
     # step=50 / m=20 / k=2
-    config = OpenSoraPlanConfig(enable_tgate=False, tgate_config=tgate_config)
+    config = OpenSoraPlanConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
 
     save_path = f"./outputs/opensora_plan_{prompt.replace(' ', '_')}_spatial_{config.tgate_config.spatial_threshold}_cross_{config.tgate_config.cross_threshold}_tgate.mp4"
@@ -63,5 +63,8 @@ def run_pab():
 
 if __name__ == "__main__":
     # torch.backends.cudnn.enabled = False
-    # run_base()
-    run_pab()
+    run_base()  # 03:17
+    # run_pab() # enable_tgate=True 02:04    # enable_tgate=False 03:17
+
+# base 快一点
+# opnedit base 时间 和 run_base时间一致
