@@ -41,5 +41,5 @@ def eval_opensoraplan(prompt_list):
 if __name__ == "__main__":
     tgate.initialize(42)
     prompt_list = read_prompt_list("./VBench_full_info.json")
-    # eval_opensora(prompt_list)
+    eval_opensora(prompt_list)
     eval_opensoraplan(prompt_list)
