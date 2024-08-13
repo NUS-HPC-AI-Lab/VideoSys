@@ -8,7 +8,7 @@ def run_base():
     config = OpenSoraConfig()
     pipeline = OpenSoraPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
@@ -19,7 +19,7 @@ def run_pab():
     config = OpenSoraConfig(enable_pab=True)
     pipeline = OpenSoraPipeline(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 

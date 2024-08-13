@@ -747,70 +747,71 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
 
-        import tqdm
-        progress_bar = tqdm.tqdm if verbose else lambda x: x
-        # with self.progress_bar(total=num_inference_steps) as progress_bar:
-        for i, t in progress_bar(list(enumerate(timesteps))):
-            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+        with self.progress_bar(total=num_inference_steps) as progress_bar:
+            for i, t in enumerate(timesteps):
+                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
-            # if do_classifier_free_guidance and (i < get_gate_step()):
-            # if do_classifier_free_guidance:
-            #     latent_model_input = torch.cat([latents] * 2)
-            # else:
-            #     latent_model_input = latents
-            #     prompt_embeds = negative_prompt_embeds if do_classifier_free_guidance else prompt_embeds
+                # if enable_tgate():
+                #     if do_classifier_free_guidance and (i < get_gate_step()):
+                #         latent_model_input = torch.cat([latents] * 2)
+                #     else:
+                #         latent_model_input = latents
+                #         prompt_embeds = negative_prompt_embeds if do_classifier_free_guidance else prompt_embeds
+                # else:
+                #     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
-            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-            current_timestep = t
-            if not torch.is_tensor(current_timestep):
-                # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
-                # This would be a good case for the `match` statement (Python 3.10+)
-                is_mps = latent_model_input.device.type == "mps"
-                if isinstance(current_timestep, float):
-                    dtype = torch.float32 if is_mps else torch.float64
+                current_timestep = t
+                if not torch.is_tensor(current_timestep):
+                    # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
+                    # This would be a good case for the `match` statement (Python 3.10+)
+                    is_mps = latent_model_input.device.type == "mps"
+                    if isinstance(current_timestep, float):
+                        dtype = torch.float32 if is_mps else torch.float64
+                    else:
+                        dtype = torch.int32 if is_mps else torch.int64
+                    current_timestep = torch.tensor([current_timestep], dtype=dtype, device=latent_model_input.device)
+                elif len(current_timestep.shape) == 0:
+                    current_timestep = current_timestep[None].to(latent_model_input.device)
+                # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
+                current_timestep = current_timestep.expand(latent_model_input.shape[0])
+
+                if prompt_embeds.ndim == 3:
+                    prompt_embeds = prompt_embeds.unsqueeze(1)  # b l d -> b 1 l d
+                # if prompt_attention_mask.ndim == 2:
+                #     prompt_attention_mask = prompt_attention_mask.unsqueeze(1)  # b l -> b 1 l
+                # predict noise model_output
+                noise_pred = self.transformer(
+                    latent_model_input,
+                    encoder_hidden_states=prompt_embeds,
+                    timestep=current_timestep,
+                    timestep_index=i,
+                    added_cond_kwargs=added_cond_kwargs,
+                    enable_temporal_attentions=enable_temporal_attentions,
+                    return_dict=False,
+                )[0]
+
+                # perform guidance
+                if do_classifier_free_guidance:
+                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+                # learned sigma
+                if self.transformer.config.out_channels // 2 == latent_channels:
+                    noise_pred = noise_pred.chunk(2, dim=1)[0]
                 else:
-                    dtype = torch.int32 if is_mps else torch.int64
-                current_timestep = torch.tensor([current_timestep], dtype=dtype, device=latent_model_input.device)
-            elif len(current_timestep.shape) == 0:
-                current_timestep = current_timestep[None].to(latent_model_input.device)
-            # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-            current_timestep = current_timestep.expand(latent_model_input.shape[0])
+                    noise_pred = noise_pred
 
-            if prompt_embeds.ndim == 3:
-                prompt_embeds = prompt_embeds.unsqueeze(1)  # b l d -> b 1 l d
-            # if prompt_attention_mask.ndim == 2:
-            #     prompt_attention_mask = prompt_attention_mask.unsqueeze(1)  # b l -> b 1 l
-            # predict noise model_output
-            noise_pred = self.transformer(
-                latent_model_input,
-                encoder_hidden_states=prompt_embeds,
-                timestep=current_timestep,
-                timestep_index=i,
-                added_cond_kwargs=added_cond_kwargs,
-                enable_temporal_attentions=enable_temporal_attentions,
-                return_dict=False,
-            )[0]
+                # compute previous image: x_t -> x_t-1
+                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
-            # perform guidance
-            if do_classifier_free_guidance:
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-            # learned sigma
-            if self.transformer.config.out_channels // 2 == latent_channels:
-                noise_pred = noise_pred.chunk(2, dim=1)[0]
-            else:
-                noise_pred = noise_pred
-
-            # compute previous image: x_t -> x_t-1
-            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-
-            # call the callback, if provided
-            if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                if callback is not None and i % callback_steps == 0:
-                    step_idx = i // getattr(self.scheduler, "order", 1)
-                    callback(step_idx, t, latents)
+                # call the callback, if provided
+                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                    progress_bar.update()
+                    if callback is not None and i % callback_steps == 0:
+                        step_idx = i // getattr(self.scheduler, "order", 1)
+                        callback(step_idx, t, latents)
 
         if not output_type == "latents":
             video = self.decode_latents(latents)
