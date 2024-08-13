@@ -17,24 +17,23 @@ from typing import Callable, List, Optional, Tuple, Union
 import ftfy
 import torch
 import torch.distributed as dist
-import tqdm
 from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.pab_mgr import (
+from deltadit.core.delta_mgr import DELTAConfig, set_delta_manager
+from deltadit.core.pab_mgr import (
     PABConfig,
     get_diffusion_skip,
     get_diffusion_skip_timestep,
-    set_pab_manager,
     skip_diffusion_timestep,
     update_steps,
 )
-from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
-from opendit.utils.logging import logger
-from opendit.utils.utils import save_video
+from deltadit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from deltadit.utils.logging import logger
+from deltadit.utils.utils import save_video
 
 from .ae import ae_stride_config, getae_wrapper
 from .latte import LatteT2V
@@ -56,73 +55,19 @@ EXAMPLE_DOC_STRING = """
 """
 
 
-class OpenSoraPlanPABConfig(PABConfig):
+class OpenSoraPlanDELTAConfig(DELTAConfig):
     def __init__(
         self,
-        steps: int = 150,
-        spatial_broadcast: bool = True,
-        spatial_threshold: list = [100, 850],
-        spatial_gap: int = 2,
-        temporal_broadcast: bool = True,
-        temporal_threshold: list = [100, 850],
-        temporal_gap: int = 4,
-        cross_broadcast: bool = True,
-        cross_threshold: list = [100, 850],
-        cross_gap: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
-        mlp_skip: bool = True,
-        mlp_spatial_skip_config: dict = {
-            738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            690: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            666: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            642: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            618: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            594: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            570: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            546: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            522: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            498: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            474: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            450: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            426: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-        },
-        mlp_temporal_skip_config: dict = {
-            738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            690: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            666: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            642: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            618: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            594: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            570: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            546: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            522: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            498: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            474: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            450: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-            426: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
-        },
+        steps: int = None,
+        delta_skip: bool = None,
+        delta_gap: int = None,
+        delta_threshold=None,
     ):
         super().__init__(
             steps=steps,
-            spatial_broadcast=spatial_broadcast,
-            spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
-            temporal_broadcast=temporal_broadcast,
-            temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
-            cross_broadcast=cross_broadcast,
-            cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
-            mlp_skip=mlp_skip,
-            mlp_spatial_skip_config=mlp_spatial_skip_config,
-            mlp_temporal_skip_config=mlp_temporal_skip_config,
+            delta_skip=delta_skip,
+            delta_threshold=delta_threshold,
+            delta_gap=delta_gap,
         )
 
 
@@ -136,9 +81,9 @@ class OpenSoraPlanConfig:
         # ======= vae =======
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
-        # ======= pab ========
-        enable_pab: bool = False,
-        pab_config: PABConfig = OpenSoraPlanPABConfig(),
+        # ======= delta ========
+        enable_delta: bool = False,
+        delta_config: PABConfig = OpenSoraPlanDELTAConfig(),
     ):
         self.model_path = model_path
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
@@ -151,9 +96,9 @@ class OpenSoraPlanConfig:
         self.enable_tiling = enable_tiling
         self.tile_overlap_factor = tile_overlap_factor
 
-        # ======= pab ========
-        self.enable_pab = enable_pab
-        self.pab_config = pab_config
+        # ======= delta ========
+        self.enable_delta = enable_delta
+        self.delta_config = delta_config
 
 
 class OpenSoraPlanPipeline(VideoSysPipeline):
@@ -221,9 +166,9 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)
 
-        # pab
-        if config.enable_pab:
-            set_pab_manager(config.pab_config)
+        # delta
+        if config.enable_delta:
+            set_delta_manager(config.delta_config)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
@@ -651,7 +596,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         clean_caption: bool = True,
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -756,7 +701,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             clean_caption=clean_caption,
             mask_feature=mask_feature,
         )
-        if do_classifier_free_guidance:
+        if do_classifier_free_guidance:  # NOTE concat negative prompt to prompt
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
 
         # 4. Prepare timesteps
@@ -802,64 +747,77 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
 
             self.scheduler.set_timesteps(num_inference_steps, device=device)
+            orignal_timesteps = self.scheduler.timesteps
 
-        progress_wrap = tqdm.tqdm if verbose and dist.get_rank() == 0 else (lambda x: x)
-        for i, t in progress_wrap(list(enumerate(timesteps))):
-            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+            if verbose and dist.get_rank() == 0:
+                print("============================")
+                print(f"orignal sample timesteps: {orignal_timesteps}")
+                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
+                print("============================")
+                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
+                print(f"sample timesteps: {timesteps}")
+                print(f"num_inference_steps: {len(timesteps)}")
+                print("============================")
 
-            current_timestep = t
-            if not torch.is_tensor(current_timestep):
-                # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
-                # This would be a good case for the `match` statement (Python 3.10+)
-                is_mps = latent_model_input.device.type == "mps"
-                if isinstance(current_timestep, float):
-                    dtype = torch.float32 if is_mps else torch.float64
+        with self.progress_bar(total=num_inference_steps) as progress_bar:
+            for i, t in enumerate(timesteps):
+                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+
+                current_timestep = t
+                if not torch.is_tensor(current_timestep):
+                    # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
+                    # This would be a good case for the `match` statement (Python 3.10+)
+                    is_mps = latent_model_input.device.type == "mps"
+                    if isinstance(current_timestep, float):
+                        dtype = torch.float32 if is_mps else torch.float64
+                    else:
+                        dtype = torch.int32 if is_mps else torch.int64
+                    current_timestep = torch.tensor([current_timestep], dtype=dtype, device=latent_model_input.device)
+                elif len(current_timestep.shape) == 0:
+                    current_timestep = current_timestep[None].to(latent_model_input.device)
+                # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
+                current_timestep = current_timestep.expand(latent_model_input.shape[0])
+
+                if prompt_embeds.ndim == 3:
+                    prompt_embeds = prompt_embeds.unsqueeze(1)  # b l d -> b 1 l d
+                # if prompt_attention_mask.ndim == 2:
+                #     prompt_attention_mask = prompt_attention_mask.unsqueeze(1)  # b l -> b 1 l
+                # predict noise model_output
+                noise_pred = self.transformer(
+                    latent_model_input,
+                    encoder_hidden_states=prompt_embeds,
+                    timestep=current_timestep,
+                    timestep_index=i,
+                    added_cond_kwargs=added_cond_kwargs,
+                    enable_temporal_attentions=enable_temporal_attentions,
+                    return_dict=False,
+                )[0]
+
+                # perform guidance
+                if do_classifier_free_guidance:
+                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+                # learned sigma
+                if self.transformer.config.out_channels // 2 == latent_channels:
+                    noise_pred = noise_pred.chunk(2, dim=1)[0]
                 else:
-                    dtype = torch.int32 if is_mps else torch.int64
-                current_timestep = torch.tensor([current_timestep], dtype=dtype, device=latent_model_input.device)
-            elif len(current_timestep.shape) == 0:
-                current_timestep = current_timestep[None].to(latent_model_input.device)
-            # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-            current_timestep = current_timestep.expand(latent_model_input.shape[0])
+                    noise_pred = noise_pred
 
-            if prompt_embeds.ndim == 3:
-                prompt_embeds = prompt_embeds.unsqueeze(1)  # b l d -> b 1 l d
+                # compute previous image: x_t -> x_t-1
+                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
-            # predict noise model_output
-            noise_pred = self.transformer(
-                latent_model_input,
-                all_timesteps=timesteps,
-                encoder_hidden_states=prompt_embeds,
-                timestep=current_timestep,
-                added_cond_kwargs=added_cond_kwargs,
-                enable_temporal_attentions=enable_temporal_attentions,
-                return_dict=False,
-            )[0]
-
-            # perform guidance
-            if do_classifier_free_guidance:
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-            # learned sigma
-            if self.transformer.config.out_channels // 2 == latent_channels:
-                noise_pred = noise_pred.chunk(2, dim=1)[0]
-            else:
-                noise_pred = noise_pred
-
-            # compute previous image: x_t -> x_t-1
-            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-
-            # call the callback, if provided
-            if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                if callback is not None and i % callback_steps == 0:
-                    step_idx = i // getattr(self.scheduler, "order", 1)
-                    callback(step_idx, t, latents)
+                # call the callback, if provided
+                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                    progress_bar.update()
+                    if callback is not None and i % callback_steps == 0:
+                        step_idx = i // getattr(self.scheduler, "order", 1)
+                        callback(step_idx, t, latents)
 
         if not output_type == "latents":
             video = self.decode_latents(latents)  # torch.Size([1, 4, 17, 64, 64])
-            video = video[:, :num_frames, :height, :width]  # torch.Size([1, 65, 512, 512, 3])
+            video = video[:, :num_frames, :height, :width]
         else:
             video = latents
             return VideoSysPipelineOutput(video=video)
