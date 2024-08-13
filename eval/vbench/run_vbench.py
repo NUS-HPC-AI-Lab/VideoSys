@@ -4,7 +4,7 @@ import os
 import torch
 from vbench import VBench
 
-full_info_path = "./vbench/VBench_full_info_test.json"
+full_info_path = "./vbench/VBench_full_info.json"
 
 dimensions = [
     "subject_consistency",
