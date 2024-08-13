@@ -1,3 +1,5 @@
+import os
+
 import opendit
 from opendit import OpenSoraPlanConfig, OpenSoraPlanPipeline
 
@@ -14,6 +16,12 @@ def run_base():
 
 
 def run_pab():
+    os.environ["RANK"] = "0"
+    os.environ["LOCAL_RANK"] = "0"
+    os.environ["WORLD_SIZE"] = "1"
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+
     opendit.initialize(42)
 
     config = OpenSoraPlanConfig(enable_pab=True)
@@ -25,5 +33,5 @@ def run_pab():
 
 
 if __name__ == "__main__":
-    run_base()
-    # run_pab()
+    # run_base()
+    run_pab()

@@ -1059,7 +1059,7 @@ class Attention(nn.Module):
                 # TODO: for pipelines such as stable-diffusion, padding cross-attn mask:
                 #       we want to instead pad by (0, remaining_length), where remaining_length is:
                 #       remaining_length: int = target_length - current_length
-                # TODO: re-enable tests/models/test_models_unet_2d_condition.py#test_model_xattn_tagteding
+                # TODO: re-enable tests/models/test_models_unet_2d_condition.py#test_model_xattn_padding
                 attention_mask = F.pad(attention_mask, (0, target_length), value=0.0)
 
         if out_dim == 3:

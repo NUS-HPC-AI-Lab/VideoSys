@@ -16,21 +16,13 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import ftfy
 import torch
-import torch.distributed as dist
 from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from tgate.core.pab_mgr import (
-    TGATEConfig,
-    get_diffusion_skip,
-    get_diffusion_skip_timestep,
-    set_tgate_manager,
-    skip_diffusion_timestep,
-    update_steps,
-)
+from tgate.core.pab_mgr import TGATEConfig, set_tgate_manager, update_steps
 from tgate.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from tgate.utils.logging import logger
 from tgate.utils.utils import save_video
@@ -614,7 +606,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         clean_caption: bool = True,
         mask_feature: bool = True,
         enable_temporal_attentions: bool = True,
-        verbose: bool = False,
+        verbose: bool = True,
     ) -> Union[VideoSysPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -754,28 +746,6 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
-        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            diffusion_skip_timestep = get_diffusion_skip_timestep()
-
-            # warmup_timesteps = timesteps[:num_warmup_steps]
-            # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
-            # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
-
-            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
-
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-            orignal_timesteps = self.scheduler.timesteps
-
-            if verbose and dist.get_rank() == 0:
-                print("============================")
-                print(f"orignal sample timesteps: {orignal_timesteps}")
-                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
-                print("============================")
-                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
-                print(f"sample timesteps: {timesteps}")
-                print(f"num_inference_steps: {len(timesteps)}")
-                print("============================")
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
