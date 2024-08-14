@@ -42,7 +42,7 @@ def run_pab():
 
 
 if __name__ == "__main__":
-    run_base()  # 03:00
-    # run_pab()  # 02:12
+    # run_base()  # 03:00
+    run_pab()  # 02:12
 
-# CUDA_VISIBLE_DEVICES=3 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample.py
+# CUDA_VISIBLE_DEVICES=0 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample.py
