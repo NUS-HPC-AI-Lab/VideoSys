@@ -1,6 +1,8 @@
 # Usage: torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py
 
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 import deltadit
 from deltadit import LatteConfig, LatteDELTAConfig, LattePipeline
@@ -8,11 +10,11 @@ from deltadit import LatteConfig, LatteDELTAConfig, LattePipeline
 
 def run_base():
     # Manually set environment variables for single GPU debugging
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    # os.environ["RANK"] = "0"
+    # os.environ["LOCAL_RANK"] = "0"
+    # os.environ["WORLD_SIZE"] = "1"
+    # os.environ["MASTER_ADDR"] = "localhost"
+    # os.environ["MASTER_PORT"] = "12355"
 
     deltadit.initialize(42)
 
@@ -21,24 +23,25 @@ def run_base():
 
     prompt = "Yellow and black tropical fish dart through the sea."
     video = pipeline.generate(prompt).video[0]
+    video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 def run_pab():
     # Manually set environment variables for single GPU debugging
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12358"
+    # os.environ["RANK"] = "0"
+    # os.environ["LOCAL_RANK"] = "0"
+    # os.environ["WORLD_SIZE"] = "1"
+    # os.environ["MASTER_ADDR"] = "localhost"
+    # os.environ["MASTER_PORT"] = "12358"
 
     deltadit.initialize(42)
 
     delta_config = LatteDELTAConfig(
         steps=10,
         delta_skip=True,
-        delta_threshold={(0, 1): [0, 5]},
-        # delta_threshold={(0, 1): [0, 1]},
+        # delta_threshold={(0, 2): [0, 2]},
+        delta_threshold={(0, 1): [0, 1]},
         delta_gap=2,
     )
     # step 250 / m=100 / k=10
@@ -48,6 +51,7 @@ def run_pab():
     pipeline = LattePipeline(config)
 
     prompt = "Yellow and black tropical fish dart through the sea."
+    video = pipeline.generate(prompt).video[0]
     video = pipeline.generate(prompt).video[0]
 
     save_path = f"./outputs/latte_delta_{config.delta_config.delta_skip}_{prompt.replace(' ', '_')}_delta_threshold_{config.delta_config.delta_threshold}_delta_gap_{config.delta_config.delta_gap}.mp4"

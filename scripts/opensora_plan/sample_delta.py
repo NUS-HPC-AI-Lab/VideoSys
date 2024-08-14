@@ -1,16 +1,17 @@
 import os
-
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 import deltadit
 from deltadit import OpenSoraPlanConfig, OpenSoraPlanDELTAConfig, OpenSoraPlanPipeline
 
 
 def run_base():
     # Manually set environment variables for single GPU debugging
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    # os.environ["RANK"] = "0"
+    # os.environ["LOCAL_RANK"] = "0"
+    # os.environ["WORLD_SIZE"] = "1"
+    # os.environ["MASTER_ADDR"] = "localhost"
+    # os.environ["MASTER_PORT"] = "12355"
 
     deltadit.initialize(42)
 
@@ -28,11 +29,11 @@ def run_base():
 
 def run_pab():
     # Manually set environment variables for single GPU debugging
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    # os.environ["RANK"] = "0"
+    # os.environ["LOCAL_RANK"] = "0"
+    # os.environ["WORLD_SIZE"] = "1"
+    # os.environ["MASTER_ADDR"] = "localhost"
+    # os.environ["MASTER_PORT"] = "12355"
 
     deltadit.initialize(42)
 
@@ -48,6 +49,7 @@ def run_pab():
 
     prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
+    video = pipeline.generate(prompt).video[0]
 
     save_path = f"./outputs/opensora_plan_delta_{config.delta_config.delta_skip}_{prompt.replace(' ', '_')}_delta_threshold_{config.delta_config.delta_threshold}_delta_gap_{config.delta_config.delta_gap}.mp4"
     pipeline.save_video(video, save_path)
@@ -55,5 +57,5 @@ def run_pab():
 
 
 if __name__ == "__main__":
-    # run_base()
+    run_base()
     run_pab()

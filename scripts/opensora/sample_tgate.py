@@ -1,16 +1,17 @@
 import os
-
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 import tgate
 from tgate import OpenSoraConfig, OpenSoraPipeline, OpenSoraTGATEConfig
 
 
 def run_base():
     # Manually set environment variables for single GPU debugging
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    # os.environ["RANK"] = "0"
+    # os.environ["LOCAL_RANK"] = "0"
+    # os.environ["WORLD_SIZE"] = "1"
+    # os.environ["MASTER_ADDR"] = "localhost"
+    # os.environ["MASTER_PORT"] = "12355"
 
     tgate.initialize(42)
 
@@ -24,11 +25,11 @@ def run_base():
 
 def run_pab():
     # Manually set environment variables for single GPU debugging
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12358"
+    # os.environ["RANK"] = "0"
+    # os.environ["LOCAL_RANK"] = "0"
+    # os.environ["WORLD_SIZE"] = "1"
+    # os.environ["MASTER_ADDR"] = "localhost"
+    # os.environ["MASTER_PORT"] = "12358"
 
     tgate.initialize(42)
 
@@ -60,5 +61,5 @@ def run_pab():
 if __name__ == "__main__":
     # torch.backends.cudnn.enabled = False
 
-    # run_base() # 01:17
+    run_base() # 01:17
     run_pab()  # enable_tgate=False 01:17    # enable_tgate=True 01:07
