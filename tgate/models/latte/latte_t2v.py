@@ -432,12 +432,12 @@ class BasicTransformerBlock(nn.Module):
         if self.attn2 is not None:
             broadcast_cross, self.cross_count = if_broadcast_cross(timestep_index, self.cross_count)
             if broadcast_cross:
-                if self.block_idx == 1:
-                    print(f"time {timestep_index} | block {self.block_idx} | cross | skip")
+                # if self.block_idx == 1:
+                #     print(f"time {timestep_index} | block {self.block_idx} | cross | skip")
                 hidden_states = hidden_states + self.cross_last
             else:
-                if self.block_idx == 1:
-                    print(f"time {timestep_index} | block {self.block_idx} | cross | compute")
+                # if self.block_idx == 1:
+                #     print(f"time {timestep_index} | block {self.block_idx} | cross | compute")
                 if self.norm_type == "ada_norm":
                     norm_hidden_states = self.norm2(hidden_states, timestep)
                 elif self.norm_type in ["ada_norm_zero", "layer_norm", "layer_norm_i2vgen"]:

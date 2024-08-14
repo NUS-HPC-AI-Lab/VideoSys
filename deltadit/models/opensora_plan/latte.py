@@ -2519,15 +2519,15 @@ class LatteT2V(ModelMixin, ConfigMixin):
         # === blocks ===
         # BUG jump here
         if if_skip_delta(timestep_index):
-            print(f"t: {timestep_index} | skip")
+            # print(f"t: {timestep_index} | skip")
             for i, (spatial_block, temp_block) in enumerate(
                 zip(self.transformer_blocks, self.temporal_transformer_blocks)
             ):
                 if if_skip_middle_block(timestep_index, i):
-                    print(f"block_id: {i} | skip block")
+                    # print(f"block_id: {i} | skip block")
                     continue
                 elif is_skip_last_block(i):
-                    print(f"block_id: {i} | add cache")
+                    # print(f"block_id: {i} | add cache")
                     hidden_states = hidden_states + get_cache()
                 else:
                     hidden_states = spatial_block(  # NOTE skip block here
@@ -2577,7 +2577,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
             ):
                 if is_skip_first_block(i):
                     save_start_cache(i, hidden_states)
-                    print(f"block_id: {i} | save_start_cache")
+                    # print(f"block_id: {i} | save_start_cache")
 
                 hidden_states = spatial_block(  # NOTE skip block here
                     hidden_states,
@@ -2618,7 +2618,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
                 if is_skip_last_block(i):
                     save_end_cache(i, hidden_states)
-                    print(f"block_id: {i} | save_end_cache")
+                    # print(f"block_id: {i} | save_end_cache")
 
         if enable_sequence_parallel():
             hidden_states = self.gather_from_second_dim(hidden_states, input_batch_size)
