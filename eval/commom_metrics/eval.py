@@ -82,7 +82,7 @@ def main(args):
     file_extension = "mp4"
     for f in os.listdir(generated_video_dir):
         if f.endswith(f".{file_extension}"):
-            video_ids.append(f.split(".")[0])
+            video_ids.append(f.replace(f".{file_extension}", ""))
     if not video_ids:
         raise ValueError("No videos found in the generated video dataset. Exiting.")
 
