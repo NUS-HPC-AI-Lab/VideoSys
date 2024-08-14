@@ -37,6 +37,7 @@ def run_pab():
     pipeline = OpenSoraPlanPipeline(config)
 
     prompt = "a bear hunting for prey"
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/opensora_plan_pab_{prompt}.mp4")
 

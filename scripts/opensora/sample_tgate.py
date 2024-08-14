@@ -16,6 +16,7 @@ def run_base():
     pipeline = OpenSoraPipeline(config)
 
     prompt = "a bear hunting for prey"
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
     pipeline.save_video(video, f"./outputs/opensora_tgate_base_{prompt}.mp4")
 
@@ -40,6 +41,7 @@ def run_pab():
         cross_broadcast=True,
         cross_threshold=[12, 30],
         cross_gap=18,
+        cross_gap=18,
     )
     # step 250 / m=100 / k=10
     # opensora step=30 / m=12 / k=2
@@ -47,7 +49,6 @@ def run_pab():
     prompt = "a bear hunting for prey"
     config = OpenSoraConfig(enable_tgate=True, tgate_config=tgate_config)
     save_path = f"./outputs/opensora_tgate_acc_{prompt.replace(' ', '_')}_spatial_{config.tgate_config.spatial_broadcast}_{config.tgate_config.spatial_threshold}_cross_{config.tgate_config.cross_broadcast}_{config.tgate_config.cross_threshold}.mp4"
-    print
     pipeline = OpenSoraPipeline(config)
 
     video = pipeline.generate(prompt).video[0]

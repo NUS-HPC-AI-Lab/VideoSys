@@ -53,8 +53,10 @@ def run_pab():
     # step=30 / m=12 / k=2
     # step=50 / m=20 / k=2
     config = OpenSoraPlanConfig(enable_tgate=True, tgate_config=tgate_config)
+    config = OpenSoraPlanConfig(enable_tgate=True, tgate_config=tgate_config)
     pipeline = OpenSoraPlanPipeline(config)
 
+    prompt = "a bear hunting for prey"
     prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
 

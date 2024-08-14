@@ -42,6 +42,7 @@ def run_pab():
     pipeline = OpenSoraPlanPipeline(config)
 
     prompt = "a bear hunting for prey"
+    prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
 
     save_path = f"./outputs/opensora_plan_delta_acc_{config.delta_config.delta_skip}_{prompt.replace(' ', '_')}_delta_threshold_{config.delta_config.delta_threshold}_delta_gap_{config.delta_config.delta_gap}.mp4"
