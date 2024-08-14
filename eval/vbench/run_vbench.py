@@ -1,5 +1,4 @@
 import argparse
-import os
 
 import torch
 from vbench import VBench
@@ -35,7 +34,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    save_path = os.path.join("./vbench_out", os.path.basename(args.video_path))
+    save_path = args.video_path.replace("/samples/", "/vbench_out/")
 
     kwargs = {}
     kwargs["imaging_quality_preprocessing_mode"] = "longer"  # use VBench/evaluate.py default
