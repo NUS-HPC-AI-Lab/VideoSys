@@ -16,13 +16,22 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import ftfy
 import torch
+import torch.distributed as dist
+import tqdm
 from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL, Transformer2DModel
 from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from tgate.core.pab_mgr import TGATEConfig, set_tgate_manager, update_steps
+from tgate.core.pab_mgr import (
+    TGATEConfig,
+    get_diffusion_skip,
+    get_diffusion_skip_timestep,
+    set_tgate_manager,
+    skip_diffusion_timestep,
+    update_steps,
+)
 from tgate.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from tgate.utils.logging import logger
 from tgate.utils.utils import save_video
@@ -747,71 +756,71 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
 
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
+            diffusion_skip_timestep = get_diffusion_skip_timestep()
 
-                # if enable_tgate():
-                #     if do_classifier_free_guidance and (i < get_gate_step()):
-                #         latent_model_input = torch.cat([latents] * 2)
-                #     else:
-                #         latent_model_input = latents
-                #         prompt_embeds = negative_prompt_embeds if do_classifier_free_guidance else prompt_embeds
-                # else:
-                #     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+            # warmup_timesteps = timesteps[:num_warmup_steps]
+            # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
+            # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
 
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
 
-                current_timestep = t
-                if not torch.is_tensor(current_timestep):
-                    # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
-                    # This would be a good case for the `match` statement (Python 3.10+)
-                    is_mps = latent_model_input.device.type == "mps"
-                    if isinstance(current_timestep, float):
-                        dtype = torch.float32 if is_mps else torch.float64
-                    else:
-                        dtype = torch.int32 if is_mps else torch.int64
-                    current_timestep = torch.tensor([current_timestep], dtype=dtype, device=latent_model_input.device)
-                elif len(current_timestep.shape) == 0:
-                    current_timestep = current_timestep[None].to(latent_model_input.device)
-                # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-                current_timestep = current_timestep.expand(latent_model_input.shape[0])
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
 
-                if prompt_embeds.ndim == 3:
-                    prompt_embeds = prompt_embeds.unsqueeze(1)  # b l d -> b 1 l d
-                # if prompt_attention_mask.ndim == 2:
-                #     prompt_attention_mask = prompt_attention_mask.unsqueeze(1)  # b l -> b 1 l
-                # predict noise model_output
-                noise_pred = self.transformer(
-                    latent_model_input,
-                    encoder_hidden_states=prompt_embeds,
-                    timestep=current_timestep,
-                    timestep_index=i,
-                    added_cond_kwargs=added_cond_kwargs,
-                    enable_temporal_attentions=enable_temporal_attentions,
-                    return_dict=False,
-                )[0]
+        progress_wrap = tqdm.tqdm if verbose and dist.get_rank() == 0 else (lambda x: x)
+        for i, t in progress_wrap(list(enumerate(timesteps))):
+            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # learned sigma
-                if self.transformer.config.out_channels // 2 == latent_channels:
-                    noise_pred = noise_pred.chunk(2, dim=1)[0]
+            current_timestep = t
+            if not torch.is_tensor(current_timestep):
+                # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
+                # This would be a good case for the `match` statement (Python 3.10+)
+                is_mps = latent_model_input.device.type == "mps"
+                if isinstance(current_timestep, float):
+                    dtype = torch.float32 if is_mps else torch.float64
                 else:
-                    noise_pred = noise_pred
+                    dtype = torch.int32 if is_mps else torch.int64
+                current_timestep = torch.tensor([current_timestep], dtype=dtype, device=latent_model_input.device)
+            elif len(current_timestep.shape) == 0:
+                current_timestep = current_timestep[None].to(latent_model_input.device)
+            # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
+            current_timestep = current_timestep.expand(latent_model_input.shape[0])
 
-                # compute previous image: x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+            if prompt_embeds.ndim == 3:
+                prompt_embeds = prompt_embeds.unsqueeze(1)  # b l d -> b 1 l d
 
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-                    if callback is not None and i % callback_steps == 0:
-                        step_idx = i // getattr(self.scheduler, "order", 1)
-                        callback(step_idx, t, latents)
+            # predict noise model_output
+            noise_pred = self.transformer(
+                latent_model_input,
+                encoder_hidden_states=prompt_embeds,
+                timestep=current_timestep,
+                timestep_index=i,
+                added_cond_kwargs=added_cond_kwargs,
+                enable_temporal_attentions=enable_temporal_attentions,
+                return_dict=False,
+            )[0]
+            if i == 158:
+                print(noise_pred.shape)
+            # perform guidance
+            if do_classifier_free_guidance:
+                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+            # learned sigma
+            if self.transformer.config.out_channels // 2 == latent_channels:
+                noise_pred = noise_pred.chunk(2, dim=1)[0]
+            else:
+                noise_pred = noise_pred
+
+            # compute previous image: x_t -> x_t-1
+            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+
+            # call the callback, if provided
+            if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                if callback is not None and i % callback_steps == 0:
+                    step_idx = i // getattr(self.scheduler, "order", 1)
+                    callback(step_idx, t, latents)
 
         if not output_type == "latents":
             video = self.decode_latents(latents)

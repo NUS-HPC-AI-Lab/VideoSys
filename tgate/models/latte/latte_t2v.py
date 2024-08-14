@@ -381,8 +381,8 @@ class BasicTransformerBlock(nn.Module):
                 self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
             ).chunk(6, dim=1)
         else:
-            if self.block_idx == 1:
-                print(f"time {timestep_index} | block {self.block_idx} | spatial | compute")
+            # if self.block_idx == 1:
+            # print(f"time {timestep_index} | block {self.block_idx} | spatial | compute")
             if self.norm_type == "ada_norm":
                 norm_hidden_states = self.norm1(hidden_states, timestep)
             elif self.norm_type == "ada_norm_zero":
@@ -436,8 +436,8 @@ class BasicTransformerBlock(nn.Module):
                     print(f"time {timestep_index} | block {self.block_idx} | cross | skip")
                 hidden_states = hidden_states + self.cross_last
             else:
-                if self.block_idx == 1:
-                    print(f"time {timestep_index} | block {self.block_idx} | cross | compute")
+                # if self.block_idx == 1:
+                # print(f"time {timestep_index} | block {self.block_idx} | cross | compute")
                 if self.norm_type == "ada_norm":
                     norm_hidden_states = self.norm2(hidden_states, timestep)
                 elif self.norm_type in ["ada_norm_zero", "layer_norm", "layer_norm_i2vgen"]:

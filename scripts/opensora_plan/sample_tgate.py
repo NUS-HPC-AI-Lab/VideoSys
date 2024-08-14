@@ -10,8 +10,8 @@ def run_base():
     os.environ["LOCAL_RANK"] = "0"
     os.environ["WORLD_SIZE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-
+    os.environ["MASTER_PORT"] = "12358"
+    print("Running tgate base")
     tgate.initialize(42)
 
     # --gate_step 15 \
@@ -21,19 +21,21 @@ def run_base():
     config = OpenSoraPlanConfig()
     pipeline = OpenSoraPlanPipeline(config)
 
-    prompt = "a bear hunting for prey"
-    video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+    for i in [1]:
+        print(f"Running iteration {i}")
+        prompt = "a bear hunting for prey"
+        video = pipeline.generate(prompt).video[0]
+        pipeline.save_video(video, f"./outputs/opensora_plan_tgate_base_{prompt}.mp4")
 
 
 def run_pab():
     # Manually set environment variables for single GPU debugging
-    os.environ["RANK"] = "0"
-    os.environ["LOCAL_RANK"] = "0"
-    os.environ["WORLD_SIZE"] = "1"
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12358"
-
+    # os.environ["RANK"] = "0"
+    # os.environ["LOCAL_RANK"] = "0"
+    # os.environ["WORLD_SIZE"] = "1"
+    # os.environ["MASTER_ADDR"] = "localhost"
+    # os.environ["MASTER_PORT"] = "12358"
+    print("Running tgate pab")
     tgate.initialize(42)
 
     tgate_config = OpenSoraPlanTGATEConfig(
@@ -56,16 +58,14 @@ def run_pab():
     prompt = "a bear hunting for prey"
     video = pipeline.generate(prompt).video[0]
 
-    save_path = f"./outputs/opensora_plan_{prompt.replace(' ', '_')}_spatial_{config.tgate_config.spatial_threshold}_cross_{config.tgate_config.cross_threshold}_tgate.mp4"
+    save_path = f"./outputs/opensora_plan_tgate_acc_{prompt.replace(' ', '_')}_spatial_{config.tgate_config.spatial_threshold}_cross_{config.tgate_config.cross_threshold}.mp4"
     pipeline.save_video(video, save_path)
     print(f"Saved video to {save_path}")
 
 
 if __name__ == "__main__":
     # torch.backends.cudnn.enabled = False
-    # run_base()  # 03:30
-    run_pab()  # enable_tgate=True 02:37    # enable_tgate=False 03:30
+    # run_base()  # 02:59
+    run_pab()  # enable_tgate=True
 
-
-# base 快一点
-# opnedit base 时间 和 run_base时间一致
+# CUDA_VISIBLE_DEVICES=3 torchrun --standalone --nproc_per_node=1 scripts/opensora_plan/sample_tgate.py

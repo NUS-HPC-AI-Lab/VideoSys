@@ -1628,6 +1628,7 @@ class BasicTransformerBlock_(nn.Module):
                 attn_output = gate_msa * attn_output
 
             if enable_pab():
+                print("PAB: enable_pab")
                 self.set_last_out(attn_output)
 
         hidden_states = attn_output + hidden_states

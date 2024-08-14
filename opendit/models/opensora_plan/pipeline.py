@@ -836,7 +836,8 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                 enable_temporal_attentions=enable_temporal_attentions,
                 return_dict=False,
             )[0]
-
+            if i == 158:
+                print(noise_pred.shape)
             # perform guidance
             if do_classifier_free_guidance:
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -858,8 +859,8 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                     callback(step_idx, t, latents)
 
         if not output_type == "latents":
-            video = self.decode_latents(latents)  # torch.Size([1, 4, 17, 64, 64])
-            video = video[:, :num_frames, :height, :width]  # torch.Size([1, 65, 512, 512, 3])
+            video = self.decode_latents(latents)
+            video = video[:, :num_frames, :height, :width]
         else:
             video = latents
             return VideoSysPipelineOutput(video=video)

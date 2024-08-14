@@ -1571,6 +1571,7 @@ class BasicTransformerBlock_(nn.Module):
 
         broadcast_temporal, self.count = if_broadcast_temporal(timestep_index, self.count)
         if broadcast_temporal:
+            print("skip temporal")
             attn_output = self.last_out
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -1920,7 +1921,7 @@ class BasicTransformerBlock(nn.Module):
         broadcast_spatial, self.spatial_count = if_broadcast_spatial(timestep_index, self.spatial_count, self.block_idx)
         if broadcast_spatial:
             # if self.block_idx == 1:
-            # print(f"time {timestep_index} | block {self.block_idx} | spatial | skip")
+            print(f"time {timestep_index} | block {self.block_idx} | spatial | skip")
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -1980,7 +1981,7 @@ class BasicTransformerBlock(nn.Module):
             broadcast_cross, self.cross_count = if_broadcast_cross(timestep_index, self.cross_count)
             if broadcast_cross:
                 # if self.block_idx == 1:
-                # print(f"time {timestep_index} | block {self.block_idx} | cross | skip")
+                print(f"time {timestep_index} | block {self.block_idx} | cross | skip")
                 hidden_states = hidden_states + self.cross_last
             else:
                 # if self.block_idx == 1:

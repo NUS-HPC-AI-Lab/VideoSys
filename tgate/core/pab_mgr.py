@@ -117,7 +117,7 @@ class TGATEManager:
                 and (self.config.spatial_threshold[0] < timestep < self.config.spatial_threshold[1])
             ):
                 flag = True
-                # print(f"spatial | timestep: {timestep} | block {block_idx} | count {count} | jump")
+                print(f"spatial | timestep: {timestep} | block {block_idx} | count {count} | jump")
             else:
                 flag = False
                 # print(f"spatial | timestep: {timestep} | block {block_idx} | count {count} | save")
