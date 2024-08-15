@@ -152,7 +152,9 @@ class OpenSoraPipeline(VideoSysPipeline):
 
         # initialize the model if not provided
         if text_encoder is None:
-            text_encoder = T5Encoder(from_pretrained=config.text_encoder, model_max_length=300, device=device)
+            text_encoder = T5Encoder(
+                from_pretrained=config.text_encoder, model_max_length=300, device=device, dtype=dtype
+            )
         if vae is None:
             vae = OpenSoraVAE_V1_2(
                 from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
