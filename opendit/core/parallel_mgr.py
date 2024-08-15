@@ -66,7 +66,7 @@ def get_parallel_manager():
     return PARALLEL_MANAGER
 
 
-def initialize(seed: Optional[int] = None, sp_size: Optional[int] = None):
+def initialize(seed: Optional[int] = None, sp_size: Optional[int] = None, enable_cp=True):
     if not dist.is_initialized():
         colossalai.launch_from_torch({})
         init_dist_logger()
@@ -80,8 +80,13 @@ def initialize(seed: Optional[int] = None, sp_size: Optional[int] = None):
         assert dist.get_world_size() % sp_size == 0, f"world_size {dist.get_world_size()} must be divisible by sp_size"
         dp_size = dist.get_world_size() // sp_size
 
+    if enable_cp:
+        assert dist.get_world_size() % 2 == 0, f"world_size {dist.get_world_size()} must be divisible by 2"
+        assert dist.get_world_size() >= 2, f"world_size {dist.get_world_size()} must be greater than 2"
+        dp_size = 2
+        sp_size = dist.get_world_size() // dp_size
+
     set_parallel_manager(dp_size, sp_size)
 
     if seed is not None:
-        local_seed = seed + get_data_parallel_rank()
-        set_seed(local_seed)
+        set_seed(seed)
