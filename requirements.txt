@@ -23,3 +23,5 @@ accelerate
 diffusers
 transformers
 colossalai
+omegaconf
+ftfy
