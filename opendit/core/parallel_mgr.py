@@ -1,6 +1,5 @@
 from typing import Optional
 
-import colossalai
 import torch
 import torch.distributed as dist
 from colossalai.cluster.process_group_mesh import ProcessGroupMesh
@@ -64,9 +63,8 @@ def get_parallel_manager():
 def initialize(rank=0, world_size=1, init_method=None, seed: Optional[int] = None, sp_size: Optional[int] = None):
     if not dist.is_initialized():
         # colossalai.launch_from_torch({})
+        dist.init_process_group(backend="nccl", init_method=init_method, world_size=world_size, rank=rank)
         torch.cuda.set_device(rank)
-        dist.init_process_group(
-            backend="nccl", init_method=init_method, world_size=world_size, rank=rank)
         init_dist_logger()
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True

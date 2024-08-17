@@ -78,6 +78,7 @@ class OpenSoraPABConfig(PABConfig):
 class OpenSoraConfig:
     def __init__(
         self,
+        world_size: int = 1,
         transformer: str = "hpcai-tech/OpenSora-STDiT-v3",
         vae: str = "hpcai-tech/OpenSora-VAE-v1.2",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
@@ -90,6 +91,10 @@ class OpenSoraConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPABConfig(),
     ):
+        # ======= engine ========
+        self.world_size = world_size
+
+        # ======= pipeline ========
         self.transformer = transformer
         self.vae = vae
         self.text_encoder = text_encoder
