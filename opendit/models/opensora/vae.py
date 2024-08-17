@@ -178,28 +178,26 @@ class CausalConv3d(nn.Module):
         return x
 
 
-class RowDistConv3d(CausalConv3d):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.sp = False
+def dist_conv3d(self, x):
+    time_causal_padding = list(self.time_causal_padding)
+    width_pad = time_causal_padding[0]
+    if get_sequence_parallel_rank() == 0:
+        time_causal_padding[1] = 0
+    elif get_sequence_parallel_rank() == get_sequence_parallel_size() - 1:
+        time_causal_padding[0] = 0
+    else:
+        time_causal_padding[0] = 0
+        time_causal_padding[1] = 0
+    time_causal_padding = tuple(time_causal_padding)
+    x = halo_exchange(x, get_sequence_parallel_group(), 4, width_pad)
+    x = F.pad(x, time_causal_padding, mode=self.pad_mode)
+    x = self.conv(x)
+    return x
 
-    def forward(self, x):
-        if not self.sp:
-            return super().forward(x)
-        time_causal_padding = list(self.time_causal_padding)
-        width_pad = time_causal_padding[0]
-        if get_sequence_parallel_rank() == 0:
-            time_causal_padding[1] = 0
-        elif get_sequence_parallel_rank() == get_sequence_parallel_size() - 1:
-            time_causal_padding[0] = 0
-        else:
-            time_causal_padding[0] = 0
-            time_causal_padding[1] = 0
-        time_causal_padding = tuple(time_causal_padding)
-        x = halo_exchange(x, get_sequence_parallel_group(), 4, width_pad)
-        x = F.pad(x, time_causal_padding, mode=self.pad_mode)
-        x = self.conv(x)
-        return x
+
+def _replace_conv3d_fwd(module: CausalConv3d):
+    bound_method = dist_conv3d.__get__(module, module.__class__)
+    setattr(module, "forward", bound_method)
 
 
 class ResBlock(nn.Module):
@@ -244,10 +242,12 @@ class ResBlock(nn.Module):
     def enable_sp(self):
         self.conv1.sp = True
         self.conv2.sp = True
+        _replace_conv3d_fwd(self.conv1)
+        _replace_conv3d_fwd(self.conv2)
         _replace_groupnorm_fwd(self.norm1)
         _replace_groupnorm_fwd(self.norm2)
         if hasattr(self, "conv3"):
-            self.conv3.sp = True
+            _replace_conv3d_fwd(self.conv3)
 
 
 def get_activation_fn(activation):
@@ -381,11 +381,10 @@ class Decoder(nn.Module):
         self.num_groups = num_groups
         self.embedding_dim = latent_embed_dim
         self.s_stride = 1
-        self.sp = False
 
         self.activation_fn = get_activation_fn(activation_fn)
         self.activate = self.activation_fn()
-        self.conv_fn = RowDistConv3d
+        self.conv_fn = CausalConv3d
         self.block_args = dict(
             conv_fn=self.conv_fn,
             activation_fn=self.activation_fn,
@@ -440,9 +439,8 @@ class Decoder(nn.Module):
         self.conv_out = self.conv_fn(filters, in_out_channels, 3)
 
     def enable_sp(self):
-        self.sp = True
-        self.conv1.sp = True
-        self.conv_out.sp = True
+        _replace_conv3d_fwd(self.conv1)
+        _replace_conv3d_fwd(self.conv_out)
         _replace_groupnorm_fwd(self.norm1)
         for res_block in self.res_blocks:
             res_block.enable_sp()
@@ -450,7 +448,8 @@ class Decoder(nn.Module):
             for block in res_block:
                 block.enable_sp()
         for conv_block in self.conv_blocks:
-            conv_block.sp = True
+            if isinstance(conv_block, CausalConv3d):
+                _replace_conv3d_fwd(conv_block)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -509,7 +508,7 @@ class VAE_Temporal(nn.Module):
         )
         self.quant_conv = CausalConv3d(2 * latent_embed_dim, 2 * embed_dim, 1)
 
-        self.post_quant_conv = RowDistConv3d(embed_dim, latent_embed_dim, 1)
+        self.post_quant_conv = CausalConv3d(embed_dim, latent_embed_dim, 1)
         self.decoder = Decoder(
             in_out_channels=in_out_channels,
             latent_embed_dim=latent_embed_dim,
@@ -759,7 +758,7 @@ class VideoAutoencoderPipeline(PreTrainedModel):
 
     def enable_sp(self):
         self.temporal_vae.decoder.enable_sp()
-        self.temporal_vae.post_quant_conv.sp = True
+        _replace_conv3d_fwd(self.temporal_vae.post_quant_conv)
 
     def encode(self, x):
         x_z = self.spatial_vae.encode(x)
