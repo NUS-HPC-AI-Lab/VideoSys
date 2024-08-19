@@ -19,6 +19,10 @@ from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
 from einops import rearrange
 from torch import nn
+from torch.nn import functional as F
+
+from opendit.core.comm import gather_sequence, split_sequence
+from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_sequence_parallel_size
 
 
 def Normalize(in_channels, num_groups=32):
@@ -677,6 +681,14 @@ class CausalVAEModel(VideoBaseAE_PL):
         return posterior
 
     def tiled_decode(self, x):
+        if enable_sequence_parallel():
+            t = x.shape[2]
+            padding_t = t % get_sequence_parallel_size()
+            if (t + padding_t) // get_sequence_parallel_size() < self.tile_latent_min_size_t:
+                padding_t = self.tile_latent_min_size_t * get_sequence_parallel_size() - t
+                padding_t += (t + padding_t) % get_sequence_parallel_size()
+            x = F.pad(x, (0, 0, 0, 0, 0, padding_t))
+            x = split_sequence(x, get_sequence_parallel_group(), dim=2)
         t = x.shape[2]
         t_chunk_idx = [i for i in range(0, t, self.tile_latent_min_size_t - 1)]
         if len(t_chunk_idx) == 1 and t_chunk_idx[0] == 0:
@@ -697,6 +709,9 @@ class CausalVAEModel(VideoBaseAE_PL):
                 dec = self.tiled_decode2d(chunk_x)
             dec_.append(dec)
         dec_ = torch.cat(dec_, dim=2)
+        if enable_sequence_parallel():
+            dec_ = gather_sequence(dec_, get_sequence_parallel_group(), dim=2)
+            dec_ = dec_.narrow(2, 0, dec_.shape[2] - padding_t)
         return dec_
 
     def tiled_encode2d(self, x, return_moments=False):
