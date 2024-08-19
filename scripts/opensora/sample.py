@@ -27,8 +27,7 @@ def run_pab(rank=0, world_size=1, init_method=None):
 
 def run(world_size=1):
     config = OpenSoraConfig(world_size)
-    engine = VideoSysEngine(OpenSoraPipeline, config)
-    # pipeline = OpenSoraPipeline(config)
+    engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
     video = engine.generate(prompt).video[0]
@@ -39,4 +38,4 @@ def run(world_size=1):
 if __name__ == "__main__":
     # run_base()
     # run_pab()
-    run()
+    run(2)

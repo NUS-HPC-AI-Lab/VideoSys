@@ -95,6 +95,7 @@ class OpenSoraConfig:
         self.world_size = world_size
 
         # ======= pipeline ========
+        self.pipeline_cls = OpenSoraPipeline
         self.transformer = transformer
         self.vae = vae
         self.text_encoder = text_encoder
@@ -142,7 +143,7 @@ class OpenSoraPipeline(VideoSysPipeline):
 
     def __init__(
         self,
-        config: OpenSoraConfig = OpenSoraConfig(),
+        config: OpenSoraConfig,
         text_encoder: Optional[T5Encoder] = None,
         vae: Optional[AutoencoderKL] = None,
         transformer: Optional[STDiT3_XL_2] = None,

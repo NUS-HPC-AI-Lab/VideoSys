@@ -15,10 +15,10 @@ class VideoSysEngine:
     this is partly inspired by vllm
     """
 
-    def __init__(self, pipeline_cls, config):
+    def __init__(self, config):
         self.config = config
         self.parallel_worker_tasks = None
-        self._init_worker(pipeline_cls)
+        self._init_worker(config.pipeline_cls)
 
     def _init_worker(self, pipeline_cls):
         world_size = self.config.world_size
