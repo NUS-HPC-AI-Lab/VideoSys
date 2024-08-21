@@ -255,7 +255,7 @@ def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
     # skip if only one rank involved
     world_size = dist.get_world_size(pg)
     rank = dist.get_rank(pg)
-    if world_size == 1:
+    if world_size == 1 or input_.size(dim) < world_size:
         return input_
 
     if pad > 0:
@@ -426,7 +426,9 @@ def all_to_all_with_pad(
 
 
 def _halo_exchange_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
-    # skip if only one rank involved
+    # skip if dim size is less than world size
+    if input_.size(dim) < dist.get_world_size(pg):
+        return input_
     world_size = dist.get_world_size(pg)
     rank = dist.get_rank(pg)
     rank_list = dist.get_process_group_ranks(pg)

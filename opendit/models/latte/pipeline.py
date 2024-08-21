@@ -17,7 +17,6 @@ import einops
 import ftfy
 import torch
 import torch.distributed as dist
-import torch.nn.functional as F
 from bs4 import BeautifulSoup
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
@@ -25,7 +24,6 @@ from diffusers.schedulers import DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from opendit.core.comm import gather_sequence, split_sequence
 from opendit.core.pab_mgr import (
     PABConfig,
     get_diffusion_skip,
@@ -34,10 +32,11 @@ from opendit.core.pab_mgr import (
     skip_diffusion_timestep,
     update_steps,
 )
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_sequence_parallel_size
+from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_size
 from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from opendit.utils.logging import logger
 from opendit.utils.utils import save_video
+from opendit.utils.vae_utils import _replace_decoder_fwd, _replace_mid_fwd, _replace_stres_fwd, _replace_up_fwd
 
 from .latte_t2v import LatteT2V
 
@@ -205,8 +204,21 @@ class LattePipeline(VideoSysPipeline):
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
 
+        if enable_sequence_parallel():
+            self.set_sequence_parallel()
+
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
+
+    def set_sequence_parallel(self):
+        resnets = self.vae.decoder.mid_block.resnets
+        _replace_mid_fwd(self.vae.decoder.mid_block)
+        _replace_decoder_fwd(self.vae.decoder)
+        for up_block in self.vae.decoder.up_blocks:
+            resnets += up_block.resnets
+            _replace_up_fwd(up_block)
+        for resnet in resnets:
+            _replace_stres_fwd(resnet)
 
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
@@ -895,12 +907,7 @@ class LattePipeline(VideoSysPipeline):
         latents = einops.rearrange(latents, "b c f h w -> (b f) c h w")
         video = []
 
-        if enable_sequence_parallel():
-            padding_bf = latents.shape[0] % get_sequence_parallel_size()
-            latents = F.pad(latents, (0, 0, 0, 0, 0, padding_bf), mode="constant", value=1e-6)
-            latents = split_sequence(latents, get_sequence_parallel_group(), dim=0)
-
-        decode_chunk_size = 14
+        decode_chunk_size = 16 * get_sequence_parallel_size()
         for frame_idx in range(0, latents.shape[0], decode_chunk_size):
             num_frames_in = latents[frame_idx : frame_idx + decode_chunk_size].shape[0]
 
@@ -910,9 +917,6 @@ class LattePipeline(VideoSysPipeline):
             video.append(self.vae.decode(latents[frame_idx : frame_idx + decode_chunk_size], **decode_kwargs).sample)
 
         video = torch.cat(video)
-        if enable_sequence_parallel():
-            video = gather_sequence(video, get_sequence_parallel_group(), dim=0)
-            video = video.narrow(0, 0, video.shape[0] - padding_bf)
         video = einops.rearrange(video, "(b f) c h w -> b f h w c", f=video_length)
         video = ((video / 2.0 + 0.5).clamp(0, 1) * 255).to(dtype=torch.uint8).cpu().contiguous()
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloa16
