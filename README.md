@@ -4,10 +4,13 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
+<p align="center">
+<a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
+</p>
 </p>
 
 ### Latest News 🔥
-- [2024/08] 🔥Release VideoSys: An easy and efficient system for video generation.
+- [2024/08] 🔥<b>Release VideoSys: An easy and efficient system for video generation.</b>
 - [2024/06] Propose Pyramid Attention Broadcast (PAB)[[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.
 - [2024/06] Support Open-Sora-Plan and Latte.
 - [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in Open-Sora compared with sota sequence parallelism.
@@ -16,9 +19,8 @@ An easy and efficient system for video generation
 
 # About
 
-OpenDiT is an open-source project that provides a high-performance implementation of Diffusion Transformer (DiT) powered by Colossal-AI, specifically designed to enhance the efficiency of training and inference for DiT applications, including text-to-video generation and text-to-image generation.
-
-OpenDiT will continue to integrate more open-source DiT models and techniques. Stay tuned for upcoming enhancements and additional features!
+VideoSys is an open-source project that provides a ease-of-use and high-performance infrastructure for video generation, including training, inference, serving and compression.
+VideoSys will continue to integrate more open-source video models and techniques. Stay tuned for upcoming enhancements and additional features!
 
 ## Installation
 
@@ -46,7 +48,7 @@ pip install -e .
 
 ## Usage
 
-OpenDiT supports many diffusion models with our various acceleration techniques, enabling these models to run faster and consume less memory.
+VideoSys supports many diffusion models with our various acceleration techniques, enabling these models to run faster and consume less memory.
 
 <b>You can find all available models and their supported acceleration techniques in the following table. Click `Doc` to see how to use them.</b>
 
@@ -59,8 +61,8 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <th rowspan="2">Usage</th>
     </tr>
     <tr>
-        <th><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc">DSP</a></th>
-        <th><a href="https://github.com/NUS-HPC-AI-Lab/OpenDiT?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc">PAB</a></th>
+        <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc">DSP</a></th>
+        <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc">PAB</a></th>
     </tr>
     <tr>
         <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
@@ -68,7 +70,7 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/opensora/sample.py">Code</a></td>
+        <td align="center"><a href="./scripts/open_sora/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
@@ -76,7 +78,7 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/opensora_plan/sample.py">Code</a></td>
+        <td align="center"><a href="./scripts/open_sora_plan/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
@@ -141,7 +143,7 @@ This codebase borrows from:
 
 ## Contributing
 
-If you encounter problems using OpenDiT or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
+If you encounter problems using VideoSys or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
 
 ## Citation
 
@@ -167,4 +169,4 @@ If you encounter problems using OpenDiT or have a feature request, feel free to 
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/OpenDiT&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/OpenDiT&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/VideoSys&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/VideoSys&Date)

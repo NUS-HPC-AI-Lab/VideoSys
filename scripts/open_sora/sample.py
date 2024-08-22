@@ -1,8 +1,8 @@
-from videosys import LatteConfig, VideoSysEngine
+from videosys import OpenSoraConfig, VideoSysEngine
 
 
 def run_base():
-    config = LatteConfig(world_size=1)
+    config = OpenSoraConfig(world_size=1)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -11,7 +11,7 @@ def run_base():
 
 
 def run_pab():
-    config = LatteConfig(world_size=1)
+    config = OpenSoraConfig(world_size=1, enable_pab=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -21,4 +21,4 @@ def run_pab():
 
 if __name__ == "__main__":
     run_base()
-    # run_pab()
+    run_pab()

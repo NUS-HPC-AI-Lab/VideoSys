@@ -3,7 +3,7 @@ import os
 
 import tqdm
 
-from opendit.utils.utils import set_seed
+from videosys.utils.utils import set_seed
 
 
 def generate_func(pipeline, prompt_list, output_dir, loop: int = 5, kwargs: dict = {}):

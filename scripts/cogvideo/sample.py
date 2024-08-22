@@ -1,4 +1,4 @@
-from opendit import CogVideoConfig, VideoSysEngine
+from videosys import CogVideoConfig, VideoSysEngine
 
 
 def run_base():
