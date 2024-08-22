@@ -1,7 +1,9 @@
 <p align="center">
 <img width="55%" alt="VideoSys" src="./assets/figures/logo.png?raw=true">
 </p>
-<p align="center"><b><big>An easy and efficient system for video generation</big></b></p>
+<h3 align="center">
+An easy and efficient system for video generation
+</h3>
 </p>
 
 ### Latest News 🔥
