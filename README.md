@@ -5,7 +5,7 @@
 An easy and efficient system for video generation
 </h3>
 <p align="center">
-<a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="">Xiaolong Jin</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
+<a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
 </p>
 </p>
 
