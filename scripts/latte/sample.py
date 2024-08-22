@@ -1,29 +1,22 @@
-# Usage: torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py
-
-import opendit
-from opendit import LatteConfig, LattePipeline
+from opendit import LatteConfig, VideoSysEngine
 
 
 def run_base():
-    opendit.initialize(42)
-
-    config = LatteConfig()
-    pipeline = LattePipeline(config)
+    config = LatteConfig(world_size=1)
+    engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
-    video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 def run_pab():
-    opendit.initialize(42)
-
-    config = LatteConfig(enable_pab=True)
-    pipeline = LattePipeline(config)
+    config = LatteConfig(world_size=1)
+    engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
-    video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 if __name__ == "__main__":
