@@ -62,7 +62,10 @@ def get_parallel_manager():
 
 def initialize(rank=0, world_size=1, init_method=None, seed: Optional[int] = None, sp_size: Optional[int] = None):
     if not dist.is_initialized():
-        # colossalai.launch_from_torch({})
+        try:
+            dist.destroy_process_group()
+        except Exception:
+            pass
         dist.init_process_group(backend="nccl", init_method=init_method, world_size=world_size, rank=rank)
         torch.cuda.set_device(rank)
         init_dist_logger()

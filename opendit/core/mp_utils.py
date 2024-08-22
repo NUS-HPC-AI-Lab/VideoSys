@@ -1,3 +1,6 @@
+# adapted from vllm
+# https://github.com/vllm-project/vllm/blob/main/vllm/executor/multiproc_worker_utils.py
+
 import asyncio
 import multiprocessing
 import os
@@ -128,7 +131,7 @@ class WorkerMonitor(threading.Thread):
                 if process.exitcode is not None and process.exitcode != 0:
                     logger.error("Worker %s pid %s died, exit code: %s", process.name, process.pid, process.exitcode)
             # Cleanup any remaining workers
-            logger.info("Killing local vLLM worker processes")
+            logger.info("Killing local worker processes")
             for worker in self.workers:
                 worker.kill_worker()
             # Must be done after worker task queues are all closed
@@ -141,7 +144,7 @@ class WorkerMonitor(threading.Thread):
         if self._close:
             return
         self._close = True
-        logger.info("Terminating local vLLM worker processes")
+        logger.info("Terminating local worker processes")
         for worker in self.workers:
             worker.terminate_worker()
         # Must be done after worker task queues are all closed
@@ -217,8 +220,7 @@ def _run_worker_process(
 
 
 class ProcessWorkerWrapper:
-    """Local process wrapper for vllm.worker.Worker,
-    for handling single-node multi-GPU tensor parallel."""
+    """Local process wrapper for handling single-node multi-GPU."""
 
     def __init__(self, result_handler: ResultHandler, worker_factory: Callable[[], Any]) -> None:
         self._task_queue = mp.Queue()

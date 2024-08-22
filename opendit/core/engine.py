@@ -135,3 +135,7 @@ class VideoSysEngine:
     def shutdown(self):
         if (worker_monitor := getattr(self, "worker_monitor", None)) is not None:
             worker_monitor.close()
+        torch.distributed.destroy_process_group()
+
+    def __del__(self):
+        self.shutdown()
