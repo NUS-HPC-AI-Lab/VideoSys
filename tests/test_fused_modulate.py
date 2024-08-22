@@ -1,6 +1,6 @@
 import torch
 
-from opendit.kernels.fused_modulate import fused_modulate
+from videosys.kernels.fused_modulate import fused_modulate
 
 
 def test_fused_modulate():

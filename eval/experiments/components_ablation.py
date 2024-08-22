@@ -1,8 +1,8 @@
 from utils import generate_func, read_prompt_list
 
-import opendit
-from opendit import OpenSoraConfig, OpenSoraPipeline
-from opendit.models.opensora import OpenSoraPABConfig
+import videosys
+from videosys import OpenSoraConfig, OpenSoraPipeline
+from videosys.models.opensora import OpenSoraPABConfig
 
 
 def wo_spatial(prompt_list):
@@ -38,7 +38,7 @@ def wo_mlp(prompt_list):
 
 
 if __name__ == "__main__":
-    opendit.initialize(42)
+    videosys.initialize(42)
     prompt_list = read_prompt_list("./vbench/VBench_full_info.json")
     wo_spatial(prompt_list)
     wo_temporal(prompt_list)

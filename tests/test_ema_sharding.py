@@ -9,10 +9,10 @@ from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.testing import clear_cache_before_run, rerun_if_address_is_in_use, spawn
 
-from opendit.core.comm import model_sharding
-from opendit.models.dit.dit import DiT
-from opendit.utils.ckpt_utils import model_gathering, record_model_param_shape
-from opendit.utils.train_utils import update_ema
+from videosys.core.comm import model_sharding
+from videosys.models.dit.dit import DiT
+from videosys.utils.ckpt_utils import model_gathering, record_model_param_shape
+from videosys.utils.train_utils import update_ema
 
 
 def assert_params_equal(model1, model2):

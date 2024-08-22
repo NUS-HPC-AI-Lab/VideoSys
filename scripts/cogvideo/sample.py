@@ -1,9 +1,9 @@
-import opendit
-from opendit import CogVideoConfig, CogVideoPipeline
+import videosys
+from videosys import CogVideoConfig, CogVideoPipeline
 
 
 def run_base():
-    opendit.initialize(42)
+    videosys.initialize(42)
 
     config = CogVideoConfig()
     pipeline = CogVideoPipeline(config)

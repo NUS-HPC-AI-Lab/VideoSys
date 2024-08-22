@@ -1,11 +1,11 @@
 # Usage: torchrun --standalone --nproc_per_node=1 scripts/latte/sample.py
 
-import opendit
-from opendit import LatteConfig, LattePipeline
+import videosys
+from videosys import LatteConfig, LattePipeline
 
 
 def run_base():
-    opendit.initialize(42)
+    videosys.initialize(42)
 
     config = LatteConfig()
     pipeline = LattePipeline(config)
@@ -16,7 +16,7 @@ def run_base():
 
 
 def run_pab():
-    opendit.initialize(42)
+    videosys.initialize(42)
 
     config = LatteConfig(enable_pab=True)
     pipeline = LattePipeline(config)

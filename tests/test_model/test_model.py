@@ -2,7 +2,7 @@ import torch
 from org_dit import DiT_S_2 as ORG_MODEL
 from torch import nn
 
-from opendit.models.dit.dit import DiT_S_2 as NEW_MODEL
+from videosys.models.dit.dit import DiT_S_2 as NEW_MODEL
 
 
 def initialize_weights(model):

@@ -6,9 +6,9 @@ from colossalai.utils import get_current_device
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 
-from opendit.core.parallel_mgr import ParallelManager
-from opendit.datasets.dataloader import prepare_dataloader
-from opendit.datasets.image_transform import center_crop_arr
+from videosys.core.parallel_mgr import ParallelManager
+from videosys.datasets.dataloader import prepare_dataloader
+from videosys.datasets.image_transform import center_crop_arr
 
 WORKERS = 4
 

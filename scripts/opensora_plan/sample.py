@@ -1,9 +1,9 @@
-import opendit
-from opendit import OpenSoraPlanConfig, OpenSoraPlanPipeline
+import videosys
+from videosys import OpenSoraPlanConfig, OpenSoraPlanPipeline
 
 
 def run_base():
-    opendit.initialize(42)
+    videosys.initialize(42)
 
     config = OpenSoraPlanConfig()
     pipeline = OpenSoraPlanPipeline(config)
@@ -14,7 +14,7 @@ def run_base():
 
 
 def run_pab():
-    opendit.initialize(42)
+    videosys.initialize(42)
 
     config = OpenSoraPlanConfig(enable_pab=True)
     pipeline = OpenSoraPlanPipeline(config)

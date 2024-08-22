@@ -1,8 +1,8 @@
 from utils import generate_func, read_prompt_list
 
-import opendit
-from opendit import OpenSoraConfig, OpenSoraPipeline
-from opendit.models.opensora import OpenSoraPABConfig
+import videosys
+from videosys import OpenSoraConfig, OpenSoraPipeline
+from videosys.models.opensora import OpenSoraPABConfig
 
 
 def eval_base(prompt_list):
@@ -36,7 +36,7 @@ def eval_pab3(prompt_list):
 
 
 if __name__ == "__main__":
-    opendit.initialize(42)
+    videosys.initialize(42)
     prompt_list = read_prompt_list("vbench/VBench_full_info.json")
     eval_base(prompt_list)
     eval_pab1(prompt_list)

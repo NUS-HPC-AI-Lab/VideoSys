@@ -15,9 +15,9 @@ import torch
 from diffusers.models import AutoencoderKL
 from torchvision.utils import save_image
 
-from opendit.diffusion import create_diffusion
-from opendit.models.dit import DiT_models
-from opendit.utils.download import find_model
+from videosys.diffusion import create_diffusion
+from videosys.models.dit import DiT_models
+from videosys.utils.download import find_model
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

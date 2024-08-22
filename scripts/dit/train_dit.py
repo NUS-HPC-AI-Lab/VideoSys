@@ -15,15 +15,15 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
-from opendit.core.comm import model_sharding
-from opendit.core.parallel_mgr import get_parallel_manager, set_parallel_manager
-from opendit.datasets.dataloader import prepare_dataloader
-from opendit.datasets.image_transform import get_transforms_image
-from opendit.diffusion import create_diffusion
-from opendit.models.dit import DiT, DiT_models
-from opendit.utils.ckpt_utils import load, record_model_param_shape, save
-from opendit.utils.logging import logger
-from opendit.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
+from videosys.core.comm import model_sharding
+from videosys.core.parallel_mgr import get_parallel_manager, set_parallel_manager
+from videosys.datasets.dataloader import prepare_dataloader
+from videosys.datasets.image_transform import get_transforms_image
+from videosys.diffusion import create_diffusion
+from videosys.models.dit import DiT, DiT_models
+from videosys.utils.ckpt_utils import load, record_model_param_shape, save
+from videosys.utils.logging import logger
+from videosys.utils.train_utils import all_reduce_mean, format_numel_str, get_model_numel, requires_grad, update_ema
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

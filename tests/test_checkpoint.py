@@ -11,7 +11,7 @@ from colossalai.nn.optimizer import HybridAdam
 from colossalai.testing import check_state_dict_equal, rerun_if_address_is_in_use, spawn
 from colossalai.zero import LowLevelZeroOptimizer
 
-from opendit.models.dit.dit import DiT
+from videosys.models.dit.dit import DiT
 
 
 def run_zero_checkpoint(stage: int, shard: bool, offload: bool):
