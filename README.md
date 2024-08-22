@@ -1,11 +1,12 @@
 <p align="center">
-<img width="200px" alt="OpenDiT" src="./assets/figures/logo.png?raw=true">
+<img width="55%" alt="VideoSys" src="./assets/figures/logo.png?raw=true">
 </p>
 <p align="center"><b><big>An easy and efficient system for video generation</big></b></p>
 </p>
 
 ### Latest News 🔥
-- [2024/06] 🔥<b>Propose Pyramid Attention Broadcast (PAB)[[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.</b>
+- [2024/08] 🔥Release VideoSys: An easy and efficient system for video generation.
+- [2024/06] Propose Pyramid Attention Broadcast (PAB)[[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.
 - [2024/06] Support Open-Sora-Plan and Latte.
 - [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in Open-Sora compared with sota sequence parallelism.
 - [2024/03] Support Open-Sora: Democratizing Efficient Video Production for All.
