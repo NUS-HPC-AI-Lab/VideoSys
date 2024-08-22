@@ -20,7 +20,6 @@ import torch.nn.functional as F
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
 from diffusers.models.attention_processor import (
-    LORA_ATTENTION_PROCESSORS,
     AttnAddedKVProcessor,
     AttnAddedKVProcessor2_0,
     AttnProcessor,
@@ -637,10 +636,7 @@ class Attention(nn.Module):
                 The attention operation to use. Defaults to `None` which uses the default attention operation from
                 `xformers`.
         """
-        is_lora = hasattr(self, "processor") and isinstance(
-            self.processor,
-            LORA_ATTENTION_PROCESSORS,
-        )
+        is_lora = hasattr(self, "processor")
         is_custom_diffusion = hasattr(self, "processor") and isinstance(
             self.processor,
             (CustomDiffusionAttnProcessor, CustomDiffusionXFormersAttnProcessor, CustomDiffusionAttnProcessor2_0),
