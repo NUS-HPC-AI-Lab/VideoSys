@@ -64,8 +64,9 @@ from opendit.core.pab_mgr import (
     if_broadcast_temporal,
     save_mlp_output,
 )
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group
+from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_cfg_parallel_size, get_cfg_parallel_group
 from opendit.utils.logging import logger
+from opendit.utils.utils import batch_func
 
 if is_xformers_available():
     import xformers
@@ -2460,8 +2461,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
             `tuple` where the first element is the sample tensor.
         """
         # 0. Split batch
-        if get_data_parallel_size() > 1:
-            conditional = get_data_parallel_rank() == 0
+        if get_cfg_parallel_size() > 1:
             (
                 hidden_states,
                 timestep,
@@ -2470,7 +2470,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                 attention_mask,
                 encoder_attention_mask,
             ) = batch_func(
-                partial(split_sequence, process_group=get_data_parallel_group(), dim=0),
+                partial(split_sequence, process_group=get_cfg_parallel_group(), dim=0),
                 hidden_states,
                 timestep,
                 encoder_hidden_states,
@@ -2760,8 +2760,8 @@ class LatteT2V(ModelMixin, ConfigMixin):
             output = rearrange(output, "(b f) c h w -> b c f h w", b=input_batch_size).contiguous()
 
         # 3. Gather batch for data parallelism
-        if get_data_parallel_size() > 1:
-            output = gather_sequence(output, get_data_parallel_group(), dim=0)
+        if get_cfg_parallel_size() > 1:
+            output = gather_sequence(output, get_cfg_parallel_group(), dim=0)
 
         if not return_dict:
             return (output,)

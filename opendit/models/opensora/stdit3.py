@@ -40,7 +40,7 @@ from opendit.core.pab_mgr import (
 from opendit.core.parallel_mgr import (
     enable_sequence_parallel,
     get_data_parallel_group,
-    get_data_parallel_size,
+    get_cfg_parallel_size,
     get_sequence_parallel_group,
 )
 from opendit.utils.utils import batch_func
@@ -457,7 +457,7 @@ class STDiT3(PreTrainedModel):
         self, x, timestep, all_timesteps, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
     ):
         # === Split batch ===
-        if get_data_parallel_size() > 1:
+        if get_cfg_parallel_size() > 1:
             x, timestep, y, x_mask, mask = batch_func(
                 partial(split_sequence, process_group=get_data_parallel_group(), dim=0), x, timestep, y, x_mask, mask
             )
@@ -560,7 +560,7 @@ class STDiT3(PreTrainedModel):
         x = x.to(torch.float32)
 
         # === Gather Output ===
-        if get_data_parallel_size() > 1:
+        if get_cfg_parallel_size() > 1:
             x = gather_sequence(x, get_data_parallel_group(), dim=0)
 
         return x
