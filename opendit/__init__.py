@@ -1,7 +1,8 @@
 from .core.parallel_mgr import initialize
-from .models.latte import LatteConfig, LattePipeline
-from .models.opensora import OpenSoraConfig, OpenSoraPipeline
-from .models.opensora_plan import OpenSoraPlanConfig, OpenSoraPlanPipeline
+from .models.latte.pipeline import LatteConfig, LattePipeline
+from .models.opensora.pipeline import OpenSoraConfig, OpenSoraPipeline
+from .models.opensora_plan.pipeline import OpenSoraPlanConfig, OpenSoraPlanPipeline
+from .models.cogvideo.pipeline import CogVideoConfig, CogVideoPipeline
 
 __all__ = [
     "initialize",
@@ -11,4 +12,6 @@ __all__ = [
     "OpenSoraPlanConfig",
     "OpenSoraPipeline",
     "OpenSoraConfig",
+    "CogVideoConfig",
+    "CogVideoPipeline"
 ]
