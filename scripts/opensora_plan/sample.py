@@ -1,27 +1,22 @@
-import opendit
-from opendit import OpenSoraPlanConfig, OpenSoraPlanPipeline
+from opendit import OpenSoraPlanConfig, VideoSysEngine
 
 
 def run_base():
-    opendit.initialize(42)
-
-    config = OpenSoraPlanConfig()
-    pipeline = OpenSoraPlanPipeline(config)
+    config = OpenSoraPlanConfig(world_size=1)
+    engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
-    video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 def run_pab():
-    opendit.initialize(42)
-
-    config = OpenSoraPlanConfig(enable_pab=True)
-    pipeline = OpenSoraPlanPipeline(config)
+    config = OpenSoraPlanConfig(world_size=1)
+    engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
-    video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 if __name__ == "__main__":

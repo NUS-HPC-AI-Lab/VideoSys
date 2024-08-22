@@ -1,21 +1,8 @@
-import opendit
-from opendit import OpenSoraConfig, OpenSoraPipeline
-from opendit.core.engine import VideoSysEngine
-
-
-def run_pab(rank=0, world_size=1, init_method=None):
-    opendit.initialize(rank, world_size, init_method, 42)
-
-    config = OpenSoraConfig(enable_pab=True)
-    pipeline = OpenSoraPipeline(config)
-
-    prompt = "Sunset over the sea."
-    video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+from opendit import OpenSoraConfig, VideoSysEngine
 
 
 def run_base():
-    config = OpenSoraConfig(world_size=2)
+    config = OpenSoraConfig(world_size=1)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -24,7 +11,7 @@ def run_base():
 
 
 def run_pab():
-    config = OpenSoraConfig(world_size=2, enable_pab=True)
+    config = OpenSoraConfig(world_size=1, enable_pab=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."

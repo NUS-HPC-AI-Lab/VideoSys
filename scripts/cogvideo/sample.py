@@ -1,16 +1,13 @@
-import opendit
-from opendit import CogVideoConfig, CogVideoPipeline
+from opendit import CogVideoConfig, VideoSysEngine
 
 
 def run_base():
-    opendit.initialize(42)
+    config = CogVideoConfig(world_size=1)
+    engine = VideoSysEngine(config)
 
-    config = CogVideoConfig()
-    pipeline = CogVideoPipeline(config)
-
-    prompt = "A cat swimming"
-    video = pipeline.generate(prompt).video[0]
-    pipeline.save_video(video, f"./outputs/{prompt}.mp4")
+    prompt = "Sunset over the sea."
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
 if __name__ == "__main__":
