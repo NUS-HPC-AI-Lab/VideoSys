@@ -78,6 +78,7 @@ class OpenSoraPABConfig(PABConfig):
 class OpenSoraConfig:
     def __init__(
         self,
+        world_size: int = 1,
         transformer: str = "hpcai-tech/OpenSora-STDiT-v3",
         vae: str = "hpcai-tech/OpenSora-VAE-v1.2",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
@@ -90,6 +91,11 @@ class OpenSoraConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPABConfig(),
     ):
+        # ======= engine ========
+        self.world_size = world_size
+
+        # ======= pipeline ========
+        self.pipeline_cls = OpenSoraPipeline
         self.transformer = transformer
         self.vae = vae
         self.text_encoder = text_encoder
@@ -137,7 +143,7 @@ class OpenSoraPipeline(VideoSysPipeline):
 
     def __init__(
         self,
-        config: OpenSoraConfig = OpenSoraConfig(),
+        config: OpenSoraConfig,
         text_encoder: Optional[T5Encoder] = None,
         vae: Optional[AutoencoderKL] = None,
         transformer: Optional[STDiT3_XL_2] = None,
