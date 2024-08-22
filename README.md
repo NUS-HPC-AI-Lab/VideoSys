@@ -4,6 +4,7 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
+Authors: [Xuanlei Zhao](https://oahzxl.github.io/), [Xiaolong Jin](), [Kai Wang](https://kaiwang960112.github.io/), [Yang You](https://www.comp.nus.edu.sg/~youy/)
 </p>
 
 ### Latest News 🔥
