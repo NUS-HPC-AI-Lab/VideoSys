@@ -68,7 +68,7 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./docs/opensora.md">Doc</a></td>
+        <td align="center"><a href="./scripts/opensora/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
@@ -76,7 +76,7 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./docs/opensora_plan.md">Doc</a></td>
+        <td align="center"><a href="./scripts/opensora_plan/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
@@ -84,7 +84,15 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./docs/latte.md">Doc</a></td>
+        <td align="center"><a href="./scripts/latte/sample.py">Code</a></td>
+    </tr>
+    <tr>
+        <td>CogVideo [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
+        <td align="center">❌</td>
+        <td align="center">✅</td>
+        <td align="center">❌</td>
+        <td align="center">❌</td>
+        <td align="center"><a href="./scripts/cogvideo/sample.py">Code</a></td>
     </tr>
 </table>
 
