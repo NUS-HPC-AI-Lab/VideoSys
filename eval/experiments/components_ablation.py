@@ -2,7 +2,7 @@ from utils import generate_func, read_prompt_list
 
 import videosys
 from videosys import OpenSoraConfig, OpenSoraPipeline
-from videosys.models.opensora import OpenSoraPABConfig
+from videosys.models.open_sora import OpenSoraPABConfig
 
 
 def wo_spatial(prompt_list):

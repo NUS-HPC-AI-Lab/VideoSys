@@ -2,7 +2,7 @@ from utils import generate_func, read_prompt_list
 
 import videosys
 from videosys import OpenSoraPlanConfig, OpenSoraPlanPipeline
-from videosys.models.opensora_plan import OpenSoraPlanPABConfig
+from videosys.models.open_sora_plan import OpenSoraPlanPABConfig
 
 
 def eval_base(prompt_list):

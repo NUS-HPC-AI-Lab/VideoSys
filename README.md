@@ -70,7 +70,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/opensora/sample.py">Code</a></td>
+        <td align="center"><a href="./scripts/open_sora/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
@@ -78,7 +78,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/opensora_plan/sample.py">Code</a></td>
+        <td align="center"><a href="./scripts/open_sora_plan/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>

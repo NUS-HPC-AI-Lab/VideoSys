@@ -25,9 +25,9 @@ from videosys.core.parallel_mgr import (
     get_sequence_parallel_size,
     is_sequence_parallelism_enable,
 )
-from videosys.models.opensora.ckpt_io import load_checkpoint
-from videosys.models.opensora.embed import CaptionEmbedder, PatchEmbed3D, TimestepEmbedder, get_2d_sincos_pos_embed
-from videosys.models.opensora.stdit import approx_gelu, t2i_modulate
+from videosys.models.open_sora.ckpt_io import load_checkpoint
+from videosys.models.open_sora.embed import CaptionEmbedder, PatchEmbed3D, TimestepEmbedder, get_2d_sincos_pos_embed
+from videosys.models.open_sora.stdit import approx_gelu, t2i_modulate
 from videosys.modules.attn import Attention, MultiHeadCrossAttention
 from videosys.modules.layers import get_layernorm
 
