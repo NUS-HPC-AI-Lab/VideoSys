@@ -86,14 +86,6 @@ OpenDiT supports many diffusion models with our various acceleration techniques,
         <td align="center">✅</td>
         <td align="center"><a href="./docs/latte.md">Doc</a></td>
     </tr>
-    <tr>
-        <td>DiT [<a href="https://github.com/facebookresearch/DiT">source</a>]</td>
-        <td align="center">✅</td>
-        <td align="center">✅</td>
-        <td align="center">❌</td>
-        <td align="center">❌</td>
-        <td align="center"><a href="./docs/dit.md">Doc</a></td>
-    </tr>
 </table>
 
 ## Acceleration Techniques
