@@ -1,7 +1,7 @@
 <p align="center">
 <img width="200px" alt="OpenDiT" src="./assets/figures/logo.png?raw=true">
 </p>
-<p align="center"><b><big>An Easy, Fast and Memory-Efficient System for DiT Training and Inference</big></b></p>
+<p align="center"><b><big>An easy and efficient system for video generation</big></b></p>
 </p>
 
 ### Latest News 🔥
