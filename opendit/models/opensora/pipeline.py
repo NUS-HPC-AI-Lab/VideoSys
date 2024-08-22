@@ -32,13 +32,13 @@ class OpenSoraPABConfig(PABConfig):
         self,
         steps: int = 50,
         spatial_broadcast: bool = True,
-        spatial_threshold: list = [540, 920],
+        spatial_threshold: list = [450, 930],
         spatial_gap: int = 2,
         temporal_broadcast: bool = True,
-        temporal_threshold: list = [540, 920],
+        temporal_threshold: list = [450, 930],
         temporal_gap: int = 4,
         cross_broadcast: bool = True,
-        cross_threshold: list = [540, 930],
+        cross_threshold: list = [450, 930],
         cross_gap: int = 6,
         diffusion_skip: bool = False,
         diffusion_timestep_respacing: list = None,
@@ -152,7 +152,9 @@ class OpenSoraPipeline(VideoSysPipeline):
 
         # initialize the model if not provided
         if text_encoder is None:
-            text_encoder = T5Encoder(from_pretrained=config.text_encoder, model_max_length=300, device=device)
+            text_encoder = T5Encoder(
+                from_pretrained=config.text_encoder, model_max_length=300, device=device, dtype=dtype
+            )
         if vae is None:
             vae = OpenSoraVAE_V1_2(
                 from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",

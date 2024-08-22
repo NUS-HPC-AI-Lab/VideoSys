@@ -116,6 +116,9 @@ class PABManager:
         return is_t_in_skip_config, skip_range
 
     def if_skip_mlp(self, timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False):
+        if not self.config.mlp_skip:
+            return False, None, False, None
+
         if is_temporal:
             cur_config = self.config.mlp_temporal_skip_config
         else:
