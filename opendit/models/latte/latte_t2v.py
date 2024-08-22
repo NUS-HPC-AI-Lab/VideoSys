@@ -51,7 +51,12 @@ from opendit.core.pab_mgr import (
     if_broadcast_temporal,
     save_mlp_output,
 )
-from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_cfg_parallel_group, get_cfg_parallel_size
+from opendit.core.parallel_mgr import (
+    enable_sequence_parallel,
+    get_cfg_parallel_group,
+    get_cfg_parallel_size,
+    get_sequence_parallel_group,
+)
 from opendit.utils.utils import batch_func
 
 

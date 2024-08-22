@@ -39,8 +39,8 @@ from opendit.core.pab_mgr import (
 )
 from opendit.core.parallel_mgr import (
     enable_sequence_parallel,
-    get_data_parallel_group,
     get_cfg_parallel_size,
+    get_data_parallel_group,
     get_sequence_parallel_group,
 )
 from opendit.utils.utils import batch_func

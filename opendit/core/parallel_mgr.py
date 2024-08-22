@@ -5,9 +5,8 @@ import torch
 import torch.distributed as dist
 from colossalai.cluster.process_group_mesh import ProcessGroupMesh
 from torch.distributed import ProcessGroup
-from opendit.utils.logging import logger
 
-from opendit.utils.logging import init_dist_logger
+from opendit.utils.logging import init_dist_logger, logger
 from opendit.utils.utils import set_seed
 
 PARALLEL_MANAGER = None
@@ -17,7 +16,7 @@ class ParallelManager(ProcessGroupMesh):
     def __init__(self, dp_size, cp_size, sp_size):
         super().__init__(dp_size, cp_size, sp_size)
         dp_axis, cp_axis, sp_axis = 0, 1, 2
-        
+
         self.dp_size = dp_size
         self.dp_group: ProcessGroup = self.get_group_along_axis(dp_axis)
         self.dp_rank = dist.get_rank(self.dp_group)
@@ -25,12 +24,12 @@ class ParallelManager(ProcessGroupMesh):
         self.cp_size = cp_size
         self.cp_group: ProcessGroup = self.get_group_along_axis(cp_axis)
         self.cp_rank = dist.get_rank(self.cp_group)
-        
+
         self.sp_size = sp_size
         self.sp_group: ProcessGroup = self.get_group_along_axis(sp_axis)
         self.sp_rank = dist.get_rank(self.sp_group)
         self.enable_sp = sp_size > 1
-        
+
         logger.info(f"Init parallel manager with dp_size: {dp_size}, cp_size: {cp_size}, sp_size: {sp_size}")
 
 
@@ -62,11 +61,14 @@ def get_sequence_parallel_size():
 def get_sequence_parallel_rank():
     return PARALLEL_MANAGER.sp_rank
 
+
 def get_cfg_parallel_group():
     return PARALLEL_MANAGER.cp_group
 
+
 def get_cfg_parallel_size():
     return PARALLEL_MANAGER.cp_size
+
 
 def enable_sequence_parallel():
     if PARALLEL_MANAGER is None:
