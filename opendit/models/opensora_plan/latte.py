@@ -21,7 +21,6 @@ import torch.nn.functional as F
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
 from diffusers.models.attention_processor import (
-    LORA_ATTENTION_PROCESSORS,
     AttnAddedKVProcessor,
     AttnAddedKVProcessor2_0,
     AttnProcessor,
@@ -638,10 +637,7 @@ class Attention(nn.Module):
                 The attention operation to use. Defaults to `None` which uses the default attention operation from
                 `xformers`.
         """
-        is_lora = hasattr(self, "processor") and isinstance(
-            self.processor,
-            LORA_ATTENTION_PROCESSORS,
-        )
+        is_lora = hasattr(self, "processor")
         is_custom_diffusion = hasattr(self, "processor") and isinstance(
             self.processor,
             (CustomDiffusionAttnProcessor, CustomDiffusionXFormersAttnProcessor, CustomDiffusionAttnProcessor2_0),
@@ -1725,37 +1721,6 @@ class BasicTransformerBlock_(nn.Module):
                     ff_output=ff_output,
                     is_temporal=True,
                 )
-
-        if self.use_ada_layer_norm_zero:
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-
-        if self.use_ada_layer_norm_single:
-            # norm_hidden_states = self.norm2(hidden_states)
-            norm_hidden_states = self.norm3(hidden_states)
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
-
-        if self._chunk_size is not None:
-            # "feed_forward_chunk_size" can be used to save memory
-            if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
-                raise ValueError(
-                    f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
-                )
-
-            num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
-            ff_output = torch.cat(
-                [
-                    self.ff(hid_slice, scale=lora_scale)
-                    for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)
-                ],
-                dim=self._chunk_dim,
-            )
-        else:
-            ff_output = self.ff(norm_hidden_states, scale=lora_scale)
-
-        if self.use_ada_layer_norm_zero:
-            ff_output = gate_mlp.unsqueeze(1) * ff_output
-        elif self.use_ada_layer_norm_single:
-            ff_output = gate_mlp * ff_output
 
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:

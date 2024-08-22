@@ -1,7 +1,9 @@
+import argparse
+
 import torch
 from vbench import VBench
 
-full_info_path = "./vbench/VBench_test.json"
+full_info_path = "./vbench/VBench_full_info.json"
 
 dimensions = [
     "subject_consistency",
@@ -22,13 +24,29 @@ dimensions = [
     "dynamic_degree",
 ]
 
-for dimension in dimensions:
-    my_VBench = VBench(torch.device("cuda"), full_info_path, "vbench_out")
-    my_VBench.evaluate(
-        videos_path="./videos",
-        name=dimension,
-        local=False,
-        read_frame=False,
-        dimension_list=[dimension],
-        mode="vbench_standard",
-    )
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--video_path", required=True, type=str)
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    save_path = args.video_path.replace("/samples/", "/vbench_out/")
+
+    kwargs = {}
+    kwargs["imaging_quality_preprocessing_mode"] = "longer"  # use VBench/evaluate.py default
+
+    for dimension in dimensions:
+        my_VBench = VBench(torch.device("cuda"), full_info_path, save_path)
+        my_VBench.evaluate(
+            videos_path=args.video_path,
+            name=dimension,
+            local=False,
+            read_frame=False,
+            dimension_list=[dimension],
+            mode="vbench_standard",
+            **kwargs,
+        )
