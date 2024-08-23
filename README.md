@@ -4,9 +4,6 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
-<p align="center">
-<a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
-</p>
 </p>
 
 ### Latest News 🔥
@@ -20,7 +17,10 @@ An easy and efficient system for video generation
 # About
 
 VideoSys is an open-source project that provides a ease-of-use and high-performance infrastructure for video generation, including training, inference, serving and compression.
+
 VideoSys will continue to integrate more open-source video models and techniques. Stay tuned for upcoming enhancements and additional features!
+
+Authors: <a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
 
 ## Installation
 
