@@ -1,12 +1,17 @@
 # Pyramid Attention Broadcast(PAB)
 
+[[paper](https://arxiv.org/abs/2408.12588)][[blog](https://arxiv.org/abs/2403.10266)]
+
 Pyramid Attention Broadcast(PAB)(#pyramid-attention-broadcastpab)
-- [Insights](#insights)
-- [Pyramid Attention Broadcast (PAB) Mechanism](#pyramid-attention-broadcast-pab-mechanism)
-- [Experimental Results](#experimental-results)
-- [Usage](#usage)
-  - [Supported Models](#supported-models)
-  - [Configuration for PAB](#configuration-for-pab)
+- [Pyramid Attention Broadcast(PAB)](#pyramid-attention-broadcastpab)
+  - [Insights](#insights)
+  - [Pyramid Attention Broadcast (PAB) Mechanism](#pyramid-attention-broadcast-pab-mechanism)
+  - [Experimental Results](#experimental-results)
+  - [Usage](#usage)
+    - [Supported Models](#supported-models)
+    - [Configuration for PAB](#configuration-for-pab)
+      - [Parameters](#parameters)
+      - [Example Configuration](#example-configuration)
 
 
 We introduce Pyramid Attention Broadcast (PAB), the first approach that achieves real-time DiT-based video generation. By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including Open-Sora, Open-Sora-Plan, and Latte. Notably, as a training-free approach, PAB can enpower any future DiT-based video generation models with real-time capabilities.
