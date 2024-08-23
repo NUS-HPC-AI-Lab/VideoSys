@@ -95,6 +95,7 @@ class LattePABConfig(PABConfig):
 class LatteConfig:
     def __init__(
         self,
+        world_size: int = 1,
         model_path: str = "maxin-cn/Latte-1",
         enable_vae_temporal_decoder: bool = True,
         # ======= scheduler ========
@@ -106,6 +107,13 @@ class LatteConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = LattePABConfig(),
     ):
+        # ======= engine ========
+        self.world_size = world_size
+
+        # ======= pipeline ========
+        self.pipeline_cls = LattePipeline
+
+        # ======= model ========
         self.model_path = model_path
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
 
@@ -628,6 +636,8 @@ class LattePipeline(VideoSysPipeline):
         """
         Function invoked when calling the pipeline for generation.
 
+        Latte can only generate video of 16 frames 512x512.
+
         Args:
             prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide the image generation. If not defined, one has to pass `prompt_embeds`.
@@ -650,13 +660,6 @@ class LattePipeline(VideoSysPipeline):
                 usually at the expense of lower image quality.
             num_images_per_prompt (`int`, *optional*, defaults to 1):
                 The number of images to generate per prompt.
-            height (`int`, *optional*, defaults to self.unet.config.sample_size):
-                The height in pixels of the generated image.
-            width (`int`, *optional*, defaults to self.unet.config.sample_size):
-                The width in pixels of the generated image.
-            eta (`float`, *optional*, defaults to 0.0):
-                Corresponds to parameter eta (η) in the DDIM paper: https://arxiv.org/abs/2010.02502. Only applies to
-                [`schedulers.DDIMScheduler`], will be ignored for others.
             generator (`torch.Generator` or `List[torch.Generator]`, *optional*):
                 One or a list of [torch generator(s)](https://pytorch.org/docs/stable/generated/torch.Generator.html)
                 to make generation deterministic.
@@ -686,8 +689,10 @@ class LattePipeline(VideoSysPipeline):
                 be installed. If the dependencies are not installed, the embeddings will be created from the raw
                 prompt.
             mask_feature (`bool` defaults to `True`): If set to `True`, the text embeddings will be masked.
-
-        Examples:
+            enable_temporal_attentions (`bool`, defaults to `True`):
+                If `True`, the model will use temporal attentions to generate the video.
+            verbose (`bool`, *optional*, defaults to `True`):
+                Whether to print progress bars and other information during inference.
 
         Returns:
             [`~pipelines.ImagePipelineOutput`] or `tuple`:
@@ -775,7 +780,7 @@ class LattePipeline(VideoSysPipeline):
             latents,
         )
 
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
+        # 6. Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
         # 6.1 Prepare micro-conditions.
@@ -797,7 +802,6 @@ class LattePipeline(VideoSysPipeline):
 
             current_timestep = t
             if not torch.is_tensor(current_timestep):
-                # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
                 # This would be a good case for the `match` statement (Python 3.10+)
                 is_mps = latent_model_input.device.type == "mps"
                 if isinstance(current_timestep, float):
