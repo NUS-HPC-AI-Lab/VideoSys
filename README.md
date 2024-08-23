@@ -133,13 +133,7 @@ See its details [here](./docs/dsp.md).
 
 ## Acknowledgement
 
-Thanks [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/), [Xiaolong Jin](), [Kai Wang](https://kaiwang960112.github.io/) for their contributions. We also extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/), [Shenggan Cheng](https://shenggan.github.io/), [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice.
-
-This codebase borrows from:
-* [Open-Sora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
-* [DiT](https://github.com/facebookresearch/DiT): Scalable Diffusion Models with Transformers.
-* [PixArt](https://github.com/PixArt-alpha/PixArt-alpha): An open-source DiT-based text-to-image model.
-* [Latte](https://github.com/Vchitect/Latte): An attempt to efficiently train DiT for video.
+Thanks [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html) for their contributions. We also extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/), [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice.
 
 ## Contributing
 
