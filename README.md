@@ -16,9 +16,9 @@ An easy and efficient system for video generation
 
 # About
 
-VideoSys is an open-source project that provides a ease-of-use and high-performance infrastructure for video generation, including training, inference, serving and compression.
+VideoSys is an open-source project that provides a user-friendly and high-performance infrastructure for video generation. This comprehensive toolkit will support the entire pipeline from training and inference to serving and compression.
 
-VideoSys will continue to integrate more open-source video models and techniques. Stay tuned for upcoming enhancements and additional features!
+We are committed to continually integrating cutting-edge open-source video models and techniques. Stay tuned for exciting enhancements and new features on the horizon!
 
 Authors: <a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
 
