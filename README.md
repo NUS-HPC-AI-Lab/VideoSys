@@ -4,9 +4,6 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
-<p align="center">
-<a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
-</p>
 </p>
 
 ### Latest News 🔥
@@ -20,7 +17,10 @@ An easy and efficient system for video generation
 # About
 
 VideoSys is an open-source project that provides a ease-of-use and high-performance infrastructure for video generation, including training, inference, serving and compression.
+
 VideoSys will continue to integrate more open-source video models and techniques. Stay tuned for upcoming enhancements and additional features!
+
+Authors: <a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
 
 ## Installation
 
@@ -70,7 +70,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/open_sora/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/open_sora/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
@@ -78,7 +78,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/open_sora_plan/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/open_sora_plan/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
@@ -86,7 +86,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/latte/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/latte/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>CogVideo [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
@@ -94,7 +94,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">❌</td>
         <td align="center">❌</td>
-        <td align="center"><a href="./scripts/cogvideo/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/cogvideo/sample.py">Code</a></td>
     </tr>
 </table>
 
@@ -133,13 +133,7 @@ See its details [here](./docs/dsp.md).
 
 ## Acknowledgement
 
-Thanks [Xuanlei Zhao](https://oahzxl.github.io/), [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html), [Yang You](https://www.comp.nus.edu.sg/~youy/), [Xiaolong Jin](), [Kai Wang](https://kaiwang960112.github.io/) for their contributions. We also extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/), [Shenggan Cheng](https://shenggan.github.io/), [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice.
-
-This codebase borrows from:
-* [Open-Sora](https://github.com/hpcaitech/Open-Sora): Democratizing Efficient Video Production for All.
-* [DiT](https://github.com/facebookresearch/DiT): Scalable Diffusion Models with Transformers.
-* [PixArt](https://github.com/PixArt-alpha/PixArt-alpha): An open-source DiT-based text-to-image model.
-* [Latte](https://github.com/Vchitect/Latte): An attempt to efficiently train DiT for video.
+Thanks [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html) for their contributions. We also extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/), [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice.
 
 ## Contributing
 
@@ -148,22 +142,24 @@ If you encounter problems using VideoSys or have a feature request, feel free to
 ## Citation
 
 ```
-@misc{zhao2024opendit,
-  author = {Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
-  title = {OpenDiT: An Easy, Fast and Memory-Efficient System for DiT Training and Inference},
-  year = {2024},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/OpenDiT}},
+@misc{zhao2024pab,
+      title={Real-Time Video Generation with Pyramid Attention Broadcast},
+      author={Xuanlei Zhao and Xiaolong Jin and Kai Wang and Yang You},
+      year={2024},
+      eprint={2408.12588},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2408.12588},
 }
 
 @misc{zhao2024dsp,
       title={DSP: Dynamic Sequence Parallelism for Multi-Dimensional Transformers},
-      author={Xuanlei Zhao and Shenggan Cheng and Zangwei Zheng and Zheming Yang and Ziming Liu and Yang You},
+      author={Xuanlei Zhao and Shenggan Cheng and Chang Chen and Zangwei Zheng and Ziming Liu and Zheming Yang and Yang You},
       year={2024},
       eprint={2403.10266},
       archivePrefix={arXiv},
-      primaryClass={cs.DC}
+      primaryClass={cs.DC},
+      url={https://arxiv.org/abs/2403.10266},
 }
 ```
 

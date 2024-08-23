@@ -196,14 +196,14 @@ class OpenSoraPipeline(VideoSysPipeline):
     def generate(
         self,
         prompt: str,
-        ms: Optional[str] = "",
-        refs: Optional[str] = "",
         resolution="480p",
         aspect_ratio="9:16",
         num_frames: int = 51,
         loop: int = 1,
         llm_refine: bool = False,
         negative_prompt: str = "",
+        ms: Optional[str] = "",
+        refs: Optional[str] = "",
         aes: float = 6.5,
         flow: Optional[float] = None,
         camera_motion: Optional[float] = None,
@@ -220,6 +220,12 @@ class OpenSoraPipeline(VideoSysPipeline):
             prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide the image generation. If not defined, one has to pass `prompt_embeds`.
                 instead.
+            resolution (`str`, *optional*, defaults to `"480p"`):
+                The resolution of the generated video.
+            aspect_ratio (`str`, *optional*, defaults to `"9:16"`):
+                The aspect ratio of the generated video.
+            num_frames (`int`, *optional*, defaults to 51):
+                The number of frames to generate.
             negative_prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts not to guide the image generation. If not defined, one has to pass
                 `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is

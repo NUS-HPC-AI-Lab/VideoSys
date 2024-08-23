@@ -129,6 +129,7 @@ class OpenSoraPlanPABConfig(PABConfig):
 class OpenSoraPlanConfig:
     def __init__(
         self,
+        world_size: int = 1,
         model_path: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
         num_frames: int = 65,
         ae: str = "CausalVAEModel_4x8x8",
@@ -140,12 +141,19 @@ class OpenSoraPlanConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPlanPABConfig(),
     ):
+        # ======= engine ========
+        self.world_size = world_size
+
+        # ======= pipeline ========
+        self.pipeline_cls = OpenSoraPlanPipeline
+        self.ae = ae
+        self.text_encoder = text_encoder
+
+        # ======= model ========
         self.model_path = model_path
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
         self.num_frames = num_frames
         self.version = f"{num_frames}x512x512"
-        self.ae = ae
-        self.text_encoder = text_encoder
 
         # ======= vae ========
         self.enable_tiling = enable_tiling
@@ -187,7 +195,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
     def __init__(
         self,
-        config: OpenSoraPlanConfig = OpenSoraPlanConfig(),
+        config: OpenSoraPlanConfig,
         tokenizer: Optional[T5Tokenizer] = None,
         text_encoder: Optional[T5EncoderModel] = None,
         vae: Optional[AutoencoderKL] = None,
