@@ -30,7 +30,7 @@ def fetch_readme() -> str:
 
 setup(
     name="videosys",
-    version="1.0.0",
+    version="2.0.0",
     packages=find_packages(
         exclude=(
             "videos",

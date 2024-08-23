@@ -37,7 +37,6 @@ class CogVideoConfig:
         model_path: str = "THUDM/CogVideoX-2b",
         num_inference_steps: int = 50,
         guidance_scale: float = 6.0,
-        fps: int = 8,
     ):
         # ======= engine ========
         self.world_size = world_size
@@ -49,7 +48,6 @@ class CogVideoConfig:
         self.model_path = model_path
         self.num_inference_steps = num_inference_steps
         self.guidance_scale = guidance_scale
-        self.fps = fps
 
 
 class CogVideoPipeline(VideoSysPipeline):
@@ -606,4 +604,4 @@ class CogVideoPipeline(VideoSysPipeline):
         return VideoSysPipelineOutput(video=video)
 
     def save_video(self, video, output_path):
-        save_video(video, output_path, fps=self._config.fps)
+        save_video(video, output_path, fps=8)

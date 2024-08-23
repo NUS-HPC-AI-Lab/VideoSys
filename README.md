@@ -70,7 +70,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/open_sora/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/open_sora/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
@@ -78,7 +78,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/open_sora_plan/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/open_sora_plan/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
@@ -86,7 +86,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./scripts/latte/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/latte/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>CogVideo [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
@@ -94,7 +94,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">✅</td>
         <td align="center">❌</td>
         <td align="center">❌</td>
-        <td align="center"><a href="./scripts/cogvideo/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/cogvideo/sample.py">Code</a></td>
     </tr>
 </table>
 
@@ -142,22 +142,24 @@ If you encounter problems using VideoSys or have a feature request, feel free to
 ## Citation
 
 ```
-@misc{zhao2024opendit,
-  author = {Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
-  title = {OpenDiT: An Easy, Fast and Memory-Efficient System for DiT Training and Inference},
-  year = {2024},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/OpenDiT}},
+@misc{zhao2024pab,
+      title={Real-Time Video Generation with Pyramid Attention Broadcast},
+      author={Xuanlei Zhao and Xiaolong Jin and Kai Wang and Yang You},
+      year={2024},
+      eprint={2408.12588},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2408.12588},
 }
 
 @misc{zhao2024dsp,
       title={DSP: Dynamic Sequence Parallelism for Multi-Dimensional Transformers},
-      author={Xuanlei Zhao and Shenggan Cheng and Zangwei Zheng and Zheming Yang and Ziming Liu and Yang You},
+      author={Xuanlei Zhao and Shenggan Cheng and Chang Chen and Zangwei Zheng and Ziming Liu and Zheming Yang and Yang You},
       year={2024},
       eprint={2403.10266},
       archivePrefix={arXiv},
-      primaryClass={cs.DC}
+      primaryClass={cs.DC},
+      url={https://arxiv.org/abs/2403.10266},
 }
 ```
 

@@ -159,7 +159,7 @@ class LattePipeline(VideoSysPipeline):
 
     def __init__(
         self,
-        config: LatteConfig = LatteConfig(),
+        config: LatteConfig,
         tokenizer: Optional[T5Tokenizer] = None,
         text_encoder: Optional[T5EncoderModel] = None,
         vae: Optional[AutoencoderKL] = None,
@@ -714,7 +714,7 @@ class LattePipeline(VideoSysPipeline):
         else:
             batch_size = prompt_embeds.shape[0]
 
-        device = self._execution_device
+        device = self.text_encoder.device or self._execution_device
 
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`

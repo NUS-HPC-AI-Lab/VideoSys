@@ -195,7 +195,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
     def __init__(
         self,
-        config: OpenSoraPlanConfig = OpenSoraPlanConfig(),
+        config: OpenSoraPlanConfig,
         tokenizer: Optional[T5Tokenizer] = None,
         text_encoder: Optional[T5EncoderModel] = None,
         vae: Optional[AutoencoderKL] = None,
