@@ -107,6 +107,8 @@ class PABManager:
     def _is_t_in_skip_config(all_timesteps, timestep, config):
         is_t_in_skip_config = False
         for key in config:
+            if key not in all_timesteps:
+                continue
             index = all_timesteps.index(key)
             skip_range = all_timesteps[index : index + 1 + int(config[key]["skip_count"])]
             if timestep in skip_range:
