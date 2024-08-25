@@ -1,7 +1,7 @@
 click
 colossalai
 contexttimer
-diffusers
+diffusers==0.30.0
 einops
 fabric
 ftfy

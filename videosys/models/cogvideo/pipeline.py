@@ -66,7 +66,7 @@ class CogVideoPipeline(VideoSysPipeline):
         transformer: Optional[CogVideoXTransformer3DModel] = None,
         scheduler: Optional[CogVideoXDDIMScheduler] = None,
         device: torch.device = torch.device("cuda"),
-        dtype: torch.dtype = torch.bfloat16,
+        dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
         self._config = config
