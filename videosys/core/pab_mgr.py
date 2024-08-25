@@ -27,6 +27,9 @@ class PABConfig:
         mlp_skip: bool,
         mlp_spatial_skip_config: dict,
         mlp_temporal_skip_config: dict,
+        full_broadcast: bool = False,
+        full_threshold: list = None,
+        full_gap: int = 1,
     ):
         self.steps = steps
 
@@ -53,6 +56,10 @@ class PABConfig:
         self.temporal_mlp_outputs = {}
         self.spatial_mlp_outputs = {}
 
+        self.full_broadcast = full_broadcast
+        self.full_threshold = full_threshold
+        self.full_gap = full_gap
+
 
 class PABManager:
     def __init__(self, config: PABConfig):
@@ -62,6 +69,7 @@ class PABManager:
         init_prompt += f" spatial_broadcast: {config.spatial_broadcast}, spatial_threshold: {config.spatial_threshold}, spatial_gap: {config.spatial_gap}."
         init_prompt += f" temporal_broadcast: {config.temporal_broadcast}, temporal_threshold: {config.temporal_threshold}, temporal_gap: {config.temporal_gap}."
         init_prompt += f" cross_broadcast: {config.cross_broadcast}, cross_threshold: {config.cross_threshold}, cross_gap: {config.cross_gap}."
+        init_prompt += f" full_broadcast: {config.full_broadcast}, full_threshold: {config.full_threshold}, full_gap: {config.full_gap}."
         logger.info(init_prompt)
 
     def if_broadcast_cross(self, timestep: int, count: int):
@@ -96,6 +104,19 @@ class PABManager:
             and (timestep is not None)
             and (count % self.config.spatial_gap != 0)
             and (self.config.spatial_threshold[0] < timestep < self.config.spatial_threshold[1])
+        ):
+            flag = True
+        else:
+            flag = False
+        count = (count + 1) % self.config.steps
+        return flag, count
+    
+    def if_broadcast_full(self, timestep: int, count: int, block_idx: int):
+        if (
+            self.config.full_broadcast
+            and (timestep is not None)
+            and (count % self.config.full_gap != 0)
+            and (self.config.full_threshold[0] < timestep < self.config.full_threshold[1])
         ):
             flag = True
         else:
@@ -228,6 +249,11 @@ def if_broadcast_spatial(timestep: int, count: int, block_idx: int):
     if not enable_pab():
         return False, count
     return PAB_MANAGER.if_broadcast_spatial(timestep, count, block_idx)
+
+def if_broadcast_full(timestep: int, count: int, block_idx: int):
+    if not enable_pab():
+        return False, count
+    return PAB_MANAGER.if_broadcast_full(timestep, count, block_idx)
 
 
 def if_broadcast_mlp(timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False):

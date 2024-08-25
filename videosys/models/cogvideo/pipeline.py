@@ -29,6 +29,65 @@ from .scheduling import CogVideoXDDIMScheduler, CogVideoXDPMScheduler
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+from videosys.core.pab_mgr import (
+    PABConfig,
+    get_diffusion_skip,
+    get_diffusion_skip_timestep,
+    set_pab_manager,
+    skip_diffusion_timestep,
+    update_steps,
+)
+
+class CogVideoPABConfig(PABConfig):
+    def __init__(
+        self,
+        steps: int = 150,
+        spatial_broadcast: bool = True,
+        spatial_threshold: list = [100, 850],
+        spatial_gap: int = 2,
+        temporal_broadcast: bool = True,
+        temporal_threshold: list = [100, 850],
+        temporal_gap: int = 4,
+        cross_broadcast: bool = True,
+        cross_threshold: list = [100, 850],
+        cross_gap: int = 6,
+        diffusion_skip: bool = False,
+        diffusion_timestep_respacing: list = None,
+        diffusion_skip_timestep: list = None,
+        mlp_skip: bool = True,
+        mlp_spatial_skip_config: dict = {
+            738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+        },
+        mlp_temporal_skip_config: dict = {
+            738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+            714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
+        },
+        full_broadcast: bool = True,
+        full_threshold: list = [100, 850],
+        full_gap: int = 3,
+    ):
+        super().__init__(
+            steps=steps,
+            spatial_broadcast=spatial_broadcast,
+            spatial_threshold=spatial_threshold,
+            spatial_gap=spatial_gap,
+            temporal_broadcast=temporal_broadcast,
+            temporal_threshold=temporal_threshold,
+            temporal_gap=temporal_gap,
+            cross_broadcast=cross_broadcast,
+            cross_threshold=cross_threshold,
+            cross_gap=cross_gap,
+            diffusion_skip=diffusion_skip,
+            diffusion_timestep_respacing=diffusion_timestep_respacing,
+            diffusion_skip_timestep=diffusion_skip_timestep,
+            mlp_skip=mlp_skip,
+            mlp_spatial_skip_config=mlp_spatial_skip_config,
+            mlp_temporal_skip_config=mlp_temporal_skip_config,
+            full_broadcast=full_broadcast,
+            full_threshold=full_threshold,
+            full_gap=full_gap,
+        )
 
 class CogVideoConfig:
     def __init__(
@@ -37,6 +96,8 @@ class CogVideoConfig:
         model_path: str = "THUDM/CogVideoX-2b",
         num_inference_steps: int = 50,
         guidance_scale: float = 6.0,
+        enable_pab: bool = False,
+        pab_config = CogVideoPABConfig() 
     ):
         # ======= engine ========
         self.world_size = world_size
@@ -48,6 +109,9 @@ class CogVideoConfig:
         self.model_path = model_path
         self.num_inference_steps = num_inference_steps
         self.guidance_scale = guidance_scale
+        self.enable_pab = enable_pab
+        self.pab_config = pab_config
+
 
 
 class CogVideoPipeline(VideoSysPipeline):
@@ -97,6 +161,10 @@ class CogVideoPipeline(VideoSysPipeline):
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
+
+        # pab
+        if config.enable_pab:
+            set_pab_manager(config.pab_config)
 
         self.vae_scale_factor_spatial = (
             2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8
@@ -457,7 +525,7 @@ class CogVideoPipeline(VideoSysPipeline):
         assert (
             num_frames <= 48 and num_frames % fps == 0 and fps == 8
         ), f"The number of frames must be divisible by {fps=} and less than 48 frames (for now). Other values are not supported in CogVideoX."
-
+        update_steps(num_inference_steps)
         if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
             callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
 
@@ -531,6 +599,17 @@ class CogVideoPipeline(VideoSysPipeline):
 
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
+
+        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
+            diffusion_skip_timestep = get_diffusion_skip_timestep()
+
+            # warmup_timesteps = timesteps[:num_warmup_steps]
+            # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
+            # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
+
+            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
+
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             # for DPM-solver++

@@ -20,6 +20,11 @@ from diffusers.utils import is_torch_version, logging
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from torch import nn
 
+from videosys.core.pab_mgr import (
+    enable_pab,
+    if_broadcast_full,
+)
+
 from .modules import AdaLayerNorm, CogVideoXLayerNormZero, CogVideoXPatchEmbed, get_3d_sincos_pos_embed
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -70,6 +75,7 @@ class CogVideoXBlock(nn.Module):
         ff_inner_dim: Optional[int] = None,
         ff_bias: bool = True,
         attention_out_bias: bool = True,
+        block_idx: int = 0,
     ):
         super().__init__()
 
@@ -98,11 +104,16 @@ class CogVideoXBlock(nn.Module):
             bias=ff_bias,
         )
 
+        self.attn_count = 0
+        self.last_attn = None
+        self.block_idx = block_idx
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
         temb: torch.Tensor,
+        timestep = None,
     ) -> torch.Tensor:
         norm_hidden_states, norm_encoder_hidden_states, gate_msa, enc_gate_msa = self.norm1(
             hidden_states, encoder_hidden_states, temb
@@ -114,10 +125,19 @@ class CogVideoXBlock(nn.Module):
         # CogVideoX uses concatenated text + video embeddings with self-attention instead of using
         # them in cross-attention individually
         norm_hidden_states = torch.cat([norm_encoder_hidden_states, norm_hidden_states], dim=1)
-        attn_output = self.attn1(
-            hidden_states=norm_hidden_states,
-            encoder_hidden_states=None,
-        )
+        
+        if enable_pab():
+            broadcast_attn, self.attn_count = if_broadcast_full(int(timestep[0]), self.attn_count, self.block_idx)
+
+        if enable_pab() and broadcast_attn:
+            attn_output = self.last_attn
+        else:
+            attn_output = self.attn1(
+                hidden_states=norm_hidden_states,
+                encoder_hidden_states=None,
+            )
+            if enable_pab():
+                self.last_attn = attn_output
 
         hidden_states = hidden_states + gate_msa * attn_output[:, text_length:]
         encoder_hidden_states = encoder_hidden_states + enc_gate_msa * attn_output[:, :text_length]
@@ -244,8 +264,9 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
                     attention_bias=attention_bias,
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
+                    block_idx=i,
                 )
-                for _ in range(num_layers)
+                for i in range(num_layers)
             ]
         )
         self.norm_final = nn.LayerNorm(inner_dim, norm_eps, norm_elementwise_affine)
@@ -321,6 +342,7 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
                     hidden_states=hidden_states,
                     encoder_hidden_states=encoder_hidden_states,
                     temb=emb,
+                    timestep=timesteps if enable_pab() else None,
                 )
 
         hidden_states = self.norm_final(hidden_states)

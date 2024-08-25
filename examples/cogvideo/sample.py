@@ -5,10 +5,20 @@ def run_base():
     config = CogVideoConfig(world_size=1)
     engine = VideoSysEngine(config)
 
-    prompt = "Sunset over the sea."
+    prompt = "a bear hunting for prey"
     video = engine.generate(prompt).video[0]
     engine.save_video(video, f"./outputs/{prompt}.mp4")
+
+def run_pab():
+    config = CogVideoConfig(world_size=1, enable_pab=True)
+    engine = VideoSysEngine(config)
+
+    prompt = "a bear hunting for prey"
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}_pab.mp4")
+
 
 
 if __name__ == "__main__":
     run_base()
+    run_pab()
