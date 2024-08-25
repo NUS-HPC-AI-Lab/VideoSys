@@ -13,14 +13,15 @@ from typing import Any, Dict, Optional, Union
 import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.attention import Attention, FeedForward
-from diffusers.models.embeddings import TimestepEmbedding, Timesteps
+from diffusers.models.embeddings import TimestepEmbedding, Timesteps, get_3d_sincos_pos_embed
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.modeling_utils import ModelMixin
 from diffusers.utils import is_torch_version, logging
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from torch import nn
 
-from .modules import AdaLayerNorm, CogVideoXLayerNormZero, CogVideoXPatchEmbed, get_3d_sincos_pos_embed
+from ..modules.embeddings import CogVideoXPatchEmbed
+from ..modules.normalization import AdaLayerNorm, CogVideoXLayerNormZero
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 

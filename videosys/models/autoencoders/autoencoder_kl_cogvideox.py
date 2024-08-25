@@ -23,7 +23,8 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.utils import logging
 from diffusers.utils.accelerate_utils import apply_forward_hook
 
-from .modules import CogVideoXDownsample3D, CogVideoXUpsample3D
+from ..modules.downsampling import CogVideoXDownsample3D
+from ..modules.upsampling import CogVideoXUpsample3D
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
