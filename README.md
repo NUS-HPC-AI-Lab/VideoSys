@@ -140,9 +140,24 @@ Thanks [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Zimi
 
 If you encounter problems using VideoSys or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
 
+## Contributors
+
+<a href="https://github.com/NUS-HPC-AI-Lab/VideoSys/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NUS-HPC-AI-Lab/VideoSys"/>
+</a>
+
 ## Citation
 
 ```
+@misc{videosys2024,
+  author = {VideoSys Team},
+  title = {VideoSys: An Easy and Efficient System for Video Generation},
+  year = {2024},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/VideoSys}},
+}
+
 @misc{zhao2024pab,
       title={Real-Time Video Generation with Pyramid Attention Broadcast},
       author={Xuanlei Zhao and Xiaolong Jin and Kai Wang and Yang You},
@@ -161,6 +176,15 @@ If you encounter problems using VideoSys or have a feature request, feel free to
       archivePrefix={arXiv},
       primaryClass={cs.DC},
       url={https://arxiv.org/abs/2403.10266},
+}
+
+@misc{zhao2024opendit,
+  author = {Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
+  title = {OpenDiT: An Easy, Fast and Memory-Efficient System for DiT Training and Inference},
+  year = {2024},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0}},
 }
 ```
 
