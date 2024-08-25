@@ -148,12 +148,11 @@ We welcome and value any contributions and collaborations. Please check out [CON
 
 ```
 @misc{videosys2024,
-  author = {VideoSys Team},
-  title = {VideoSys: An Easy and Efficient System for Video Generation},
-  year = {2024},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/VideoSys}},
+  author={VideoSys Team},
+  title={VideoSys: An Easy and Efficient System for Video Generation},
+  year={2024},
+  publisher={GitHub},
+  url = {https://github.com/NUS-HPC-AI-Lab/VideoSys},
 }
 
 @misc{zhao2024pab,
@@ -177,11 +176,10 @@ We welcome and value any contributions and collaborations. Please check out [CON
 }
 
 @misc{zhao2024opendit,
-  author = {Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
-  title = {OpenDiT: An Easy, Fast and Memory-Efficient System for DiT Training and Inference},
-  year = {2024},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0}},
+  author={Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
+  title={OpenDiT: An Easy, Fast and Memory-Efficient System for DiT Training and Inference},
+  year={2024},
+  publisher={GitHub},
+  url={https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0},
 }
 ```
