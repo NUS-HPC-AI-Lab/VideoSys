@@ -6,7 +6,7 @@
 # References:
 # CogVideo: https://github.com/THUDM/CogVideo
 # diffusers: https://github.com/huggingface/diffusers
-# --------------------------------------------------------
+#  --------------------------------------------------------
 
 import inspect
 import math
