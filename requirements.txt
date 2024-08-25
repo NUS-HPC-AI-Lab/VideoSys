@@ -4,6 +4,7 @@ contexttimer
 diffusers
 einops
 fabric
+ftfy
 imageio
 imageio-ffmpeg
 matplotlib
