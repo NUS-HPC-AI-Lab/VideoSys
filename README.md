@@ -7,21 +7,19 @@ An easy and efficient system for video generation
 </p>
 
 ### Latest News 🔥
-- [2024/08] 🔥<b>Release VideoSys: An easy and efficient system for video generation.</b>
+- [2024/08] 🔥<b>Evole from OpenDiT to VideoSys: An easy and efficient system for video generation.</b>
 - [2024/08] 🔥<b>Release PAB paper: [Real-Time Video Generation with Pyramid Attention Broadcast](https://arxiv.org/abs/2408.12588).</b>
 - [2024/06] Propose Pyramid Attention Broadcast (PAB)[[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.
 - [2024/06] Support Open-Sora-Plan and Latte.
 - [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in Open-Sora compared with sota sequence parallelism.
 - [2024/03] Support Open-Sora: Democratizing Efficient Video Production for All.
-- [2024/02] Release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
+- [2024/02] 🎉Release [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0): An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
 # About
 
 VideoSys is an open-source project that provides a user-friendly and high-performance infrastructure for video generation. This comprehensive toolkit will support the entire pipeline from training and inference to serving and compression.
 
 We are committed to continually integrating cutting-edge open-source video models and techniques. Stay tuned for exciting enhancements and new features on the horizon!
-
-Authors: <a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
 
 ## Installation
 
@@ -146,6 +144,10 @@ If you encounter problems using VideoSys or have a feature request, feel free to
   <img src="https://contrib.rocks/image?repo=NUS-HPC-AI-Lab/VideoSys"/>
 </a>
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/VideoSys&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/VideoSys&Date)
+
 ## Citation
 
 ```
@@ -187,7 +189,3 @@ If you encounter problems using VideoSys or have a feature request, feel free to
   howpublished = {\url{https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0}},
 }
 ```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/VideoSys&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/VideoSys&Date)
