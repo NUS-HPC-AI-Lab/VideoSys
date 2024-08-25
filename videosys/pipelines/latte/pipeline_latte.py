@@ -37,7 +37,7 @@ from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video
 
-from .latte_t2v import LatteT2V
+from ...models.transformers.latte_transformer_3d import LatteT2V
 
 
 class LattePABConfig(PABConfig):
