@@ -130,10 +130,6 @@ It achieves **3x** speed for training and **2x** speed for inference in Open-Sor
 See its details [here](./docs/dsp.md).
 
 
-## Acknowledgement
-
-Thanks [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html) for their contributions. We also extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/), [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice.
-
 ## Contributing
 
 If you encounter problems using VideoSys or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
