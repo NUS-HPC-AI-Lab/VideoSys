@@ -132,7 +132,7 @@ See its details [here](./docs/dsp.md).
 
 ## Contributing
 
-We welcome and value any contributions and collaborations. Please check out `CONTRIBUTING.md` for how to get involved.
+We welcome and value any contributions and collaborations. Please check out [CONTRIBUTING.md](./CONTRIBUTING.md) for how to get involved.
 
 ## Contributors
 
