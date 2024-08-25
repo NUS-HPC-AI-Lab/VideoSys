@@ -132,7 +132,7 @@ See its details [here](./docs/dsp.md).
 
 ## Contributing
 
-If you encounter problems using VideoSys or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
+We welcome and value any contributions and collaborations. Please check out `CONTRIBUTING.md` for how to get involved.
 
 ## Contributors
 
