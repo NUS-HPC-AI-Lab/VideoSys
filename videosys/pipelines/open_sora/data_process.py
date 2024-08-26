@@ -786,3 +786,22 @@ def read_image_from_path(path, transform=None, transform_name="center", num_fram
     video = image.unsqueeze(0).repeat(num_frames, 1, 1, 1)
     video = video.permute(1, 0, 2, 3)
     return video
+
+
+def prepare_multi_resolution_info(info_type, batch_size, image_size, num_frames, fps, device, dtype):
+    if info_type is None:
+        return dict()
+    elif info_type == "PixArtMS":
+        hw = torch.tensor([image_size], device=device, dtype=dtype).repeat(batch_size, 1)
+        ar = torch.tensor([[image_size[0] / image_size[1]]], device=device, dtype=dtype).repeat(batch_size, 1)
+        return dict(ar=ar, hw=hw)
+    elif info_type in ["STDiT2", "OpenSora"]:
+        fps = fps if num_frames > 1 else IMG_FPS
+        fps = torch.tensor([fps], device=device, dtype=dtype).repeat(batch_size)
+        height = torch.tensor([image_size[0]], device=device, dtype=dtype).repeat(batch_size)
+        width = torch.tensor([image_size[1]], device=device, dtype=dtype).repeat(batch_size)
+        num_frames = torch.tensor([num_frames], device=device, dtype=dtype).repeat(batch_size)
+        ar = torch.tensor([image_size[0] / image_size[1]], device=device, dtype=dtype).repeat(batch_size)
+        return dict(height=height, width=width, num_frames=num_frames, ar=ar, fps=fps)
+    else:
+        raise NotImplementedError
