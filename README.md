@@ -156,23 +156,23 @@ We welcome and value any contributions and collaborations. Please check out [CON
 }
 
 @misc{zhao2024pab,
-      title={Real-Time Video Generation with Pyramid Attention Broadcast},
-      author={Xuanlei Zhao and Xiaolong Jin and Kai Wang and Yang You},
-      year={2024},
-      eprint={2408.12588},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2408.12588},
+  title={Real-Time Video Generation with Pyramid Attention Broadcast},
+  author={Xuanlei Zhao and Xiaolong Jin and Kai Wang and Yang You},
+  year={2024},
+  eprint={2408.12588},
+  archivePrefix={arXiv},
+  primaryClass={cs.CV},
+  url={https://arxiv.org/abs/2408.12588},
 }
 
 @misc{zhao2024dsp,
-      title={DSP: Dynamic Sequence Parallelism for Multi-Dimensional Transformers},
-      author={Xuanlei Zhao and Shenggan Cheng and Chang Chen and Zangwei Zheng and Ziming Liu and Zheming Yang and Yang You},
-      year={2024},
-      eprint={2403.10266},
-      archivePrefix={arXiv},
-      primaryClass={cs.DC},
-      url={https://arxiv.org/abs/2403.10266},
+  title={DSP: Dynamic Sequence Parallelism for Multi-Dimensional Transformers},
+  author={Xuanlei Zhao and Shenggan Cheng and Chang Chen and Zangwei Zheng and Ziming Liu and Zheming Yang and Yang You},
+  year={2024},
+  eprint={2403.10266},
+  archivePrefix={arXiv},
+  primaryClass={cs.DC},
+  url={https://arxiv.org/abs/2403.10266},
 }
 
 @misc{zhao2024opendit,
