@@ -7,21 +7,19 @@ An easy and efficient system for video generation
 </p>
 
 ### Latest News 🔥
-- [2024/08] 🔥<b>Release VideoSys: An easy and efficient system for video generation.</b>
-- [2024/08] 🔥<b>Release PAB paper: [Real-Time Video Generation with Pyramid Attention Broadcast](https://arxiv.org/abs/2408.12588).</b>
+- [2024/08] 🔥 Evole from OpenDiT to <b>VideoSys: An easy and efficient system for video generation.</b>
+- [2024/08] 🔥 <b>Release PAB paper: [Real-Time Video Generation with Pyramid Attention Broadcast](https://arxiv.org/abs/2408.12588).</b>
 - [2024/06] Propose Pyramid Attention Broadcast (PAB)[[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.
 - [2024/06] Support Open-Sora-Plan and Latte.
 - [2024/03] Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in Open-Sora compared with sota sequence parallelism.
 - [2024/03] Support Open-Sora: Democratizing Efficient Video Production for All.
-- [2024/02] Release OpenDiT: An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
+- [2024/02] 🎉 Release [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0): An Easy, Fast and Memory-Efficent System for DiT Training and Inference.
 
 # About
 
 VideoSys is an open-source project that provides a user-friendly and high-performance infrastructure for video generation. This comprehensive toolkit will support the entire pipeline from training and inference to serving and compression.
 
 We are committed to continually integrating cutting-edge open-source video models and techniques. Stay tuned for exciting enhancements and new features on the horizon!
-
-Authors: <a href="https://oahzxl.github.io/">Xuanlei Zhao</a>, <a href="https://kaiwang960112.github.io/">Kai Wang</a>, <a href="https://scholar.google.com/citations?user=wrhNmbIAAAAJ&hl">Geng Zhang</a>, <a href="https://viscent.dev">Yiqi Zhang</a>, <a href="https://shenggan.github.io">Shenggan Cheng</a>, <a href="https://www.cs.purdue.edu/people/graduate-students/jin509.html">Xiaolong Jin</a>, <a href="https://www.comp.nus.edu.sg/~youy/">Yang You</a>
 
 ## Installation
 
@@ -132,17 +130,31 @@ It achieves **3x** speed for training and **2x** speed for inference in Open-Sor
 See its details [here](./docs/dsp.md).
 
 
-## Acknowledgement
-
-Thanks [Zhongkai Zhao](https://www.linkedin.com/in/zhongkai-zhao-kk2000/), [Ziming Liu](https://maruyamaaya.github.io/), [Haotian Zhou](https://github.com/ht-zhou), [Qianli Ma](https://fazzie-key.cool/about/index.html) for their contributions. We also extend our gratitude to [Zangwei Zheng](https://zhengzangw.github.io/), [Fuzhao Xue](https://xuefuzhao.github.io/), [Shizun Wang](https://littlepure2333.github.io/home/), [Yuchao Gu](https://ycgu.site/), [Shenggui Li](https://franklee.xyz/), and [Haofan Wang](https://haofanwang.github.io/) for their invaluable advice.
-
 ## Contributing
 
-If you encounter problems using VideoSys or have a feature request, feel free to create an issue! We also welcome pull requests from the community.
+We welcome and value any contributions and collaborations. Please check out [CONTRIBUTING.md](./CONTRIBUTING.md) for how to get involved.
+
+## Contributors
+
+<a href="https://github.com/NUS-HPC-AI-Lab/VideoSys/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NUS-HPC-AI-Lab/VideoSys"/>
+</a>
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/VideoSys&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/VideoSys&Date)
 
 ## Citation
 
 ```
+@misc{videosys2024,
+  author={VideoSys Team},
+  title={VideoSys: An Easy and Efficient System for Video Generation},
+  year={2024},
+  publisher={GitHub},
+  url = {https://github.com/NUS-HPC-AI-Lab/VideoSys},
+}
+
 @misc{zhao2024pab,
       title={Real-Time Video Generation with Pyramid Attention Broadcast},
       author={Xuanlei Zhao and Xiaolong Jin and Kai Wang and Yang You},
@@ -162,8 +174,12 @@ If you encounter problems using VideoSys or have a feature request, feel free to
       primaryClass={cs.DC},
       url={https://arxiv.org/abs/2403.10266},
 }
+
+@misc{zhao2024opendit,
+  author={Xuanlei Zhao, Zhongkai Zhao, Ziming Liu, Haotian Zhou, Qianli Ma, and Yang You},
+  title={OpenDiT: An Easy, Fast and Memory-Efficient System for DiT Training and Inference},
+  year={2024},
+  publisher={GitHub},
+  url={https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0},
+}
 ```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=NUS-HPC-AI-Lab/VideoSys&type=Date)](https://star-history.com/#NUS-HPC-AI-Lab/VideoSys&Date)
