@@ -9,6 +9,7 @@
 
 
 import os
+from collections.abc import Iterable
 from functools import partial
 
 import numpy as np
@@ -17,6 +18,7 @@ import torch.nn as nn
 from einops import rearrange
 from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
+from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 from transformers import PretrainedConfig, PreTrainedModel
 
 from videosys.core.comm import (
@@ -58,7 +60,15 @@ from ..open_sora.modules import (
     get_layernorm,
     t2i_modulate,
 )
-from ..open_sora.utils import auto_grad_checkpoint, load_checkpoint
+
+
+def auto_grad_checkpoint(module, *args, **kwargs):
+    if getattr(module, "grad_checkpointing", False):
+        if not isinstance(module, Iterable):
+            return checkpoint(module, *args, use_reentrant=False, **kwargs)
+        gc_step = module[0].grad_checkpointing_step
+        return checkpoint_sequential(module, gc_step, *args, use_reentrant=False, **kwargs)
+    return module(*args, **kwargs)
 
 
 class STDiT3Block(nn.Module):
@@ -598,6 +608,4 @@ def STDiT3_XL_2(from_pretrained=None, **kwargs):
     else:
         config = STDiT3Config(depth=28, hidden_size=1152, patch_size=(1, 2, 2), num_heads=16, **kwargs)
         model = STDiT3(config)
-        if from_pretrained is not None:
-            load_checkpoint(model, from_pretrained)
     return model

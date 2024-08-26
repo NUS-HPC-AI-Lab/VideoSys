@@ -18,8 +18,6 @@ from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
 from einops import rearrange
 from transformers import PretrainedConfig, PreTrainedModel
 
-from ..open_sora.utils import load_checkpoint
-
 
 class DiagonalGaussianDistribution(object):
     def __init__(
@@ -474,7 +472,7 @@ class VAE_Temporal(nn.Module):
         return recon_video, posterior, z
 
 
-def VAE_Temporal_SD(from_pretrained=None, **kwargs):
+def VAE_Temporal_SD(**kwargs):
     model = VAE_Temporal(
         in_out_channels=4,
         latent_embed_dim=4,
@@ -485,8 +483,6 @@ def VAE_Temporal_SD(from_pretrained=None, **kwargs):
         temporal_downsample=(False, True, True),
         **kwargs,
     )
-    if from_pretrained is not None:
-        load_checkpoint(model, from_pretrained)
     return model
 
 
@@ -634,7 +630,7 @@ class VideoAutoencoderPipeline(PreTrainedModel):
             micro_batch_size=4,
             subfolder="vae",
         )
-        self.temporal_vae = VAE_Temporal_SD(from_pretrained=None)
+        self.temporal_vae = VAE_Temporal_SD()
         self.cal_loss = config.cal_loss
         self.micro_frame_size = config.micro_frame_size
         self.micro_z_frame_size = self.temporal_vae.get_latent_size([config.micro_frame_size, None, None])[0]
@@ -763,7 +759,4 @@ def OpenSoraVAE_V1_2(
     else:
         config = VideoAutoencoderPipelineConfig(**kwargs)
         model = VideoAutoencoderPipeline(config)
-
-        if from_pretrained:
-            load_checkpoint(model, from_pretrained)
     return model
