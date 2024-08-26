@@ -18,7 +18,7 @@ from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
 from einops import rearrange
 from transformers import PretrainedConfig, PreTrainedModel
 
-from .utils import load_checkpoint
+from ..open_sora.utils import load_checkpoint
 
 
 class DiagonalGaussianDistribution(object):

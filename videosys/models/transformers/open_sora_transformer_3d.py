@@ -45,7 +45,7 @@ from videosys.core.parallel_mgr import (
 )
 from videosys.utils.utils import batch_func
 
-from .modules import (
+from ..open_sora.modules import (
     Attention,
     CaptionEmbedder,
     MultiHeadCrossAttention,
@@ -58,7 +58,7 @@ from .modules import (
     get_layernorm,
     t2i_modulate,
 )
-from .utils import auto_grad_checkpoint, load_checkpoint
+from ..open_sora.utils import auto_grad_checkpoint, load_checkpoint
 
 
 class STDiT3Block(nn.Module):

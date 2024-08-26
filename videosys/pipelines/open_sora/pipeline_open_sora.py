@@ -8,8 +8,9 @@ from videosys.core.pab_mgr import PABConfig, set_pab_manager
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.utils.utils import save_video
 
-from .datasets import get_image_size, get_num_frames
-from .inference_utils import (
+from ...models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
+from ...models.open_sora.datasets import get_image_size, get_num_frames
+from ...models.open_sora.inference_utils import (
     append_generated,
     append_score_to_prompts,
     apply_mask_strategy,
@@ -21,10 +22,9 @@ from .inference_utils import (
     prepare_multi_resolution_info,
     split_prompt,
 )
-from .rflow import RFLOW
-from .stdit3 import STDiT3_XL_2
-from .text_encoder import T5Encoder, text_preprocessing
-from .vae import OpenSoraVAE_V1_2
+from ...models.open_sora.text_encoder import T5Encoder, text_preprocessing
+from ...models.transformers.open_sora_transformer_3d import STDiT3_XL_2
+from ...schedulers.scheduling_rflow_open_sora import RFLOW
 
 
 class OpenSoraPABConfig(PABConfig):
