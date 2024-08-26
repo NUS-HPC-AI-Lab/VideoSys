@@ -1,16 +1,18 @@
+import html
+import os
 import re
 from typing import Optional, Tuple, Union
 
+import ftfy
 import torch
 from diffusers.models import AutoencoderKL
+from transformers import AutoTokenizer, T5EncoderModel
 
 from videosys.core.pab_mgr import PABConfig, set_pab_manager
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
-from videosys.utils.utils import save_video
-
-from ...models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
-from ...models.open_sora.datasets import get_image_size, get_num_frames
-from ...models.open_sora.inference_utils import (
+from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
+from videosys.models.open_sora.datasets import get_image_size, get_num_frames
+from videosys.models.open_sora.inference_utils import (
     append_generated,
     append_score_to_prompts,
     apply_mask_strategy,
@@ -22,9 +24,16 @@ from ...models.open_sora.inference_utils import (
     prepare_multi_resolution_info,
     split_prompt,
 )
-from ...models.open_sora.text_encoder import T5Encoder, text_preprocessing
-from ...models.transformers.open_sora_transformer_3d import STDiT3_XL_2
-from ...schedulers.scheduling_rflow_open_sora import RFLOW
+from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2
+from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
+from videosys.utils.utils import save_video
+
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+
+
+BAD_PUNCT_REGEX = re.compile(
+    r"[" + "#®•©™&@·º½¾¿¡§~" + "\)" + "\(" + "\]" + "\[" + "\}" + "\{" + "\|" + "\\" + "\/" + "\*" + r"]{1,}"
+)  # noqa
 
 
 class OpenSoraPABConfig(PABConfig):
@@ -144,7 +153,8 @@ class OpenSoraPipeline(VideoSysPipeline):
     def __init__(
         self,
         config: OpenSoraConfig,
-        text_encoder: Optional[T5Encoder] = None,
+        text_encoder: Optional[T5EncoderModel] = None,
+        tokenizer: Optional[AutoTokenizer] = None,
         vae: Optional[AutoencoderKL] = None,
         transformer: Optional[STDiT3_XL_2] = None,
         scheduler: Optional[RFLOW] = None,
@@ -158,9 +168,9 @@ class OpenSoraPipeline(VideoSysPipeline):
 
         # initialize the model if not provided
         if text_encoder is None:
-            text_encoder = T5Encoder(
-                from_pretrained=config.text_encoder, model_max_length=300, device=device, dtype=dtype
-            )
+            text_encoder = T5EncoderModel.from_pretrained(config.text_encoder).to(dtype)
+        if tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(config.text_encoder)
         if vae is None:
             vae = OpenSoraVAE_V1_2(
                 from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
@@ -174,10 +184,9 @@ class OpenSoraPipeline(VideoSysPipeline):
                 enable_flash_attn=True,
                 enable_layernorm_kernel=True,
                 in_channels=vae.out_channels,
-                caption_channels=text_encoder.output_dim,
-                model_max_length=text_encoder.model_max_length,
+                caption_channels=text_encoder.config.d_model,
+                model_max_length=300,
             ).to(device, dtype)
-            text_encoder.y_embedder = transformer.y_embedder
         if scheduler is None:
             scheduler = RFLOW(
                 use_timestep_transform=True, num_sampling_steps=config.num_sampling_steps, cfg_scale=config.cfg_scale
@@ -190,7 +199,170 @@ class OpenSoraPipeline(VideoSysPipeline):
         # set eval and device
         self.set_eval_and_device(device, text_encoder, vae, transformer)
 
-        self.register_modules(text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler)
+        self.register_modules(
+            text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler, tokenizer=tokenizer
+        )
+
+    def get_text_embeddings(self, texts):
+        text_tokens_and_mask = self.tokenizer(
+            texts,
+            max_length=300,
+            padding="max_length",
+            truncation=True,
+            return_attention_mask=True,
+            add_special_tokens=True,
+            return_tensors="pt",
+        )
+
+        input_ids = text_tokens_and_mask["input_ids"].to(self.device)
+        attention_mask = text_tokens_and_mask["attention_mask"].to(self.device)
+        with torch.no_grad():
+            text_encoder_embs = self.text_encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )["last_hidden_state"].detach()
+        return text_encoder_embs, attention_mask
+
+    def encode_prompt(self, text):
+        caption_embs, emb_masks = self.get_text_embeddings(text)
+        caption_embs = caption_embs[:, None]
+        return dict(y=caption_embs, mask=emb_masks)
+
+    def null_embed(self, n):
+        null_y = self.transformer.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None]
+        return null_y
+
+    @staticmethod
+    def _basic_clean(text):
+        text = ftfy.fix_text(text)
+        text = html.unescape(html.unescape(text))
+        return text.strip()
+
+    def _clean_caption(self, caption):
+        import urllib.parse as ul
+
+        from bs4 import BeautifulSoup
+
+        caption = str(caption)
+        caption = ul.unquote_plus(caption)
+        caption = caption.strip().lower()
+        caption = re.sub("<person>", "person", caption)
+        # urls:
+        caption = re.sub(
+            r"\b((?:https?:(?:\/{1,3}|[a-zA-Z0-9%])|[a-zA-Z0-9.\-]+[.](?:com|co|ru|net|org|edu|gov|it)[\w/-]*\b\/?(?!@)))",  # noqa
+            "",
+            caption,
+        )  # regex for urls
+        caption = re.sub(
+            r"\b((?:www:(?:\/{1,3}|[a-zA-Z0-9%])|[a-zA-Z0-9.\-]+[.](?:com|co|ru|net|org|edu|gov|it)[\w/-]*\b\/?(?!@)))",  # noqa
+            "",
+            caption,
+        )  # regex for urls
+        # html:
+        caption = BeautifulSoup(caption, features="html.parser").text
+
+        # @<nickname>
+        caption = re.sub(r"@[\w\d]+\b", "", caption)
+
+        # 31C0—31EF CJK Strokes
+        # 31F0—31FF Katakana Phonetic Extensions
+        # 3200—32FF Enclosed CJK Letters and Months
+        # 3300—33FF CJK Compatibility
+        # 3400—4DBF CJK Unified Ideographs Extension A
+        # 4DC0—4DFF Yijing Hexagram Symbols
+        # 4E00—9FFF CJK Unified Ideographs
+        caption = re.sub(r"[\u31c0-\u31ef]+", "", caption)
+        caption = re.sub(r"[\u31f0-\u31ff]+", "", caption)
+        caption = re.sub(r"[\u3200-\u32ff]+", "", caption)
+        caption = re.sub(r"[\u3300-\u33ff]+", "", caption)
+        caption = re.sub(r"[\u3400-\u4dbf]+", "", caption)
+        caption = re.sub(r"[\u4dc0-\u4dff]+", "", caption)
+        caption = re.sub(r"[\u4e00-\u9fff]+", "", caption)
+        #######################################################
+
+        # все виды тире / all types of dash --> "-"
+        caption = re.sub(
+            r"[\u002D\u058A\u05BE\u1400\u1806\u2010-\u2015\u2E17\u2E1A\u2E3A\u2E3B\u2E40\u301C\u3030\u30A0\uFE31\uFE32\uFE58\uFE63\uFF0D]+",  # noqa
+            "-",
+            caption,
+        )
+
+        # кавычки к одному стандарту
+        caption = re.sub(r"[`´«»“”¨]", '"', caption)
+        caption = re.sub(r"[‘’]", "'", caption)
+
+        # &quot;
+        caption = re.sub(r"&quot;?", "", caption)
+        # &amp
+        caption = re.sub(r"&amp", "", caption)
+
+        # ip adresses:
+        caption = re.sub(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", " ", caption)
+
+        # article ids:
+        caption = re.sub(r"\d:\d\d\s+$", "", caption)
+
+        # \n
+        caption = re.sub(r"\\n", " ", caption)
+
+        # "#123"
+        caption = re.sub(r"#\d{1,3}\b", "", caption)
+        # "#12345.."
+        caption = re.sub(r"#\d{5,}\b", "", caption)
+        # "123456.."
+        caption = re.sub(r"\b\d{6,}\b", "", caption)
+        # filenames:
+        caption = re.sub(r"[\S]+\.(?:png|jpg|jpeg|bmp|webp|eps|pdf|apk|mp4)", "", caption)
+
+        #
+        caption = re.sub(r"[\"\']{2,}", r'"', caption)  # """AUSVERKAUFT"""
+        caption = re.sub(r"[\.]{2,}", r" ", caption)  # """AUSVERKAUFT"""
+
+        caption = re.sub(BAD_PUNCT_REGEX, r" ", caption)  # ***AUSVERKAUFT***, #AUSVERKAUFT
+        caption = re.sub(r"\s+\.\s+", r" ", caption)  # " . "
+
+        # this-is-my-cute-cat / this_is_my_cute_cat
+        regex2 = re.compile(r"(?:\-|\_)")
+        if len(re.findall(regex2, caption)) > 3:
+            caption = re.sub(regex2, " ", caption)
+
+        caption = self._basic_clean(caption)
+
+        caption = re.sub(r"\b[a-zA-Z]{1,3}\d{3,15}\b", "", caption)  # jc6640
+        caption = re.sub(r"\b[a-zA-Z]+\d+[a-zA-Z]+\b", "", caption)  # jc6640vc
+        caption = re.sub(r"\b\d+[a-zA-Z]+\d+\b", "", caption)  # 6640vc231
+
+        caption = re.sub(r"(worldwide\s+)?(free\s+)?shipping", "", caption)
+        caption = re.sub(r"(free\s)?download(\sfree)?", "", caption)
+        caption = re.sub(r"\bclick\b\s(?:for|on)\s\w+", "", caption)
+        caption = re.sub(r"\b(?:png|jpg|jpeg|bmp|webp|eps|pdf|apk|mp4)(\simage[s]?)?", "", caption)
+        caption = re.sub(r"\bpage\s+\d+\b", "", caption)
+
+        caption = re.sub(r"\b\d*[a-zA-Z]+\d+[a-zA-Z]+\d+[a-zA-Z\d]*\b", r" ", caption)  # j2d1a2a...
+
+        caption = re.sub(r"\b\d+\.?\d*[xх×]\d+\.?\d*\b", "", caption)
+
+        caption = re.sub(r"\b\s+\:\s+", r": ", caption)
+        caption = re.sub(r"(\D[,\./])\b", r"\1 ", caption)
+        caption = re.sub(r"\s+", " ", caption)
+
+        caption.strip()
+
+        caption = re.sub(r"^[\"\']([\w\W]+)[\"\']$", r"\1", caption)
+        caption = re.sub(r"^[\'\_,\-\:;]", r"", caption)
+        caption = re.sub(r"[\'\_,\-\:\-\+]$", r"", caption)
+        caption = re.sub(r"^\.\S+$", "", caption)
+
+        return caption.strip()
+
+    def text_preprocessing(self, text, use_text_preprocessing: bool = True):
+        if use_text_preprocessing:
+            # The exact text cleaning as was in the training stage:
+            text = self._clean_caption(text)
+            text = self._clean_caption(text)
+            return text
+        else:
+            return text.lower().strip()
 
     @torch.no_grad()
     def generate(
@@ -367,7 +539,7 @@ class OpenSoraPipeline(VideoSysPipeline):
 
         # 3. clean prompt with T5
         for idx, prompt_segment_list in enumerate(batched_prompt_segment_list):
-            batched_prompt_segment_list[idx] = [text_preprocessing(prompt) for prompt in prompt_segment_list]
+            batched_prompt_segment_list[idx] = [self.text_preprocessing(prompt) for prompt in prompt_segment_list]
 
         # 4. merge to obtain the final prompt
         batch_prompts = []
@@ -392,14 +564,16 @@ class OpenSoraPipeline(VideoSysPipeline):
             z = torch.randn(
                 len(batch_prompts), self.vae.out_channels, *latent_size, device=self._device, dtype=self._dtype
             )
+            model_args.update(self.encode_prompt(batch_prompts_loop))
+            y_null = self.null_embed(len(batch_prompts_loop))
+
             masks = apply_mask_strategy(z, refs, ms, loop_i, align=align)
             samples = self.scheduler.sample(
                 self.transformer,
-                self.text_encoder,
                 z=z,
-                prompts=batch_prompts_loop,
+                model_args=model_args,
+                y_null=y_null,
                 device=self._device,
-                additional_args=model_args,
                 progress=verbose,
                 mask=masks,
             )

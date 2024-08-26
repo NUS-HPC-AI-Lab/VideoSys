@@ -34,10 +34,9 @@ from videosys.core.pab_mgr import (
     update_steps,
 )
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.models.transformers.latte_transformer_3d import LatteT2V
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video
-
-from ...models.transformers.latte_transformer_3d import LatteT2V
 
 
 class LattePABConfig(PABConfig):

@@ -20,12 +20,11 @@ from diffusers.video_processor import VideoProcessor
 from transformers import T5EncoderModel, T5Tokenizer
 
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.models.autoencoders.autoencoder_kl_cogvideox import AutoencoderKLCogVideoX
+from videosys.models.transformers.cogvideox_transformer_3d import CogVideoXTransformer3DModel
+from videosys.schedulers.scheduling_ddim_cogvideox import CogVideoXDDIMScheduler
+from videosys.schedulers.scheduling_dpm_cogvideox import CogVideoXDPMScheduler
 from videosys.utils.utils import save_video
-
-from ...models.autoencoders.autoencoder_kl_cogvideox import AutoencoderKLCogVideoX
-from ...models.transformers.cogvideox_transformer_3d import CogVideoXTransformer3DModel
-from ...schedulers.scheduling_ddim_cogvideox import CogVideoXDDIMScheduler
-from ...schedulers.scheduling_dpm_cogvideox import CogVideoXDPMScheduler
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 

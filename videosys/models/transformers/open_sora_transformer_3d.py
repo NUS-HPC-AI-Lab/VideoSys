@@ -45,21 +45,59 @@ from videosys.core.parallel_mgr import (
     get_data_parallel_group,
     get_sequence_parallel_group,
 )
+from videosys.models.modules.activations import approx_gelu
+from videosys.models.modules.attentions import Attention, MultiHeadCrossAttention
+from videosys.models.modules.embeddings import (
+    CaptionEmbedder,
+    OpenSoraPatchEmbed3D,
+    OpenSoraPositionEmbedding2D,
+    SizeEmbedder,
+    TimestepEmbedder,
+)
 from videosys.utils.utils import batch_func
 
-from ..open_sora.modules import (
-    Attention,
-    CaptionEmbedder,
-    MultiHeadCrossAttention,
-    PatchEmbed3D,
-    PositionEmbedding2D,
-    SizeEmbedder,
-    T2IFinalLayer,
-    TimestepEmbedder,
-    approx_gelu,
-    get_layernorm,
-    t2i_modulate,
-)
+
+def t2i_modulate(x, shift, scale):
+    return x * (1 + scale) + shift
+
+
+class T2IFinalLayer(nn.Module):
+    """
+    The final layer of PixArt.
+    """
+
+    def __init__(self, hidden_size, num_patch, out_channels, d_t=None, d_s=None):
+        super().__init__()
+        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.linear = nn.Linear(hidden_size, num_patch * out_channels, bias=True)
+        self.scale_shift_table = nn.Parameter(torch.randn(2, hidden_size) / hidden_size**0.5)
+        self.out_channels = out_channels
+        self.d_t = d_t
+        self.d_s = d_s
+
+    def t_mask_select(self, x_mask, x, masked_x, T, S):
+        # x: [B, (T, S), C]
+        # mased_x: [B, (T, S), C]
+        # x_mask: [B, T]
+        x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
+        masked_x = rearrange(masked_x, "B (T S) C -> B T S C", T=T, S=S)
+        x = torch.where(x_mask[:, :, None, None], x, masked_x)
+        x = rearrange(x, "B T S C -> B (T S) C")
+        return x
+
+    def forward(self, x, t, x_mask=None, t0=None, T=None, S=None):
+        if T is None:
+            T = self.d_t
+        if S is None:
+            S = self.d_s
+        shift, scale = (self.scale_shift_table[None] + t[:, None]).chunk(2, dim=1)
+        x = t2i_modulate(self.norm_final(x), shift, scale)
+        if x_mask is not None:
+            shift_zero, scale_zero = (self.scale_shift_table[None] + t0[:, None]).chunk(2, dim=1)
+            x_zero = t2i_modulate(self.norm_final(x), shift_zero, scale_zero)
+            x = self.t_mask_select(x_mask, x, x_zero, T, S)
+        x = self.linear(x)
+        return x
 
 
 def auto_grad_checkpoint(module, *args, **kwargs):
@@ -92,7 +130,7 @@ class STDiT3Block(nn.Module):
         attn_cls = Attention
         mha_cls = MultiHeadCrossAttention
 
-        self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False)
+        self.norm1 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
         self.attn = attn_cls(
             hidden_size,
             num_heads=num_heads,
@@ -102,7 +140,7 @@ class STDiT3Block(nn.Module):
             enable_flash_attn=enable_flash_attn,
         )
         self.cross_attn = mha_cls(hidden_size, num_heads)
-        self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False)
+        self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
         )
@@ -342,14 +380,14 @@ class STDiT3(PreTrainedModel):
         # input size related
         self.patch_size = config.patch_size
         self.input_sq_size = config.input_sq_size
-        self.pos_embed = PositionEmbedding2D(config.hidden_size)
+        self.pos_embed = OpenSoraPositionEmbedding2D(config.hidden_size)
 
         from rotary_embedding_torch import RotaryEmbedding
 
         self.rope = RotaryEmbedding(dim=self.hidden_size // self.num_heads)
 
         # embedding
-        self.x_embedder = PatchEmbed3D(config.patch_size, config.in_channels, config.hidden_size)
+        self.x_embedder = OpenSoraPatchEmbed3D(config.patch_size, config.in_channels, config.hidden_size)
         self.t_embedder = TimestepEmbedder(config.hidden_size)
         self.fps_embedder = SizeEmbedder(self.hidden_size)
         self.t_block = nn.Sequential(
