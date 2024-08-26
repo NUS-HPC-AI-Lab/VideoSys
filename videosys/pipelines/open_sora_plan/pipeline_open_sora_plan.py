@@ -36,8 +36,8 @@ from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video
 
-from .ae import ae_stride_config, getae_wrapper
-from .latte import LatteT2V
+from ...models.autoencoders.autoencoder_kl_open_sora_plan import ae_stride_config, getae_wrapper
+from ...models.transformers.open_sora_plan_transformer_3d import LatteT2V
 
 EXAMPLE_DOC_STRING = """
     Examples:

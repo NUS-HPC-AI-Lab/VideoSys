@@ -48,7 +48,7 @@ from videosys.core.parallel_mgr import (
 from videosys.models.modules.activations import approx_gelu
 from videosys.models.modules.attentions import Attention, MultiHeadCrossAttention
 from videosys.models.modules.embeddings import (
-    CaptionEmbedder,
+    OpenSoraCaptionEmbedder,
     OpenSoraPatchEmbed3D,
     OpenSoraPositionEmbedding2D,
     SizeEmbedder,
@@ -394,7 +394,7 @@ class STDiT3(PreTrainedModel):
             nn.SiLU(),
             nn.Linear(config.hidden_size, 6 * config.hidden_size, bias=True),
         )
-        self.y_embedder = CaptionEmbedder(
+        self.y_embedder = OpenSoraCaptionEmbedder(
             in_channels=config.caption_channels,
             hidden_size=config.hidden_size,
             uncond_prob=config.class_dropout_prob,

@@ -179,7 +179,7 @@ class SizeEmbedder(TimestepEmbedder):
         return next(self.parameters()).dtype
 
 
-class CaptionEmbedder(nn.Module):
+class OpenSoraCaptionEmbedder(nn.Module):
     """
     Embeds class labels into vector representations. Also handles label dropout for classifier-free guidance.
     """

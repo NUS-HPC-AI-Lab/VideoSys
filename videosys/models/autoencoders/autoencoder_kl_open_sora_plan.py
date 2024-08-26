@@ -6,19 +6,23 @@
 # References:
 # Open-Sora-Plan: https://github.com/PKU-YuanGroup/Open-Sora-Plan
 # --------------------------------------------------------
-
 import glob
-import importlib
 import os
 from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.distributed as dist
+import torch.nn as nn
+import torch.nn.functional as F
 from diffusers import ConfigMixin, ModelMixin
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
+from diffusers.utils import logging
 from einops import rearrange
 from torch import nn
+
+logging.set_verbosity_error()
 
 
 def Normalize(in_channels, num_groups=32):
@@ -80,13 +84,7 @@ class DiagonalGaussianDistribution(object):
 
 
 def resolve_str_to_obj(str_val, append=True):
-    if append:
-        str_val = "videosys.models.open_sora_plan.modules." + str_val
-    if "opensora.models.ae.videobase." in str_val:
-        str_val = str_val.replace("opensora.models.ae.videobase.", "videosys.models.open_sora_plan.")
-    module_name, class_name = str_val.rsplit(".", 1)
-    module = importlib.import_module(module_name)
-    return getattr(module, class_name)
+    return globals()[str_val]
 
 
 class VideoBaseAE_PL(ModelMixin, ConfigMixin):
@@ -130,7 +128,6 @@ class VideoBaseAE_PL(ModelMixin, ConfigMixin):
             model.init_from_ckpt(last_ckpt_file)
             return model
         else:
-            print(f"Loading model from {pretrained_model_name_or_path}")
             return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
 
 
@@ -431,8 +428,6 @@ class CausalVAEModel(VideoBaseAE_PL):
         self.learning_rate = lr
         self.lr_g_factor = 1.0
 
-        self.loss = resolve_str_to_obj(loss_type, append=False)(**loss_params)
-
         self.encoder = Encoder(
             z_channels=z_channels,
             hidden_size=hidden_size,
@@ -471,8 +466,6 @@ class CausalVAEModel(VideoBaseAE_PL):
         quant_conv_cls = resolve_str_to_obj(q_conv)
         self.quant_conv = quant_conv_cls(2 * z_channels, 2 * embed_dim, 1)
         self.post_quant_conv = quant_conv_cls(embed_dim, z_channels, 1)
-        if hasattr(self.loss, "discriminator"):
-            self.automatic_optimization = False
 
     def encode(self, x):
         if self.use_tiling and (
@@ -855,3 +848,793 @@ def getae_wrapper(ae):
     ae = videobase_ae.get(ae, None)
     assert ae is not None
     return ae
+
+
+def video_to_image(func):
+    def wrapper(self, x, *args, **kwargs):
+        if x.dim() == 5:
+            t = x.shape[2]
+            x = rearrange(x, "b c t h w -> (b t) c h w")
+            x = func(self, x, *args, **kwargs)
+            x = rearrange(x, "(b t) c h w -> b c t h w", t=t)
+        return x
+
+    return wrapper
+
+
+class Block(nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+
+class LinearAttention(Block):
+    def __init__(self, dim, heads=4, dim_head=32):
+        super().__init__()
+        self.heads = heads
+        hidden_dim = dim_head * heads
+        self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias=False)
+        self.to_out = nn.Conv2d(hidden_dim, dim, 1)
+
+    def forward(self, x):
+        b, c, h, w = x.shape
+        qkv = self.to_qkv(x)
+        q, k, v = rearrange(qkv, "b (qkv heads c) h w -> qkv b heads c (h w)", heads=self.heads, qkv=3)
+        k = k.softmax(dim=-1)
+        context = torch.einsum("bhdn,bhen->bhde", k, v)
+        out = torch.einsum("bhde,bhdn->bhen", context, q)
+        out = rearrange(out, "b heads c (h w) -> b (heads c) h w", heads=self.heads, h=h, w=w)
+        return self.to_out(out)
+
+
+class LinAttnBlock(LinearAttention):
+    """to match AttnBlock usage"""
+
+    def __init__(self, in_channels):
+        super().__init__(dim=in_channels, heads=1, dim_head=in_channels)
+
+
+class AttnBlock3D(Block):
+    """Compatible with old versions, there are issues, use with caution."""
+
+    def __init__(self, in_channels):
+        super().__init__()
+        self.in_channels = in_channels
+
+        self.norm = Normalize(in_channels)
+        self.q = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.k = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.v = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.proj_out = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+
+    def forward(self, x):
+        h_ = x
+        h_ = self.norm(h_)
+        q = self.q(h_)
+        k = self.k(h_)
+        v = self.v(h_)
+
+        # compute attention
+        b, c, t, h, w = q.shape
+        q = q.reshape(b * t, c, h * w)
+        q = q.permute(0, 2, 1)  # b,hw,c
+        k = k.reshape(b * t, c, h * w)  # b,c,hw
+        w_ = torch.bmm(q, k)  # b,hw,hw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
+        w_ = w_ * (int(c) ** (-0.5))
+        w_ = torch.nn.functional.softmax(w_, dim=2)
+
+        # attend to values
+        v = v.reshape(b * t, c, h * w)
+        w_ = w_.permute(0, 2, 1)  # b,hw,hw (first hw of k, second of q)
+        h_ = torch.bmm(v, w_)  # b, c,hw (hw of q) h_[b,c,j] = sum_i v[b,c,i] w_[b,i,j]
+        h_ = h_.reshape(b, c, t, h, w)
+
+        h_ = self.proj_out(h_)
+
+        return x + h_
+
+
+class AttnBlock3DFix(nn.Module):
+    """
+    Thanks to https://github.com/PKU-YuanGroup/Open-Sora-Plan/pull/172.
+    """
+
+    def __init__(self, in_channels):
+        super().__init__()
+        self.in_channels = in_channels
+
+        self.norm = Normalize(in_channels)
+        self.q = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.k = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.v = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.proj_out = CausalConv3d(in_channels, in_channels, kernel_size=1, stride=1)
+
+    def forward(self, x):
+        h_ = x
+        h_ = self.norm(h_)
+        q = self.q(h_)
+        k = self.k(h_)
+        v = self.v(h_)
+
+        # compute attention
+        # q: (b c t h w) -> (b t c h w) -> (b*t c h*w) -> (b*t h*w c)
+        b, c, t, h, w = q.shape
+        q = q.permute(0, 2, 1, 3, 4)
+        q = q.reshape(b * t, c, h * w)
+        q = q.permute(0, 2, 1)
+
+        # k: (b c t h w) -> (b t c h w) -> (b*t c h*w)
+        k = k.permute(0, 2, 1, 3, 4)
+        k = k.reshape(b * t, c, h * w)
+
+        # w: (b*t hw hw)
+        w_ = torch.bmm(q, k)
+        w_ = w_ * (int(c) ** (-0.5))
+        w_ = torch.nn.functional.softmax(w_, dim=2)
+
+        # attend to values
+        # v: (b c t h w) -> (b t c h w) -> (bt c hw)
+        # w_: (bt hw hw) -> (bt hw hw)
+        v = v.permute(0, 2, 1, 3, 4)
+        v = v.reshape(b * t, c, h * w)
+        w_ = w_.permute(0, 2, 1)  # b,hw,hw (first hw of k, second of q)
+        h_ = torch.bmm(v, w_)  # b, c,hw (hw of q) h_[b,c,j] = sum_i v[b,c,i] w_[b,i,j]
+
+        # h_: (b*t c hw) -> (b t c h w) -> (b c t h w)
+        h_ = h_.reshape(b, t, c, h, w)
+        h_ = h_.permute(0, 2, 1, 3, 4)
+
+        h_ = self.proj_out(h_)
+
+        return x + h_
+
+
+class AttnBlock(Block):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.in_channels = in_channels
+
+        self.norm = Normalize(in_channels)
+        self.q = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+
+    @video_to_image
+    def forward(self, x):
+        h_ = x
+        h_ = self.norm(h_)
+        q = self.q(h_)
+        k = self.k(h_)
+        v = self.v(h_)
+
+        # compute attention
+        b, c, h, w = q.shape
+        q = q.reshape(b, c, h * w)
+        q = q.permute(0, 2, 1)  # b,hw,c
+        k = k.reshape(b, c, h * w)  # b,c,hw
+        w_ = torch.bmm(q, k)  # b,hw,hw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
+        w_ = w_ * (int(c) ** (-0.5))
+        w_ = torch.nn.functional.softmax(w_, dim=2)
+
+        # attend to values
+        v = v.reshape(b, c, h * w)
+        w_ = w_.permute(0, 2, 1)  # b,hw,hw (first hw of k, second of q)
+        h_ = torch.bmm(v, w_)  # b, c,hw (hw of q) h_[b,c,j] = sum_i v[b,c,i] w_[b,i,j]
+        h_ = h_.reshape(b, c, h, w)
+
+        h_ = self.proj_out(h_)
+
+        return x + h_
+
+
+class TemporalAttnBlock(Block):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.in_channels = in_channels
+
+        self.norm = Normalize(in_channels)
+        self.q = torch.nn.Conv3d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = torch.nn.Conv3d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = torch.nn.Conv3d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = torch.nn.Conv3d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, x):
+        h_ = x
+        h_ = self.norm(h_)
+        q = self.q(h_)
+        k = self.k(h_)
+        v = self.v(h_)
+
+        # compute attention
+        b, c, t, h, w = q.shape
+        q = rearrange(q, "b c t h w -> (b h w) t c")
+        k = rearrange(k, "b c t h w -> (b h w) c t")
+        v = rearrange(v, "b c t h w -> (b h w) c t")
+        w_ = torch.bmm(q, k)
+        w_ = w_ * (int(c) ** (-0.5))
+        w_ = torch.nn.functional.softmax(w_, dim=2)
+
+        # attend to values
+        w_ = w_.permute(0, 2, 1)
+        h_ = torch.bmm(v, w_)
+        h_ = rearrange(h_, "(b h w) c t -> b c t h w", h=h, w=w)
+        h_ = self.proj_out(h_)
+
+        return x + h_
+
+
+def make_attn(in_channels, attn_type="vanilla"):
+    assert attn_type in ["vanilla", "linear", "none", "vanilla3D"], f"attn_type {attn_type} unknown"
+    print(f"making attention of type '{attn_type}' with {in_channels} in_channels")
+    print(attn_type)
+    if attn_type == "vanilla":
+        return AttnBlock(in_channels)
+    elif attn_type == "vanilla3D":
+        return AttnBlock3D(in_channels)
+    elif attn_type == "none":
+        return nn.Identity(in_channels)
+    else:
+        return LinAttnBlock(in_channels)
+
+
+class Conv2d(nn.Conv2d):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Union[int, Tuple[int]] = 3,
+        stride: Union[int, Tuple[int]] = 1,
+        padding: Union[str, int, Tuple[int]] = 0,
+        dilation: Union[int, Tuple[int]] = 1,
+        groups: int = 1,
+        bias: bool = True,
+        padding_mode: str = "zeros",
+        device=None,
+        dtype=None,
+    ) -> None:
+        super().__init__(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            groups,
+            bias,
+            padding_mode,
+            device,
+            dtype,
+        )
+
+    @video_to_image
+    def forward(self, x):
+        return super().forward(x)
+
+
+class CausalConv3d(nn.Module):
+    def __init__(
+        self, chan_in, chan_out, kernel_size: Union[int, Tuple[int, int, int]], init_method="random", **kwargs
+    ):
+        super().__init__()
+        self.kernel_size = cast_tuple(kernel_size, 3)
+        self.time_kernel_size = self.kernel_size[0]
+        self.chan_in = chan_in
+        self.chan_out = chan_out
+        stride = kwargs.pop("stride", 1)
+        padding = kwargs.pop("padding", 0)
+        padding = list(cast_tuple(padding, 3))
+        padding[0] = 0
+        stride = cast_tuple(stride, 3)
+        self.conv = nn.Conv3d(chan_in, chan_out, self.kernel_size, stride=stride, padding=padding)
+        self._init_weights(init_method)
+
+    def _init_weights(self, init_method):
+        torch.tensor(self.kernel_size)
+        if init_method == "avg":
+            assert self.kernel_size[1] == 1 and self.kernel_size[2] == 1, "only support temporal up/down sample"
+            assert self.chan_in == self.chan_out, "chan_in must be equal to chan_out"
+            weight = torch.zeros((self.chan_out, self.chan_in, *self.kernel_size))
+
+            eyes = torch.concat(
+                [
+                    torch.eye(self.chan_in).unsqueeze(-1) * 1 / 3,
+                    torch.eye(self.chan_in).unsqueeze(-1) * 1 / 3,
+                    torch.eye(self.chan_in).unsqueeze(-1) * 1 / 3,
+                ],
+                dim=-1,
+            )
+            weight[:, :, :, 0, 0] = eyes
+
+            self.conv.weight = nn.Parameter(
+                weight,
+                requires_grad=True,
+            )
+        elif init_method == "zero":
+            self.conv.weight = nn.Parameter(
+                torch.zeros((self.chan_out, self.chan_in, *self.kernel_size)),
+                requires_grad=True,
+            )
+        if self.conv.bias is not None:
+            nn.init.constant_(self.conv.bias, 0)
+
+    def forward(self, x):
+        # 1 + 16   16 as video, 1 as image
+        first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.time_kernel_size - 1, 1, 1))  # b c t h w
+        x = torch.concatenate((first_frame_pad, x), dim=2)  # 3 + 16
+        return self.conv(x)
+
+
+class GroupNorm(Block):
+    def __init__(self, num_channels, num_groups=32, eps=1e-6, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.norm = torch.nn.GroupNorm(num_groups=num_groups, num_channels=num_channels, eps=1e-6, affine=True)
+
+    def forward(self, x):
+        return self.norm(x)
+
+
+def Normalize(in_channels, num_groups=32):
+    return torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels, eps=1e-6, affine=True)
+
+
+class ActNorm(nn.Module):
+    def __init__(self, num_features, logdet=False, affine=True, allow_reverse_init=False):
+        assert affine
+        super().__init__()
+        self.logdet = logdet
+        self.loc = nn.Parameter(torch.zeros(1, num_features, 1, 1))
+        self.scale = nn.Parameter(torch.ones(1, num_features, 1, 1))
+        self.allow_reverse_init = allow_reverse_init
+
+        self.register_buffer("initialized", torch.tensor(0, dtype=torch.uint8))
+
+    def initialize(self, input):
+        with torch.no_grad():
+            flatten = input.permute(1, 0, 2, 3).contiguous().view(input.shape[1], -1)
+            mean = flatten.mean(1).unsqueeze(1).unsqueeze(2).unsqueeze(3).permute(1, 0, 2, 3)
+            std = flatten.std(1).unsqueeze(1).unsqueeze(2).unsqueeze(3).permute(1, 0, 2, 3)
+
+            self.loc.data.copy_(-mean)
+            self.scale.data.copy_(1 / (std + 1e-6))
+
+    def forward(self, input, reverse=False):
+        if reverse:
+            return self.reverse(input)
+        if len(input.shape) == 2:
+            input = input[:, :, None, None]
+            squeeze = True
+        else:
+            squeeze = False
+
+        _, _, height, width = input.shape
+
+        if self.training and self.initialized.item() == 0:
+            self.initialize(input)
+            self.initialized.fill_(1)
+
+        h = self.scale * (input + self.loc)
+
+        if squeeze:
+            h = h.squeeze(-1).squeeze(-1)
+
+        if self.logdet:
+            log_abs = torch.log(torch.abs(self.scale))
+            logdet = height * width * torch.sum(log_abs)
+            logdet = logdet * torch.ones(input.shape[0]).to(input)
+            return h, logdet
+
+        return h
+
+    def reverse(self, output):
+        if self.training and self.initialized.item() == 0:
+            if not self.allow_reverse_init:
+                raise RuntimeError(
+                    "Initializing ActNorm in reverse direction is "
+                    "disabled by default. Use allow_reverse_init=True to enable."
+                )
+            else:
+                self.initialize(output)
+                self.initialized.fill_(1)
+
+        if len(output.shape) == 2:
+            output = output[:, :, None, None]
+            squeeze = True
+        else:
+            squeeze = False
+
+        h = output / self.scale - self.loc
+
+        if squeeze:
+            h = h.squeeze(-1).squeeze(-1)
+        return h
+
+
+def nonlinearity(x):
+    return x * torch.sigmoid(x)
+
+
+def cast_tuple(t, length=1):
+    return t if isinstance(t, tuple) else ((t,) * length)
+
+
+def shift_dim(x, src_dim=-1, dest_dim=-1, make_contiguous=True):
+    n_dims = len(x.shape)
+    if src_dim < 0:
+        src_dim = n_dims + src_dim
+    if dest_dim < 0:
+        dest_dim = n_dims + dest_dim
+    assert 0 <= src_dim < n_dims and 0 <= dest_dim < n_dims
+    dims = list(range(n_dims))
+    del dims[src_dim]
+    permutation = []
+    ctr = 0
+    for i in range(n_dims):
+        if i == dest_dim:
+            permutation.append(src_dim)
+        else:
+            permutation.append(dims[ctr])
+            ctr += 1
+    x = x.permute(permutation)
+    if make_contiguous:
+        x = x.contiguous()
+    return x
+
+
+class Codebook(nn.Module):
+    def __init__(self, n_codes, embedding_dim):
+        super().__init__()
+        self.register_buffer("embeddings", torch.randn(n_codes, embedding_dim))
+        self.register_buffer("N", torch.zeros(n_codes))
+        self.register_buffer("z_avg", self.embeddings.data.clone())
+
+        self.n_codes = n_codes
+        self.embedding_dim = embedding_dim
+        self._need_init = True
+
+    def _tile(self, x):
+        d, ew = x.shape
+        if d < self.n_codes:
+            n_repeats = (self.n_codes + d - 1) // d
+            std = 0.01 / np.sqrt(ew)
+            x = x.repeat(n_repeats, 1)
+            x = x + torch.randn_like(x) * std
+        return x
+
+    def _init_embeddings(self, z):
+        # z: [b, c, t, h, w]
+        self._need_init = False
+        flat_inputs = shift_dim(z, 1, -1).flatten(end_dim=-2)
+        y = self._tile(flat_inputs)
+
+        y.shape[0]
+        _k_rand = y[torch.randperm(y.shape[0])][: self.n_codes]
+        if dist.is_initialized():
+            dist.broadcast(_k_rand, 0)
+        self.embeddings.data.copy_(_k_rand)
+        self.z_avg.data.copy_(_k_rand)
+        self.N.data.copy_(torch.ones(self.n_codes))
+
+    def forward(self, z):
+        # z: [b, c, t, h, w]
+        if self._need_init and self.training:
+            self._init_embeddings(z)
+        flat_inputs = shift_dim(z, 1, -1).flatten(end_dim=-2)
+        distances = (
+            (flat_inputs**2).sum(dim=1, keepdim=True)
+            - 2 * flat_inputs @ self.embeddings.t()
+            + (self.embeddings.t() ** 2).sum(dim=0, keepdim=True)
+        )
+
+        encoding_indices = torch.argmin(distances, dim=1)
+        encode_onehot = F.one_hot(encoding_indices, self.n_codes).type_as(flat_inputs)
+        encoding_indices = encoding_indices.view(z.shape[0], *z.shape[2:])
+
+        embeddings = F.embedding(encoding_indices, self.embeddings)
+        embeddings = shift_dim(embeddings, -1, 1)
+
+        commitment_loss = 0.25 * F.mse_loss(z, embeddings.detach())
+
+        # EMA codebook update
+        if self.training:
+            n_total = encode_onehot.sum(dim=0)
+            encode_sum = flat_inputs.t() @ encode_onehot
+            if dist.is_initialized():
+                dist.all_reduce(n_total)
+                dist.all_reduce(encode_sum)
+
+            self.N.data.mul_(0.99).add_(n_total, alpha=0.01)
+            self.z_avg.data.mul_(0.99).add_(encode_sum.t(), alpha=0.01)
+
+            n = self.N.sum()
+            weights = (self.N + 1e-7) / (n + self.n_codes * 1e-7) * n
+            encode_normalized = self.z_avg / weights.unsqueeze(1)
+            self.embeddings.data.copy_(encode_normalized)
+
+            y = self._tile(flat_inputs)
+            _k_rand = y[torch.randperm(y.shape[0])][: self.n_codes]
+            if dist.is_initialized():
+                dist.broadcast(_k_rand, 0)
+
+            usage = (self.N.view(self.n_codes, 1) >= 1).float()
+            self.embeddings.data.mul_(usage).add_(_k_rand * (1 - usage))
+
+        embeddings_st = (embeddings - z).detach() + z
+
+        avg_probs = torch.mean(encode_onehot, dim=0)
+        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
+
+        return dict(
+            embeddings=embeddings_st,
+            encodings=encoding_indices,
+            commitment_loss=commitment_loss,
+            perplexity=perplexity,
+        )
+
+    def dictionary_lookup(self, encodings):
+        embeddings = F.embedding(encodings, self.embeddings)
+        return embeddings
+
+
+class ResnetBlock2D(Block):
+    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, dropout):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = in_channels if out_channels is None else out_channels
+        self.use_conv_shortcut = conv_shortcut
+
+        self.norm1 = Normalize(in_channels)
+        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.norm2 = Normalize(out_channels)
+        self.dropout = torch.nn.Dropout(dropout)
+        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+            else:
+                self.nin_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+
+    @video_to_image
+    def forward(self, x):
+        h = x
+        h = self.norm1(h)
+        h = nonlinearity(h)
+        h = self.conv1(h)
+        h = self.norm2(h)
+        h = nonlinearity(h)
+        h = self.dropout(h)
+        h = self.conv2(h)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                x = self.conv_shortcut(x)
+            else:
+                x = self.nin_shortcut(x)
+        x = x + h
+        return x
+
+
+class ResnetBlock3D(Block):
+    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, dropout):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = in_channels if out_channels is None else out_channels
+        self.use_conv_shortcut = conv_shortcut
+
+        self.norm1 = Normalize(in_channels)
+        self.conv1 = CausalConv3d(in_channels, out_channels, 3, padding=1)
+        self.norm2 = Normalize(out_channels)
+        self.dropout = torch.nn.Dropout(dropout)
+        self.conv2 = CausalConv3d(out_channels, out_channels, 3, padding=1)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                self.conv_shortcut = CausalConv3d(in_channels, out_channels, 3, padding=1)
+            else:
+                self.nin_shortcut = CausalConv3d(in_channels, out_channels, 1, padding=0)
+
+    def forward(self, x):
+        h = x
+        h = self.norm1(h)
+        h = nonlinearity(h)
+        h = self.conv1(h)
+        h = self.norm2(h)
+        h = nonlinearity(h)
+        h = self.dropout(h)
+        h = self.conv2(h)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                x = self.conv_shortcut(x)
+            else:
+                x = self.nin_shortcut(x)
+        return x + h
+
+
+class Upsample(Block):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.with_conv = True
+        if self.with_conv:
+            self.conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+
+    @video_to_image
+    def forward(self, x):
+        x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
+        if self.with_conv:
+            x = self.conv(x)
+        return x
+
+
+class Downsample(Block):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.with_conv = True
+        if self.with_conv:
+            # no asymmetric padding in torch conv, must do it ourselves
+            self.conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=0)
+
+    @video_to_image
+    def forward(self, x):
+        if self.with_conv:
+            pad = (0, 1, 0, 1)
+            x = torch.nn.functional.pad(x, pad, mode="constant", value=0)
+            x = self.conv(x)
+        else:
+            x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+        return x
+
+
+class SpatialDownsample2x(Block):
+    def __init__(
+        self,
+        chan_in,
+        chan_out,
+        kernel_size: Union[int, Tuple[int]] = (3, 3),
+        stride: Union[int, Tuple[int]] = (2, 2),
+    ):
+        super().__init__()
+        kernel_size = cast_tuple(kernel_size, 2)
+        stride = cast_tuple(stride, 2)
+        self.chan_in = chan_in
+        self.chan_out = chan_out
+        self.kernel_size = kernel_size
+        self.conv = CausalConv3d(self.chan_in, self.chan_out, (1,) + self.kernel_size, stride=(1,) + stride, padding=0)
+
+    def forward(self, x):
+        pad = (0, 1, 0, 1, 0, 0)
+        x = torch.nn.functional.pad(x, pad, mode="constant", value=0)
+        x = self.conv(x)
+        return x
+
+
+class SpatialUpsample2x(Block):
+    def __init__(
+        self,
+        chan_in,
+        chan_out,
+        kernel_size: Union[int, Tuple[int]] = (3, 3),
+        stride: Union[int, Tuple[int]] = (1, 1),
+    ):
+        super().__init__()
+        self.chan_in = chan_in
+        self.chan_out = chan_out
+        self.kernel_size = kernel_size
+        self.conv = CausalConv3d(self.chan_in, self.chan_out, (1,) + self.kernel_size, stride=(1,) + stride, padding=1)
+
+    def forward(self, x):
+        t = x.shape[2]
+        x = rearrange(x, "b c t h w -> b (c t) h w")
+        x = F.interpolate(x, scale_factor=(2, 2), mode="nearest")
+        x = rearrange(x, "b (c t) h w -> b c t h w", t=t)
+        x = self.conv(x)
+        return x
+
+
+class TimeDownsample2x(Block):
+    def __init__(self, chan_in, chan_out, kernel_size: int = 3):
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.conv = nn.AvgPool3d((kernel_size, 1, 1), stride=(2, 1, 1))
+
+    def forward(self, x):
+        first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.kernel_size - 1, 1, 1))
+        x = torch.concatenate((first_frame_pad, x), dim=2)
+        return self.conv(x)
+
+
+class TimeUpsample2x(Block):
+    def __init__(self, chan_in, chan_out):
+        super().__init__()
+
+    def forward(self, x):
+        if x.size(2) > 1:
+            x, x_ = x[:, :, :1], x[:, :, 1:]
+            x_ = F.interpolate(x_, scale_factor=(2, 1, 1), mode="trilinear")
+            x = torch.concat([x, x_], dim=2)
+        return x
+
+
+class TimeDownsampleRes2x(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size: int = 3,
+        mix_factor: float = 2.0,
+    ):
+        super().__init__()
+        self.kernel_size = cast_tuple(kernel_size, 3)
+        self.avg_pool = nn.AvgPool3d((kernel_size, 1, 1), stride=(2, 1, 1))
+        self.conv = nn.Conv3d(in_channels, out_channels, self.kernel_size, stride=(2, 1, 1), padding=(0, 1, 1))
+        self.mix_factor = torch.nn.Parameter(torch.Tensor([mix_factor]))
+
+    def forward(self, x):
+        alpha = torch.sigmoid(self.mix_factor)
+        first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.kernel_size[0] - 1, 1, 1))
+        x = torch.concatenate((first_frame_pad, x), dim=2)
+        return alpha * self.avg_pool(x) + (1 - alpha) * self.conv(x)
+
+
+class TimeUpsampleRes2x(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size: int = 3,
+        mix_factor: float = 2.0,
+    ):
+        super().__init__()
+        self.conv = CausalConv3d(in_channels, out_channels, kernel_size, padding=1)
+        self.mix_factor = torch.nn.Parameter(torch.Tensor([mix_factor]))
+
+    def forward(self, x):
+        alpha = torch.sigmoid(self.mix_factor)
+        if x.size(2) > 1:
+            x, x_ = x[:, :, :1], x[:, :, 1:]
+            x_ = F.interpolate(x_, scale_factor=(2, 1, 1), mode="trilinear")
+            x = torch.concat([x, x_], dim=2)
+        return alpha * x + (1 - alpha) * self.conv(x)
+
+
+class TimeDownsampleResAdv2x(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size: int = 3,
+        mix_factor: float = 1.5,
+    ):
+        super().__init__()
+        self.kernel_size = cast_tuple(kernel_size, 3)
+        self.avg_pool = nn.AvgPool3d((kernel_size, 1, 1), stride=(2, 1, 1))
+        self.attn = TemporalAttnBlock(in_channels)
+        self.res = ResnetBlock3D(in_channels=in_channels, out_channels=in_channels, dropout=0.0)
+        self.conv = nn.Conv3d(in_channels, out_channels, self.kernel_size, stride=(2, 1, 1), padding=(0, 1, 1))
+        self.mix_factor = torch.nn.Parameter(torch.Tensor([mix_factor]))
+
+    def forward(self, x):
+        first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.kernel_size[0] - 1, 1, 1))
+        x = torch.concatenate((first_frame_pad, x), dim=2)
+        alpha = torch.sigmoid(self.mix_factor)
+        return alpha * self.avg_pool(x) + (1 - alpha) * self.conv(self.attn((self.res(x))))
+
+
+class TimeUpsampleResAdv2x(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size: int = 3,
+        mix_factor: float = 1.5,
+    ):
+        super().__init__()
+        self.res = ResnetBlock3D(in_channels=in_channels, out_channels=in_channels, dropout=0.0)
+        self.attn = TemporalAttnBlock(in_channels)
+        self.norm = Normalize(in_channels=in_channels)
+        self.conv = CausalConv3d(in_channels, out_channels, kernel_size, padding=1)
+        self.mix_factor = torch.nn.Parameter(torch.Tensor([mix_factor]))
+
+    def forward(self, x):
+        if x.size(2) > 1:
+            x, x_ = x[:, :, :1], x[:, :, 1:]
+            x_ = F.interpolate(x_, scale_factor=(2, 1, 1), mode="trilinear")
+            x = torch.concat([x, x_], dim=2)
+        alpha = torch.sigmoid(self.mix_factor)
+        return alpha * x + (1 - alpha) * self.conv(self.attn(self.res(x)))
