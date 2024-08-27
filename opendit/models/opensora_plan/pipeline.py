@@ -31,6 +31,7 @@ from opendit.core.pab_mgr import (
     skip_diffusion_timestep,
     update_steps,
 )
+from opendit.core.parallel_mgr import enable_sequence_parallel
 from opendit.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from opendit.utils.logging import logger
 from opendit.utils.utils import save_video
@@ -228,6 +229,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
 
+        self.vae.sp = False
         # self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
@@ -885,6 +887,8 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         return VideoSysPipelineOutput(video=video)
 
     def decode_latents(self, latents):
+        if enable_sequence_parallel() and not self.vae.sp:
+            self.vae.vae.set_sequence_parallel()
         video = self.vae.decode(latents)  # b t c h w
         # b t c h w -> b t h w c
         video = ((video / 2.0 + 0.5).clamp(0, 1) * 255).to(dtype=torch.uint8).cpu().permute(0, 1, 3, 4, 2).contiguous()

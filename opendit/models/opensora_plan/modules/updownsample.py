@@ -93,6 +93,9 @@ class SpatialUpsample2x(Block):
         self.kernel_size = kernel_size
         self.conv = CausalConv3d(self.chan_in, self.chan_out, (1,) + self.kernel_size, stride=(1,) + stride, padding=1)
 
+    def set_sequence_parallel(self):
+        self.conv.set_sequence_parallel()
+
     def forward(self, x):
         t = x.shape[2]
         x = rearrange(x, "b c t h w -> b (c t) h w")
@@ -158,6 +161,9 @@ class TimeUpsampleRes2x(nn.Module):
         super().__init__()
         self.conv = CausalConv3d(in_channels, out_channels, kernel_size, padding=1)
         self.mix_factor = torch.nn.Parameter(torch.Tensor([mix_factor]))
+
+    def set_sequence_parallel(self):
+        self.conv.set_sequence_parallel()
 
     def forward(self, x):
         alpha = torch.sigmoid(self.mix_factor)

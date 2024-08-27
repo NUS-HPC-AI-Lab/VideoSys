@@ -12,6 +12,9 @@ from typing import Tuple, Union
 import torch
 import torch.nn as nn
 
+from opendit.core.parallel_mgr import enable_sequence_parallel
+from opendit.utils.vae_utils import _replace_conv_fwd
+
 from .ops import cast_tuple, video_to_image
 
 
@@ -65,6 +68,10 @@ class CausalConv3d(nn.Module):
         stride = cast_tuple(stride, 3)
         self.conv = nn.Conv3d(chan_in, chan_out, self.kernel_size, stride=stride, padding=padding)
         self._init_weights(init_method)
+
+    def set_sequence_parallel(self):
+        if enable_sequence_parallel():
+            _replace_conv_fwd(self.conv)
 
     def _init_weights(self, init_method):
         torch.tensor(self.kernel_size)

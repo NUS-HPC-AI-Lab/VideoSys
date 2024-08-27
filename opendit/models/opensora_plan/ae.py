@@ -23,6 +23,7 @@ from torch.nn import functional as F
 
 from opendit.core.comm import gather_sequence, split_sequence
 from opendit.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_sequence_parallel_size
+from opendit.utils.vae_utils import _replace_groupnorm_fwd, dynamic_switch
 
 
 def Normalize(in_channels, num_groups=32):
@@ -339,7 +340,49 @@ class Decoder(nn.Module):
         self.norm_out = Normalize(block_in)
         self.conv_out = resolve_str_to_obj(conv_out)(block_in, 3, kernel_size=3, padding=1)
 
+    def set_sequence_parallel(self):
+        self.conv_in.set_sequence_parallel()
+        self.conv_out.set_sequence_parallel()
+        _replace_groupnorm_fwd(self.norm_out)
+        self.mid.block_1.set_sequence_parallel()
+        self.mid.block_2.set_sequence_parallel()
+        for i_level in reversed(range(self.num_resolutions)):
+            for i_block in range(self.num_res_blocks + 1):
+                self.up[i_level].block[i_block].set_sequence_parallel()
+            if hasattr(self.up[i_level], "upsample"):
+                self.up[i_level].upsample.set_sequence_parallel()
+            if hasattr(self.up[i_level], "time_upsample"):
+                self.up[i_level].time_upsample.set_sequence_parallel()
+
+    def _forward_sp(self, z):
+        h = self.conv_in(z)
+        h = self.mid.block_1(h)
+        h = dynamic_switch(h, to_spatial_shard=False)
+        h = self.mid.attn_1(h)
+        h = dynamic_switch(h, to_spatial_shard=True)
+        h = self.mid.block_2(h)
+
+        for i_level in reversed(range(self.num_resolutions)):
+            for i_block in range(self.num_res_blocks + 1):
+                h = self.up[i_level].block[i_block](h)
+                if len(self.up[i_level].attn) > 0:
+                    dynamic_switch(h, to_spatial_shard=False)
+                    h = self.up[i_level].attn[i_block](h)
+                    dynamic_switch(h, to_spatial_shard=True)
+            if hasattr(self.up[i_level], "upsample"):
+                dynamic_switch(h, to_spatial_shard=False)
+                h = self.up[i_level].upsample(h)
+                dynamic_switch(h, to_spatial_shard=True)
+            if hasattr(self.up[i_level], "time_upsample"):
+                h = self.up[i_level].time_upsample(h)
+        h = self.norm_out(h)
+        h = nonlinearity(h)
+        h = self.conv_out(h)
+        return h
+
     def forward(self, z):
+        if enable_sequence_parallel():
+            return self._forward_sp(z)
         h = self.conv_in(z)
         h = self.mid.block_1(h)
         h = self.mid.attn_1(h)
@@ -477,6 +520,11 @@ class CausalVAEModel(VideoBaseAE_PL):
         self.post_quant_conv = quant_conv_cls(embed_dim, z_channels, 1)
         if hasattr(self.loss, "discriminator"):
             self.automatic_optimization = False
+
+    def set_sequence_parallel(self):
+        # TODO: sequence parallel for encoder
+        self.post_quant_conv.set_sequence_parallel()
+        self.decoder.set_sequence_parallel()
 
     def encode(self, x):
         if self.use_tiling and (
@@ -681,14 +729,6 @@ class CausalVAEModel(VideoBaseAE_PL):
         return posterior
 
     def tiled_decode(self, x):
-        if enable_sequence_parallel():
-            t = x.shape[2]
-            padding_t = t % get_sequence_parallel_size()
-            if (t + padding_t) // get_sequence_parallel_size() < self.tile_latent_min_size_t:
-                padding_t = self.tile_latent_min_size_t * get_sequence_parallel_size() - t
-                padding_t += (t + padding_t) % get_sequence_parallel_size()
-            x = F.pad(x, (0, 0, 0, 0, 0, padding_t))
-            x = split_sequence(x, get_sequence_parallel_group(), dim=2)
         t = x.shape[2]
         t_chunk_idx = [i for i in range(0, t, self.tile_latent_min_size_t - 1)]
         if len(t_chunk_idx) == 1 and t_chunk_idx[0] == 0:
@@ -709,9 +749,6 @@ class CausalVAEModel(VideoBaseAE_PL):
                 dec = self.tiled_decode2d(chunk_x)
             dec_.append(dec)
         dec_ = torch.cat(dec_, dim=2)
-        if enable_sequence_parallel():
-            dec_ = gather_sequence(dec_, get_sequence_parallel_group(), dim=2)
-            dec_ = dec_.narrow(2, 0, dec_.shape[2] - padding_t)
         return dec_
 
     def tiled_encode2d(self, x, return_moments=False):
@@ -772,8 +809,20 @@ class CausalVAEModel(VideoBaseAE_PL):
                     i : i + self.tile_latent_min_size,
                     j : j + self.tile_latent_min_size,
                 ]
+                if enable_sequence_parallel():
+                    b, c, t, h, w = tile.shape
+                    tile = tile.view(b * c, t, h, w)
+                    padding_f = t % get_sequence_parallel_size()
+                    padding_s = w % get_sequence_parallel_size()
+                    tile = F.pad(tile, (0, padding_s, 0, 0, 0, padding_f))
+                    tile = tile.view(b, c, t + padding_f, h, w + padding_s)
+                    tile = split_sequence(tile, get_sequence_parallel_group(), dim=4)
                 tile = self.post_quant_conv(tile)
                 decoded = self.decoder(tile)
+                if enable_sequence_parallel():
+                    decoded = gather_sequence(decoded, get_sequence_parallel_group(), dim=4)
+                    decoded = decoded.narrow(4, 0, decoded.shape[4] - padding_s)
+                    decoded = decoded.narrow(2, 0, decoded.shape[2] - padding_f)
                 row.append(decoded)
             rows.append(row)
         result_rows = []
@@ -825,6 +874,7 @@ class CausalVAEModelWrapper(nn.Module):
         # if os.path.exists(ckpt):
         # self.vae = CausalVAEModel.load_from_checkpoint(ckpt)
         self.vae = CausalVAEModel.from_pretrained(model_path, subfolder=subfolder, cache_dir=cache_dir, **kwargs)
+        self.sp = False
 
     def encode(self, x):  # b c t h w
         # x = self.vae.encode(x).sample()

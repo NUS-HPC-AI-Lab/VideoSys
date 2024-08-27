@@ -9,6 +9,8 @@
 
 import torch
 
+from opendit.utils.vae_utils import _replace_groupnorm_fwd
+
 from .block import Block
 from .conv import CausalConv3d
 from .normalize import Normalize
@@ -69,6 +71,34 @@ class ResnetBlock3D(Block):
                 self.conv_shortcut = CausalConv3d(in_channels, out_channels, 3, padding=1)
             else:
                 self.nin_shortcut = CausalConv3d(in_channels, out_channels, 1, padding=0)
+
+    def set_sequence_parallel(self):
+        self.conv1.set_sequence_parallel()
+        self.conv2.set_sequence_parallel()
+        _replace_groupnorm_fwd(self.norm1)
+        _replace_groupnorm_fwd(self.norm2)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                self.conv_shortcut.set_sequence_parallel()
+            else:
+                self.nin_shortcut.set_sequence_parallel()
+        self.forward = self.forward_sp
+
+    def forward_sp(self, x):
+        h = x
+        h = self.norm1(h)
+        h = nonlinearity(h)
+        h = self.conv1(h)
+        h = self.norm2(h)
+        h = nonlinearity(h)
+        h = self.dropout(h)
+        h = self.conv2(h)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                x = self.conv_shortcut(x)
+            else:
+                x = self.nin_shortcut(x)
+        return x + h
 
     def forward(self, x):
         h = x
