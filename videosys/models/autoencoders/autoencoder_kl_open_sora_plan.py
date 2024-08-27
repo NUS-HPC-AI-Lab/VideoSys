@@ -22,6 +22,10 @@ from diffusers.utils import logging
 from einops import rearrange
 from torch import nn
 
+from videosys.utils.vae_utils import _replace_groupnorm_fwd, dynamic_switch, _replace_conv_fwd
+from videosys.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_sequence_parallel_size
+from videosys.core.comm import gather_sequence, split_sequence
+
 logging.set_verbosity_error()
 
 
@@ -332,7 +336,49 @@ class Decoder(nn.Module):
         self.norm_out = Normalize(block_in)
         self.conv_out = resolve_str_to_obj(conv_out)(block_in, 3, kernel_size=3, padding=1)
 
+    def set_sequence_parallel(self):
+        self.conv_in.set_sequence_parallel()
+        self.conv_out.set_sequence_parallel()
+        _replace_groupnorm_fwd(self.norm_out)
+        self.mid.block_1.set_sequence_parallel()
+        self.mid.block_2.set_sequence_parallel()
+        for i_level in reversed(range(self.num_resolutions)):
+            for i_block in range(self.num_res_blocks + 1):
+                self.up[i_level].block[i_block].set_sequence_parallel()
+            if hasattr(self.up[i_level], "upsample"):
+                self.up[i_level].upsample.set_sequence_parallel()
+            if hasattr(self.up[i_level], "time_upsample"):
+                self.up[i_level].time_upsample.set_sequence_parallel()
+
+    def _forward_sp(self, z):
+        h = self.conv_in(z)
+        h = self.mid.block_1(h)
+        h = dynamic_switch(h, to_spatial_shard=False)
+        h = self.mid.attn_1(h)
+        h = dynamic_switch(h, to_spatial_shard=True)
+        h = self.mid.block_2(h)
+
+        for i_level in reversed(range(self.num_resolutions)):
+            for i_block in range(self.num_res_blocks + 1):
+                h = self.up[i_level].block[i_block](h)
+                if len(self.up[i_level].attn) > 0:
+                    dynamic_switch(h, to_spatial_shard=False)
+                    h = self.up[i_level].attn[i_block](h)
+                    dynamic_switch(h, to_spatial_shard=True)
+            if hasattr(self.up[i_level], "upsample"):
+                dynamic_switch(h, to_spatial_shard=False)
+                h = self.up[i_level].upsample(h)
+                dynamic_switch(h, to_spatial_shard=True)
+            if hasattr(self.up[i_level], "time_upsample"):
+                h = self.up[i_level].time_upsample(h)
+        h = self.norm_out(h)
+        h = nonlinearity(h)
+        h = self.conv_out(h)
+        return h
+
     def forward(self, z):
+        if enable_sequence_parallel():
+            return self._forward_sp(z)
         h = self.conv_in(z)
         h = self.mid.block_1(h)
         h = self.mid.attn_1(h)
@@ -466,6 +512,13 @@ class CausalVAEModel(VideoBaseAE_PL):
         quant_conv_cls = resolve_str_to_obj(q_conv)
         self.quant_conv = quant_conv_cls(2 * z_channels, 2 * embed_dim, 1)
         self.post_quant_conv = quant_conv_cls(embed_dim, z_channels, 1)
+        self.sp = False
+
+    def set_sequence_parallel(self):
+        # TODO: sequence parallel for encoder
+        self.post_quant_conv.set_sequence_parallel()
+        self.decoder.set_sequence_parallel()
+        self.sp = True
 
     def encode(self, x):
         if self.use_tiling and (
@@ -750,8 +803,20 @@ class CausalVAEModel(VideoBaseAE_PL):
                     i : i + self.tile_latent_min_size,
                     j : j + self.tile_latent_min_size,
                 ]
+                if enable_sequence_parallel():
+                    b, c, t, h, w = tile.shape
+                    tile = tile.view(b * c, t, h, w)
+                    padding_f = t % get_sequence_parallel_size()
+                    padding_s = w % get_sequence_parallel_size()
+                    tile = F.pad(tile, (0, padding_s, 0, 0, 0, padding_f))
+                    tile = tile.view(b, c, t + padding_f, h, w + padding_s)
+                    tile = split_sequence(tile, get_sequence_parallel_group(), dim=4)
                 tile = self.post_quant_conv(tile)
                 decoded = self.decoder(tile)
+                if enable_sequence_parallel():
+                    decoded = gather_sequence(decoded, get_sequence_parallel_group(), dim=4)
+                    decoded = decoded.narrow(4, 0, decoded.shape[4] - padding_s)
+                    decoded = decoded.narrow(2, 0, decoded.shape[2] - padding_f)
                 row.append(decoded)
             rows.append(row)
         result_rows = []
@@ -1157,6 +1222,10 @@ class CausalConv3d(nn.Module):
         if self.conv.bias is not None:
             nn.init.constant_(self.conv.bias, 0)
 
+    def set_sequence_parallel(self):
+        if enable_sequence_parallel():
+            _replace_conv_fwd(self.conv)
+
     def forward(self, x):
         # 1 + 16   16 as video, 1 as image
         first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.time_kernel_size - 1, 1, 1))  # b c t h w
@@ -1430,6 +1499,34 @@ class ResnetBlock3D(Block):
             else:
                 self.nin_shortcut = CausalConv3d(in_channels, out_channels, 1, padding=0)
 
+    def set_sequence_parallel(self):
+        self.conv1.set_sequence_parallel()
+        self.conv2.set_sequence_parallel()
+        _replace_groupnorm_fwd(self.norm1)
+        _replace_groupnorm_fwd(self.norm2)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                self.conv_shortcut.set_sequence_parallel()
+            else:
+                self.nin_shortcut.set_sequence_parallel()
+        self.forward = self.forward_sp
+
+    def forward_sp(self, x):
+        h = x
+        h = self.norm1(h)
+        h = nonlinearity(h)
+        h = self.conv1(h)
+        h = self.norm2(h)
+        h = nonlinearity(h)
+        h = self.dropout(h)
+        h = self.conv2(h)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                x = self.conv_shortcut(x)
+            else:
+                x = self.nin_shortcut(x)
+        return x + h
+
     def forward(self, x):
         h = x
         h = self.norm1(h)
@@ -1518,6 +1615,9 @@ class SpatialUpsample2x(Block):
         self.kernel_size = kernel_size
         self.conv = CausalConv3d(self.chan_in, self.chan_out, (1,) + self.kernel_size, stride=(1,) + stride, padding=1)
 
+    def set_sequence_parallel(self):
+        self.conv.set_sequence_parallel()
+
     def forward(self, x):
         t = x.shape[2]
         x = rearrange(x, "b c t h w -> b (c t) h w")
@@ -1583,6 +1683,9 @@ class TimeUpsampleRes2x(nn.Module):
         super().__init__()
         self.conv = CausalConv3d(in_channels, out_channels, kernel_size, padding=1)
         self.mix_factor = torch.nn.Parameter(torch.Tensor([mix_factor]))
+
+    def set_sequence_parallel(self):
+        self.conv.set_sequence_parallel()
 
     def forward(self, x):
         alpha = torch.sigmoid(self.mix_factor)
