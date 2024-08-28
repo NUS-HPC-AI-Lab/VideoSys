@@ -20,7 +20,7 @@ from diffusers.utils import is_torch_version, logging
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from torch import nn
 
-from videosys.core.pab_mgr import enable_pab, if_broadcast_full
+from videosys.core.pab_mgr import enable_pab, if_broadcast_spatial
 
 from ..modules.embeddings import CogVideoXPatchEmbed
 from ..modules.normalization import AdaLayerNorm, CogVideoXLayerNormZero
@@ -125,7 +125,7 @@ class CogVideoXBlock(nn.Module):
         norm_hidden_states = torch.cat([norm_encoder_hidden_states, norm_hidden_states], dim=1)
 
         if enable_pab():
-            broadcast_attn, self.attn_count = if_broadcast_full(int(timestep[0]), self.attn_count, self.block_idx)
+            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count, self.block_idx)
 
         if enable_pab() and broadcast_attn:
             attn_output = self.last_attn

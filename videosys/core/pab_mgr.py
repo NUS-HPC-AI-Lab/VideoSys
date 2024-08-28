@@ -12,24 +12,21 @@ class PABConfig:
     def __init__(
         self,
         steps: int,
-        cross_broadcast: bool,
-        cross_threshold: list,
-        cross_gap: int,
-        spatial_broadcast: bool,
-        spatial_threshold: list,
-        spatial_gap: int,
-        temporal_broadcast: bool,
-        temporal_threshold: list,
-        temporal_gap: int,
-        diffusion_skip: bool,
-        diffusion_timestep_respacing: list,
-        diffusion_skip_timestep: list,
-        mlp_skip: bool,
-        mlp_spatial_skip_config: dict,
-        mlp_temporal_skip_config: dict,
-        full_broadcast: bool = False,
-        full_threshold: list = None,
-        full_gap: int = 1,
+        cross_broadcast: bool = False,
+        cross_threshold: list = None,
+        cross_gap: int = None,
+        spatial_broadcast: bool = False,
+        spatial_threshold: list = None,
+        spatial_gap: int = None,
+        temporal_broadcast: bool = False,
+        temporal_threshold: list = None,
+        temporal_gap: int = None,
+        diffusion_skip: bool = False,
+        diffusion_timestep_respacing: list = None,
+        diffusion_skip_timestep: list = None,
+        mlp_skip: bool = False,
+        mlp_spatial_skip_config: dict = None,
+        mlp_temporal_skip_config: dict = None,
     ):
         self.steps = steps
 
@@ -55,10 +52,6 @@ class PABConfig:
 
         self.temporal_mlp_outputs = {}
         self.spatial_mlp_outputs = {}
-
-        self.full_broadcast = full_broadcast
-        self.full_threshold = full_threshold
-        self.full_gap = full_gap
 
 
 class PABManager:
@@ -104,19 +97,6 @@ class PABManager:
             and (timestep is not None)
             and (count % self.config.spatial_gap != 0)
             and (self.config.spatial_threshold[0] < timestep < self.config.spatial_threshold[1])
-        ):
-            flag = True
-        else:
-            flag = False
-        count = (count + 1) % self.config.steps
-        return flag, count
-    
-    def if_broadcast_full(self, timestep: int, count: int, block_idx: int):
-        if (
-            self.config.full_broadcast
-            and (timestep is not None)
-            and (count % self.config.full_gap != 0)
-            and (self.config.full_threshold[0] < timestep < self.config.full_threshold[1])
         ):
             flag = True
         else:
@@ -249,11 +229,6 @@ def if_broadcast_spatial(timestep: int, count: int, block_idx: int):
     if not enable_pab():
         return False, count
     return PAB_MANAGER.if_broadcast_spatial(timestep, count, block_idx)
-
-def if_broadcast_full(timestep: int, count: int, block_idx: int):
-    if not enable_pab():
-        return False, count
-    return PAB_MANAGER.if_broadcast_full(timestep, count, block_idx)
 
 
 def if_broadcast_mlp(timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False):
