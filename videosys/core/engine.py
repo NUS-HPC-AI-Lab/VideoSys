@@ -2,7 +2,6 @@ import os
 from functools import partial
 from typing import Any, Optional
 
-import imageio
 import torch
 
 import videosys
@@ -120,8 +119,7 @@ class VideoSysEngine:
             result.get()
 
     def save_video(self, video, output_path):
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        imageio.mimwrite(output_path, video, fps=24)
+        return self.driver_worker.save_video(video, output_path)
 
     def shutdown(self):
         if (worker_monitor := getattr(self, "worker_monitor", None)) is not None:
