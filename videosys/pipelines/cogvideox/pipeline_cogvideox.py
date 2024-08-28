@@ -32,10 +32,10 @@ from videosys.utils.utils import save_video
 class CogVideoXPABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 150,
+        steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 850],
-        spatial_range: int = 3,
+        spatial_range: int = 2,
     ):
         super().__init__(
             steps=steps,
