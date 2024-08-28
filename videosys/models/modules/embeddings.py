@@ -1,7 +1,8 @@
 import functools
 import math
-from typing import Optional
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -277,3 +278,135 @@ class OpenSoraPositionEmbedding2D(nn.Module):
         base_size: Optional[int] = None,
     ) -> torch.Tensor:
         return self._get_cached_emb(x.device, x.dtype, h, w, scale, base_size)
+
+
+def get_3d_rotary_pos_embed(
+    embed_dim, crops_coords, grid_size, temporal_size, theta: int = 10000, use_real: bool = True
+) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    """
+    RoPE for video tokens with 3D structure.
+
+    Args:
+    embed_dim: (`int`):
+        The embedding dimension size, corresponding to hidden_size_head.
+    crops_coords (`Tuple[int]`):
+        The top-left and bottom-right coordinates of the crop.
+    grid_size (`Tuple[int]`):
+        The grid size of the spatial positional embedding (height, width).
+    temporal_size (`int`):
+        The size of the temporal dimension.
+    theta (`float`):
+        Scaling factor for frequency computation.
+    use_real (`bool`):
+        If True, return real part and imaginary part separately. Otherwise, return complex numbers.
+
+    Returns:
+        `torch.Tensor`: positional embedding with shape `(temporal_size * grid_size[0] * grid_size[1], embed_dim/2)`.
+    """
+    start, stop = crops_coords
+    grid_h = np.linspace(start[0], stop[0], grid_size[0], endpoint=False, dtype=np.float32)
+    grid_w = np.linspace(start[1], stop[1], grid_size[1], endpoint=False, dtype=np.float32)
+    grid_t = np.linspace(0, temporal_size, temporal_size, endpoint=False, dtype=np.float32)
+
+    # Compute dimensions for each axis
+    dim_t = embed_dim // 4
+    dim_h = embed_dim // 8 * 3
+    dim_w = embed_dim // 8 * 3
+
+    # Temporal frequencies
+    freqs_t = 1.0 / (theta ** (torch.arange(0, dim_t, 2).float() / dim_t))
+    grid_t = torch.from_numpy(grid_t).float()
+    freqs_t = torch.einsum("n , f -> n f", grid_t, freqs_t)
+    freqs_t = freqs_t.repeat_interleave(2, dim=-1)
+
+    # Spatial frequencies for height and width
+    freqs_h = 1.0 / (theta ** (torch.arange(0, dim_h, 2).float() / dim_h))
+    freqs_w = 1.0 / (theta ** (torch.arange(0, dim_w, 2).float() / dim_w))
+    grid_h = torch.from_numpy(grid_h).float()
+    grid_w = torch.from_numpy(grid_w).float()
+    freqs_h = torch.einsum("n , f -> n f", grid_h, freqs_h)
+    freqs_w = torch.einsum("n , f -> n f", grid_w, freqs_w)
+    freqs_h = freqs_h.repeat_interleave(2, dim=-1)
+    freqs_w = freqs_w.repeat_interleave(2, dim=-1)
+
+    # Broadcast and concatenate tensors along specified dimension
+    def broadcast(tensors, dim=-1):
+        num_tensors = len(tensors)
+        shape_lens = {len(t.shape) for t in tensors}
+        assert len(shape_lens) == 1, "tensors must all have the same number of dimensions"
+        shape_len = list(shape_lens)[0]
+        dim = (dim + shape_len) if dim < 0 else dim
+        dims = list(zip(*(list(t.shape) for t in tensors)))
+        expandable_dims = [(i, val) for i, val in enumerate(dims) if i != dim]
+        assert all(
+            [*(len(set(t[1])) <= 2 for t in expandable_dims)]
+        ), "invalid dimensions for broadcastable concatenation"
+        max_dims = [(t[0], max(t[1])) for t in expandable_dims]
+        expanded_dims = [(t[0], (t[1],) * num_tensors) for t in max_dims]
+        expanded_dims.insert(dim, (dim, dims[dim]))
+        expandable_shapes = list(zip(*(t[1] for t in expanded_dims)))
+        tensors = [t[0].expand(*t[1]) for t in zip(tensors, expandable_shapes)]
+        return torch.cat(tensors, dim=dim)
+
+    freqs = broadcast((freqs_t[:, None, None, :], freqs_h[None, :, None, :], freqs_w[None, None, :, :]), dim=-1)
+
+    t, h, w, d = freqs.shape
+    freqs = freqs.view(t * h * w, d)
+
+    # Generate sine and cosine components
+    sin = freqs.sin()
+    cos = freqs.cos()
+
+    if use_real:
+        return cos, sin
+    else:
+        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
+        return freqs_cis
+
+
+def apply_rotary_emb(
+    x: torch.Tensor,
+    freqs_cis: Union[torch.Tensor, Tuple[torch.Tensor]],
+    use_real: bool = True,
+    use_real_unbind_dim: int = -1,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply rotary embeddings to input tensors using the given frequency tensor. This function applies rotary embeddings
+    to the given query or key 'x' tensors using the provided frequency tensor 'freqs_cis'. The input tensors are
+    reshaped as complex numbers, and the frequency tensor is reshaped for broadcasting compatibility. The resulting
+    tensors contain rotary embeddings and are returned as real tensors.
+
+    Args:
+        x (`torch.Tensor`):
+            Query or key tensor to apply rotary embeddings. [B, H, S, D] xk (torch.Tensor): Key tensor to apply
+        freqs_cis (`Tuple[torch.Tensor]`): Precomputed frequency tensor for complex exponentials. ([S, D], [S, D],)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Tuple of modified query tensor and key tensor with rotary embeddings.
+    """
+    if use_real:
+        cos, sin = freqs_cis  # [S, D]
+        cos = cos[None, None]
+        sin = sin[None, None]
+        cos, sin = cos.to(x.device), sin.to(x.device)
+
+        if use_real_unbind_dim == -1:
+            # Use for example in Lumina
+            x_real, x_imag = x.reshape(*x.shape[:-1], -1, 2).unbind(-1)  # [B, S, H, D//2]
+            x_rotated = torch.stack([-x_imag, x_real], dim=-1).flatten(3)
+        elif use_real_unbind_dim == -2:
+            # Use for example in Stable Audio
+            x_real, x_imag = x.reshape(*x.shape[:-1], 2, -1).unbind(-2)  # [B, S, H, D//2]
+            x_rotated = torch.cat([-x_imag, x_real], dim=-1)
+        else:
+            raise ValueError(f"`use_real_unbind_dim={use_real_unbind_dim}` but should be -1 or -2.")
+
+        out = (x.float() * cos + x_rotated.float() * sin).to(x.dtype)
+
+        return out
+    else:
+        x_rotated = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
+        freqs_cis = freqs_cis.unsqueeze(2)
+        x_out = torch.view_as_real(x_rotated * freqs_cis).flatten(3)
+
+        return x_out.type_as(x)

@@ -81,8 +81,8 @@ class LattePABConfig(PABConfig):
 class LatteConfig:
     def __init__(
         self,
-        world_size: int = 1,
         model_path: str = "maxin-cn/Latte-1",
+        world_size: int = 1,
         enable_vae_temporal_decoder: bool = True,
         # ======= scheduler ========
         beta_start: float = 0.0001,
