@@ -39,16 +39,13 @@ class OpenSoraPABConfig(PABConfig):
         cross_broadcast: bool = True,
         cross_threshold: list = [450, 930],
         cross_range: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
-        mlp_skip: bool = True,
-        mlp_spatial_skip_config: dict = {
+        mlp_broadcast: bool = True,
+        mlp_spatial_broadcast_config: dict = {
             676: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             788: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             864: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
         },
-        mlp_temporal_skip_config: dict = {
+        mlp_temporal_broadcast_config: dict = {
             676: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             788: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             864: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
@@ -65,12 +62,9 @@ class OpenSoraPABConfig(PABConfig):
             cross_broadcast=cross_broadcast,
             cross_threshold=cross_threshold,
             cross_range=cross_range,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
-            mlp_broadcast=mlp_skip,
-            mlp_spatial_broadcast_config=mlp_spatial_skip_config,
-            mlp_temporal_broadcast_config=mlp_temporal_skip_config,
+            mlp_broadcast=mlp_broadcast,
+            mlp_spatial_broadcast_config=mlp_spatial_broadcast_config,
+            mlp_temporal_broadcast_config=mlp_temporal_broadcast_config,
         )
 
 

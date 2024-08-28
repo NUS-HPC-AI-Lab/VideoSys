@@ -45,18 +45,15 @@ class LattePABConfig(PABConfig):
         cross_broadcast: bool = True,
         cross_threshold: list = [100, 800],
         cross_range: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
-        mlp_skip: bool = True,
-        mlp_spatial_skip_config: dict = {
+        mlp_broadcast: bool = True,
+        mlp_spatial_broadcast_config: dict = {
             720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             480: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             400: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
         },
-        mlp_temporal_skip_config: dict = {
+        mlp_temporal_broadcast_config: dict = {
             720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
@@ -75,12 +72,9 @@ class LattePABConfig(PABConfig):
             cross_broadcast=cross_broadcast,
             cross_threshold=cross_threshold,
             cross_range=cross_range,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
-            mlp_broadcast=mlp_skip,
-            mlp_spatial_broadcast_config=mlp_spatial_skip_config,
-            mlp_temporal_broadcast_config=mlp_temporal_skip_config,
+            mlp_broadcast=mlp_broadcast,
+            mlp_spatial_broadcast_config=mlp_spatial_broadcast_config,
+            mlp_temporal_broadcast_config=mlp_temporal_broadcast_config,
         )
 
 
