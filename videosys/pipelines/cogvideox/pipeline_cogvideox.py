@@ -85,11 +85,13 @@ class CogVideoXPipeline(VideoSysPipeline):
         transformer: Optional[CogVideoXTransformer3DModel] = None,
         scheduler: Optional[CogVideoXDDIMScheduler] = None,
         device: torch.device = torch.device("cuda"),
-        dtype: torch.dtype = torch.float16,
+        dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
         self._config = config
         self._device = device
+        if config.model_path == "THUDM/CogVideoX-2b":
+            dtype = torch.float16
         self._dtype = dtype
 
         if transformer is None:
