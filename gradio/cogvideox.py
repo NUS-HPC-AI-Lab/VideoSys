@@ -3,7 +3,6 @@ import os
 os.environ["GRADIO_TEMP_DIR"] = os.path.join(os.getcwd(), ".tmp_outputs")
 
 import logging
-import tempfile
 import uuid
 from time import time
 
@@ -90,19 +89,11 @@ def load_model(enable_video_sys=False, pab_threshold=[100, 850], pab_gap=2):
 
 
 def generate(engine, prompt, num_inference_steps=50, guidance_scale=6.0):
-    try:
-        video = engine.generate(prompt, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale).video[0]
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            temp_file.name
-            unique_filename = f"{uuid.uuid4().hex}.mp4"
-            output_path = os.path.join("./temp_outputs", unique_filename)
-
-            engine.save_video(video, output_path)
-        return output_path
-    except Exception as e:
-        logger.error(f"An error occurred: {str(e)}")
-        return None
+    video = engine.generate(prompt, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale).video[0]
+    unique_filename = f"{uuid.uuid4().hex}.mp4"
+    output_path = os.path.join("./.tmp", unique_filename)
+    engine.save_video(video, output_path)
+    return output_path
 
 
 def generate_vanilla(prompt, num_inference_steps, guidance_scale, progress=gr.Progress(track_tqdm=True)):
