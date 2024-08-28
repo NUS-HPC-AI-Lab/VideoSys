@@ -5,7 +5,7 @@ from videosys import CogVideoConfig, VideoSysEngine
 
 @pytest.mark.parametrize("world_size", [1])
 def test_base(world_size):
-    config = CogVideoConfig(world_size)
+    config = CogVideoConfig(world_size=world_size)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
