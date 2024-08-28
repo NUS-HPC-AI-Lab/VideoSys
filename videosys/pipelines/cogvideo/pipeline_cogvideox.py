@@ -28,14 +28,7 @@ from videosys.utils.utils import save_video
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-from videosys.core.pab_mgr import (
-    PABConfig,
-    get_diffusion_skip,
-    get_diffusion_skip_timestep,
-    set_pab_manager,
-    skip_diffusion_timestep,
-    update_steps,
-)
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 
 
 class CogVideoPABConfig(PABConfig):
@@ -50,7 +43,7 @@ class CogVideoPABConfig(PABConfig):
             steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
+            spatial_range=spatial_gap,
         )
 
 
@@ -563,18 +556,6 @@ class CogVideoPipeline(VideoSysPipeline):
 
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
-        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            diffusion_skip_timestep = get_diffusion_skip_timestep()
-
-            # warmup_timesteps = timesteps[:num_warmup_steps]
-            # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
-            # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
-
-            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
-
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             # for DPM-solver++
             old_pred_original_sample = None

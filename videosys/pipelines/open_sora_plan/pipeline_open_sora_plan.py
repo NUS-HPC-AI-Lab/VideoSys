@@ -24,14 +24,7 @@ from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from videosys.core.pab_mgr import (
-    PABConfig,
-    get_diffusion_skip,
-    get_diffusion_skip_timestep,
-    set_pab_manager,
-    skip_diffusion_timestep,
-    update_steps,
-)
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video
@@ -110,19 +103,19 @@ class OpenSoraPlanPABConfig(PABConfig):
             steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
+            spatial_range=spatial_gap,
             temporal_broadcast=temporal_broadcast,
             temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
+            temporal_range=temporal_gap,
             cross_broadcast=cross_broadcast,
             cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
+            cross_range=cross_gap,
             diffusion_skip=diffusion_skip,
             diffusion_timestep_respacing=diffusion_timestep_respacing,
             diffusion_skip_timestep=diffusion_skip_timestep,
-            mlp_skip=mlp_skip,
-            mlp_spatial_skip_config=mlp_spatial_skip_config,
-            mlp_temporal_skip_config=mlp_temporal_skip_config,
+            mlp_broadcast=mlp_skip,
+            mlp_spatial_broadcast_config=mlp_spatial_skip_config,
+            mlp_temporal_broadcast_config=mlp_temporal_skip_config,
         )
 
 
@@ -799,18 +792,6 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
-        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            diffusion_skip_timestep = get_diffusion_skip_timestep()
-
-            # warmup_timesteps = timesteps[:num_warmup_steps]
-            # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
-            # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
-
-            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
-
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-
         progress_wrap = tqdm.tqdm if verbose and dist.get_rank() == 0 else (lambda x: x)
         for i, t in progress_wrap(list(enumerate(timesteps))):
             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
