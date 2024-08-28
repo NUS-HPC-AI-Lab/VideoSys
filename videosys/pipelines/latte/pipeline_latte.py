@@ -25,14 +25,7 @@ from diffusers.schedulers import DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from videosys.core.pab_mgr import (
-    PABConfig,
-    get_diffusion_skip,
-    get_diffusion_skip_timestep,
-    set_pab_manager,
-    skip_diffusion_timestep,
-    update_steps,
-)
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.transformers.latte_transformer_3d import LatteT2V
 from videosys.utils.logging import logger
@@ -45,25 +38,22 @@ class LattePABConfig(PABConfig):
         steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 800],
-        spatial_gap: int = 2,
+        spatial_range: int = 2,
         temporal_broadcast: bool = True,
         temporal_threshold: list = [100, 800],
-        temporal_gap: int = 3,
+        temporal_range: int = 3,
         cross_broadcast: bool = True,
         cross_threshold: list = [100, 800],
-        cross_gap: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
-        mlp_skip: bool = True,
-        mlp_spatial_skip_config: dict = {
+        cross_range: int = 6,
+        mlp_broadcast: bool = True,
+        mlp_spatial_broadcast_config: dict = {
             720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             480: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             400: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
         },
-        mlp_temporal_skip_config: dict = {
+        mlp_temporal_broadcast_config: dict = {
             720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
@@ -75,19 +65,16 @@ class LattePABConfig(PABConfig):
             steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
+            spatial_range=spatial_range,
             temporal_broadcast=temporal_broadcast,
             temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
+            temporal_range=temporal_range,
             cross_broadcast=cross_broadcast,
             cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
-            mlp_skip=mlp_skip,
-            mlp_spatial_skip_config=mlp_spatial_skip_config,
-            mlp_temporal_skip_config=mlp_temporal_skip_config,
+            cross_range=cross_range,
+            mlp_broadcast=mlp_broadcast,
+            mlp_spatial_broadcast_config=mlp_spatial_broadcast_config,
+            mlp_temporal_broadcast_config=mlp_temporal_broadcast_config,
         )
 
 
@@ -737,33 +724,7 @@ class LattePipeline(VideoSysPipeline):
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
-        # timesteps = self.scheduler.timesteps # NOTE change timestep_respacing here
-
-        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            # TODO add assertion for timestep_respacing
-            # timestep_respacing = get_diffusion_skip_timestep()
-            # timesteps = space_timesteps(1000, timestep_respacing)
-
-            diffusion_skip_timestep = get_diffusion_skip_timestep()
-            timesteps = skip_diffusion_timestep(self.scheduler.timesteps, diffusion_skip_timestep)
-
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-            orignal_timesteps = self.scheduler.timesteps
-
-            if verbose and dist.get_rank() == 0:
-                print("============================")
-                print("skip diffusion steps!!!")
-                print("============================")
-                print(f"orignal sample timesteps: {orignal_timesteps}")
-                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
-                print("============================")
-                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
-                print(f"sample timesteps: {timesteps}")
-                print(f"num_inference_steps: {len(timesteps)}")
-                print("============================")
-        else:
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-            timesteps = self.scheduler.timesteps
+        timesteps = self.scheduler.timesteps
 
         # 5. Prepare latents.
         latent_channels = self.transformer.config.in_channels

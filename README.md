@@ -73,7 +73,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
-        <td align="center">❌</td>
+        <td align="center">/</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
@@ -81,7 +81,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
-        <td align="center">❌</td>
+        <td align="center">/</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
@@ -89,10 +89,10 @@ VideoSys supports many diffusion models with our various acceleration techniques
     </tr>
     <tr>
         <td>CogVideo [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
-        <td align="center">❌</td>
+        <td align="center">/</td>
         <td align="center">✅</td>
-        <td align="center">❌</td>
-        <td align="center">❌</td>
+        <td align="center">/</td>
+        <td align="center">✅</td>
         <td align="center"><a href="./examples/cogvideo/sample.py">Code</a></td>
     </tr>
 </table>

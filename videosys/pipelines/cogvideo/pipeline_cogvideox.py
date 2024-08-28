@@ -28,14 +28,34 @@ from videosys.utils.utils import save_video
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
+
+
+class CogVideoPABConfig(PABConfig):
+    def __init__(
+        self,
+        steps: int = 150,
+        spatial_broadcast: bool = True,
+        spatial_threshold: list = [100, 850],
+        spatial_range: int = 3,
+    ):
+        super().__init__(
+            steps=steps,
+            spatial_broadcast=spatial_broadcast,
+            spatial_threshold=spatial_threshold,
+            spatial_range=spatial_range,
+        )
+
 
 class CogVideoConfig:
     def __init__(
         self,
-        world_size: int = 1,
         model_path: str = "THUDM/CogVideoX-2b",
+        world_size: int = 1,
         num_inference_steps: int = 50,
         guidance_scale: float = 6.0,
+        enable_pab: bool = False,
+        pab_config=CogVideoPABConfig(),
     ):
         # ======= engine ========
         self.world_size = world_size
@@ -47,6 +67,8 @@ class CogVideoConfig:
         self.model_path = model_path
         self.num_inference_steps = num_inference_steps
         self.guidance_scale = guidance_scale
+        self.enable_pab = enable_pab
+        self.pab_config = pab_config
 
 
 class CogVideoPipeline(VideoSysPipeline):
@@ -96,6 +118,10 @@ class CogVideoPipeline(VideoSysPipeline):
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
+
+        # pab
+        if config.enable_pab:
+            set_pab_manager(config.pab_config)
 
         self.vae_scale_factor_spatial = (
             2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8
@@ -456,7 +482,7 @@ class CogVideoPipeline(VideoSysPipeline):
         assert (
             num_frames <= 48 and num_frames % fps == 0 and fps == 8
         ), f"The number of frames must be divisible by {fps=} and less than 48 frames (for now). Other values are not supported in CogVideoX."
-
+        update_steps(num_inference_steps)
         if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
             callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
 
@@ -530,7 +556,6 @@ class CogVideoPipeline(VideoSysPipeline):
 
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             # for DPM-solver++
             old_pred_original_sample = None
