@@ -37,13 +37,13 @@ class CogVideoPABConfig(PABConfig):
         steps: int = 150,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 850],
-        spatial_gap: int = 3,
+        spatial_range: int = 3,
     ):
         super().__init__(
             steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
-            spatial_range=spatial_gap,
+            spatial_range=spatial_range,
         )
 
 
