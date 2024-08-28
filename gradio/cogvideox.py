@@ -10,8 +10,7 @@ import torch
 from openai import OpenAI
 
 import gradio as gr
-from videosys import CogVideoConfig, VideoSysEngine
-from videosys.pipelines.cogvideo.pipeline_cogvideox import CogVideoPABConfig
+from videosys import CogVideoXConfig, CogVideoXPABConfig, VideoSysEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -82,8 +81,8 @@ def convert_prompt(prompt: str, retry_times: int = 3) -> str:
 
 
 def load_model(enable_video_sys=False, pab_threshold=[100, 850], pab_gap=2):
-    pab_config = CogVideoPABConfig(full_threshold=pab_threshold, full_gap=pab_gap)
-    config = CogVideoConfig(world_size=1, enable_pab=enable_video_sys, pab_config=pab_config)
+    pab_config = CogVideoXPABConfig(full_threshold=pab_threshold, full_gap=pab_gap)
+    config = CogVideoXConfig(world_size=1, enable_pab=enable_video_sys, pab_config=pab_config)
     engine = VideoSysEngine(config)
     return engine
 

@@ -88,12 +88,12 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center"><a href="./examples/latte/sample.py">Code</a></td>
     </tr>
     <tr>
-        <td>CogVideo [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
+        <td>CogVideoX [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
         <td align="center">/</td>
         <td align="center">✅</td>
         <td align="center">/</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/cogvideo/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/cogvideox/sample.py">Code</a></td>
     </tr>
 </table>
 
