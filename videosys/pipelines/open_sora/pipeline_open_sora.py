@@ -71,8 +71,8 @@ class OpenSoraPABConfig(PABConfig):
 class OpenSoraConfig:
     def __init__(
         self,
+        model_path: str = "hpcai-tech/OpenSora-STDiT-v3",
         world_size: int = 1,
-        transformer: str = "hpcai-tech/OpenSora-STDiT-v3",
         vae: str = "hpcai-tech/OpenSora-VAE-v1.2",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
         # ======= scheduler =======
@@ -89,7 +89,7 @@ class OpenSoraConfig:
 
         # ======= pipeline ========
         self.pipeline_cls = OpenSoraPipeline
-        self.transformer = transformer
+        self.transformer = model_path
         self.vae = vae
         self.text_encoder = text_encoder
 

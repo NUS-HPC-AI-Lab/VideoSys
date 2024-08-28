@@ -116,8 +116,8 @@ class OpenSoraPlanPABConfig(PABConfig):
 class OpenSoraPlanConfig:
     def __init__(
         self,
-        world_size: int = 1,
         model_path: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
+        world_size: int = 1,
         num_frames: int = 65,
         ae: str = "CausalVAEModel_4x8x8",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
