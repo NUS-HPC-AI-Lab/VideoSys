@@ -92,7 +92,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center">❌</td>
         <td align="center">✅</td>
         <td align="center">❌</td>
-        <td align="center">❌</td>
+        <td align="center">✅</td>
         <td align="center"><a href="./examples/cogvideo/sample.py">Code</a></td>
     </tr>
 </table>
