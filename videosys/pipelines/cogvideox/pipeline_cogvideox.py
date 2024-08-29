@@ -46,24 +46,64 @@ class CogVideoXPABConfig(PABConfig):
 
 
 class CogVideoXConfig:
+    """
+    This config is to instantiate a `CogVideoXPipeline` class for video generation.
+
+    To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
+    In the engine, it will be used to instantiate the corresponding pipeline class.
+    And the engine will call the `generate` function of the pipeline to generate the video.
+    If you want to explore the detail of generation, please refer to the pipeline class below.
+
+    Args:
+        model_path (str):
+            A path to the pretrained pipeline. Defaults to "THUDM/CogVideoX-2b".
+        num_gpus (int):
+            The number of GPUs to use. Defaults to 1.
+        vae_tiling (bool):
+            Whether to enable tiling for the VAE. Defaults to True.
+        enable_pab (bool):
+            Whether to enable Pyramid Attention Broadcast. Defaults to False.
+        pab_config (CogVideoXPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `CogVideoXPABConfig()`.
+
+    Examples:
+        ```python
+        from videosys import CogVideoXConfig, VideoSysEngine
+
+        # models: "THUDM/CogVideoX-2b" or "THUDM/CogVideoX-5b"
+        config = CogVideoXConfig("THUDM/CogVideoX-2b", num_gpus=1)
+        engine = VideoSysEngine(config)
+
+        prompt = "Sunset over the sea."
+        # num frames should be <= 49. resolution is fixed to 720p.
+        video = engine.generate(
+            prompt=prompt,
+            guidance_scale=6,
+            num_inference_steps=50,
+            num_frames=49,
+        ).video[0]
+        engine.save_video(video, f"./outputs/{prompt}.mp4")
+        ```
+    """
+
     def __init__(
         self,
         model_path: str = "THUDM/CogVideoX-2b",
-        world_size: int = 1,
+        # ======= distributed ========
+        num_gpus: int = 1,
+        # ======= vae ========
         vae_tiling: bool = True,
+        # ======= pab ========
         enable_pab: bool = False,
         pab_config=CogVideoXPABConfig(),
     ):
-        # ======= engine ========
-        self.world_size = world_size
-
-        # ======= pipeline ========
-        self.pipeline_cls = CogVideoXPipeline
-
-        self.vae_tiling = vae_tiling
-
-        # ======= model ========
         self.model_path = model_path
+        self.pipeline_cls = CogVideoXPipeline
+        # ======= distributed ========
+        self.num_gpus = num_gpus
+        # ======= vae ========
+        self.vae_tiling = vae_tiling
+        # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config
 

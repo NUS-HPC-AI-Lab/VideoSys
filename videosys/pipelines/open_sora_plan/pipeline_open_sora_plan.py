@@ -114,13 +114,60 @@ class OpenSoraPlanPABConfig(PABConfig):
 
 
 class OpenSoraPlanConfig:
+    """
+    This config is to instantiate a `OpenSoraPlanPipeline` class for video generation.
+
+    To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
+    In the engine, it will be used to instantiate the corresponding pipeline class.
+    And the engine will call the `generate` function of the pipeline to generate the video.
+    If you want to explore the detail of generation, please refer to the pipeline class below.
+
+    Args:
+        transformer (str):
+            The transformer model to use. Defaults to "LanguageBind/Open-Sora-Plan-v1.1.0".
+        ae (str):
+            The Autoencoder model to use. Defaults to "CausalVAEModel_4x8x8".
+        text_encoder (str):
+            The text encoder model to use. Defaults to "DeepFloyd/t5-v1_1-xxl".
+        num_frames (int):
+            The number of frames to generate. Must be one of [65, 221].
+        num_gpus (int):
+            The number of GPUs to use. Defaults to 1.
+        enable_tiling (bool):
+            Whether to enable tiling. Defaults to True.
+        tile_overlap_factor (float):
+            The overlap factor for tiling. Defaults to 0.25.
+        enable_pab (bool):
+            Whether to enable Pyramid Attention Broadcast. Defaults to False.
+        pab_config (CogVideoXPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `LattePABConfig()`.
+
+    Examples:
+        ```python
+        from videosys import OpenSoraPlanConfig, VideoSysEngine
+
+        # num frames: 65 or 221
+        config = OpenSoraPlanConfig(num_frames=65, num_gpus=1)
+        engine = VideoSysEngine(config)
+
+        prompt = "Sunset over the sea."
+        video = engine.generate(
+            prompt=prompt,
+            guidance_scale=7.5,
+            num_inference_steps=150,
+        ).video[0]
+        engine.save_video(video, f"./outputs/{prompt}.mp4")
+        ```
+    """
+
     def __init__(
         self,
-        model_path: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
-        world_size: int = 1,
-        num_frames: int = 65,
+        transformer: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
         ae: str = "CausalVAEModel_4x8x8",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
+        num_frames: int = 65,
+        # ======= distributed ========
+        num_gpus: int = 1,
         # ======= vae =======
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
@@ -128,24 +175,18 @@ class OpenSoraPlanConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPlanPABConfig(),
     ):
-        # ======= engine ========
-        self.world_size = world_size
-
-        # ======= pipeline ========
         self.pipeline_cls = OpenSoraPlanPipeline
         self.ae = ae
         self.text_encoder = text_encoder
-
-        # ======= model ========
-        self.model_path = model_path
+        self.transformer = transformer
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
         self.num_frames = num_frames
         self.version = f"{num_frames}x512x512"
-
+        # ======= distributed ========
+        self.num_gpus = num_gpus
         # ======= vae ========
         self.enable_tiling = enable_tiling
         self.tile_overlap_factor = tile_overlap_factor
-
         # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config
@@ -200,9 +241,9 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         if text_encoder is None:
             text_encoder = T5EncoderModel.from_pretrained(config.text_encoder, torch_dtype=torch.float16)
         if vae is None:
-            vae = getae_wrapper(config.ae)(config.model_path, subfolder="vae").to(dtype=dtype)
+            vae = getae_wrapper(config.ae)(config.transformer, subfolder="vae").to(dtype=dtype)
         if transformer is None:
-            transformer = LatteT2V.from_pretrained(config.model_path, subfolder=config.version, torch_dtype=dtype)
+            transformer = LatteT2V.from_pretrained(config.transformer, subfolder=config.version, torch_dtype=dtype)
         if scheduler is None:
             scheduler = PNDMScheduler()
 

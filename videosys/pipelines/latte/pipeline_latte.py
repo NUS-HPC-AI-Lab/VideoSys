@@ -79,10 +79,58 @@ class LattePABConfig(PABConfig):
 
 
 class LatteConfig:
+    """
+    This config is to instantiate a `LattePipeline` class for video generation.
+
+    To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
+    In the engine, it will be used to instantiate the corresponding pipeline class.
+    And the engine will call the `generate` function of the pipeline to generate the video.
+    If you want to explore the detail of generation, please refer to the pipeline class below.
+
+    Args:
+        model_path (str):
+            A path to the pretrained pipeline. Defaults to "maxin-cn/Latte-1".
+        num_gpus (int):
+            The number of GPUs to use. Defaults to 1.
+        enable_vae_temporal_decoder (bool):
+            Whether to enable VAE Temporal Decoder. Defaults to True.
+        beta_start (float):
+            The initial value of beta for DDIM. Defaults to 0.0001.
+        beta_end (float):
+            The final value of beta for DDIM. Defaults to 0.02.
+        beta_schedule (str):
+            The schedule of beta for DDIM. Defaults to "linear".
+        variance_type (str):
+            The type of variance for DDIM. Defaults to "learned_range".
+        enable_pab (bool):
+            Whether to enable Pyramid Attention Broadcast. Defaults to False.
+        pab_config (CogVideoXPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `LattePABConfig()`.
+
+    Examples:
+        ```python
+        from videosys import LatteConfig, VideoSysEngine
+
+        config = LatteConfig("maxin-cn/Latte-1", num_gpus=1)
+        engine = VideoSysEngine(config)
+
+        prompt = "Sunset over the sea."
+        # video size is fixed to 16 frames, 512x512.
+        video = engine.generate(
+            prompt=prompt,
+            guidance_scale=7.5,
+            num_inference_steps=50,
+        ).video[0]
+        engine.save_video(video, f"./outputs/{prompt}.mp4")
+        ```
+    """
+
     def __init__(
         self,
         model_path: str = "maxin-cn/Latte-1",
-        world_size: int = 1,
+        # ======= distributed =======
+        num_gpus: int = 1,
+        # ======= vae ========
         enable_vae_temporal_decoder: bool = True,
         # ======= scheduler ========
         beta_start: float = 0.0001,
@@ -93,22 +141,17 @@ class LatteConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = LattePABConfig(),
     ):
-        # ======= engine ========
-        self.world_size = world_size
-
-        # ======= pipeline ========
-        self.pipeline_cls = LattePipeline
-
-        # ======= model ========
         self.model_path = model_path
+        self.pipeline_cls = LattePipeline
+        # ======= distributed =======
+        self.num_gpus = num_gpus
+        # ======= vae ========
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
-
         # ======= scheduler ========
         self.beta_start = beta_start
         self.beta_end = beta_end
         self.beta_schedule = beta_schedule
         self.variance_type = variance_type
-
         # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config

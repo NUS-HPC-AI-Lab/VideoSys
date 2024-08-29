@@ -2,7 +2,7 @@ from videosys import CogVideoXConfig, VideoSysEngine
 
 
 def run_base():
-    config = CogVideoXConfig(world_size=1)
+    config = CogVideoXConfig(num_gpus=1)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -11,7 +11,7 @@ def run_base():
 
 
 def run_pab():
-    config = CogVideoXConfig(world_size=1, enable_pab=True)
+    config = CogVideoXConfig(num_gpus=1, enable_pab=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
