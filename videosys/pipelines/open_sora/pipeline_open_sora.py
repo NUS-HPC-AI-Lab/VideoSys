@@ -108,8 +108,8 @@ class OpenSoraConfig:
 
         prompt = "Sunset over the sea."
         # num frames: 2s, 4s, 8s, 16s
-        # resolution: 360p, 480p, 720p
-        # aspect ratio: 9:16, 16:9, 4:3, 3:4, 1:1
+        # resolution: 144p, 240p, 360p, 480p, 720p
+        # aspect ratio: 9:16, 16:9, 3:4, 4:3, 1:1
         video = engine.generate(
             prompt=prompt,
             resolution="480p",
