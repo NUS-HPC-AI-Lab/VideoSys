@@ -69,6 +69,46 @@ class OpenSoraPABConfig(PABConfig):
 
 
 class OpenSoraConfig:
+    """
+    This config is to instantiate a `OpenSoraPipeline` class for video generation.
+
+    To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
+    In the engine, it will be used to instantiate the corresponding pipeline class.
+    And the engine will call the `generate` function of the pipeline to generate the video.
+    If you want to explore the detail of generation, please refer to the pipeline class below.
+
+    Args:
+        model_path (str):
+            A path to the pretrained pipeline. Defaults to "hpcai-tech/OpenSora-STDiT-v3".
+        world_size (int):
+            The number of GPUs to use. Defaults to 1.
+
+        enable_pab (bool):
+            Whether to enable Pyramid Attention Broadcast. Defaults to False.
+        pab_config (CogVideoXPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `LattePABConfig()`.
+
+    Examples:
+        ```python
+        from videosys import OpenSoraConfig, VideoSysEngine
+
+        config = OpenSoraConfig("hpcai-tech/OpenSora-STDiT-v3", world_size=1)
+        engine = VideoSysEngine(config)
+
+        prompt = "Sunset over the sea."
+        # num frames: 2s, 4s, 8s, 16s
+        # resolution: 360p, 480p, 720p
+        # aspect ratio: 9:16, 16:9, 4:3, 3:4, 1:1
+        video = engine.generate(
+            prompt=prompt,
+            resolution="480p",
+            aspect_ratio="9:16",
+            num_frames="2s",
+        ).video[0]
+        engine.save_video(video, f"./outputs/{prompt}.mp4")
+        ```
+    """
+
     def __init__(
         self,
         model_path: str = "hpcai-tech/OpenSora-STDiT-v3",
