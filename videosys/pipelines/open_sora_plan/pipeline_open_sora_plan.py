@@ -138,7 +138,7 @@ class OpenSoraPlanConfig:
         from videosys import OpenSoraPlanConfig, VideoSysEngine
 
         # num frames: 65 or 221
-        config = OpenSoraPlanConfig("LanguageBind/Open-Sora-Plan-v1.1.0", num_frames=65, world_size=1)
+        config = OpenSoraPlanConfig(num_frames=65, world_size=1)
         engine = VideoSysEngine(config)
 
         prompt = "Sunset over the sea."
@@ -153,11 +153,11 @@ class OpenSoraPlanConfig:
 
     def __init__(
         self,
-        model_path: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
-        world_size: int = 1,
-        num_frames: int = 65,
+        transformer: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
         ae: str = "CausalVAEModel_4x8x8",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
+        num_frames: int = 65,
+        world_size: int = 1,
         # ======= vae =======
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
@@ -168,13 +168,11 @@ class OpenSoraPlanConfig:
         # ======= engine ========
         self.world_size = world_size
 
-        # ======= pipeline ========
+        # ======= model ========
         self.pipeline_cls = OpenSoraPlanPipeline
         self.ae = ae
         self.text_encoder = text_encoder
-
-        # ======= model ========
-        self.model_path = model_path
+        self.transformer = transformer
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
         self.num_frames = num_frames
         self.version = f"{num_frames}x512x512"
@@ -237,9 +235,9 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         if text_encoder is None:
             text_encoder = T5EncoderModel.from_pretrained(config.text_encoder, torch_dtype=torch.float16)
         if vae is None:
-            vae = getae_wrapper(config.ae)(config.model_path, subfolder="vae").to(dtype=dtype)
+            vae = getae_wrapper(config.ae)(config.transformer, subfolder="vae").to(dtype=dtype)
         if transformer is None:
-            transformer = LatteT2V.from_pretrained(config.model_path, subfolder=config.version, torch_dtype=dtype)
+            transformer = LatteT2V.from_pretrained(config.transformer, subfolder=config.version, torch_dtype=dtype)
         if scheduler is None:
             scheduler = PNDMScheduler()
 

@@ -92,7 +92,7 @@ class OpenSoraConfig:
         ```python
         from videosys import OpenSoraConfig, VideoSysEngine
 
-        config = OpenSoraConfig("hpcai-tech/OpenSora-STDiT-v3", world_size=1)
+        config = OpenSoraConfig(world_size=1, num_sampling_steps=30, cfg_scale=7.0)
         engine = VideoSysEngine(config)
 
         prompt = "Sunset over the sea."
@@ -111,36 +111,37 @@ class OpenSoraConfig:
 
     def __init__(
         self,
-        model_path: str = "hpcai-tech/OpenSora-STDiT-v3",
-        world_size: int = 1,
+        transformer: str = "hpcai-tech/OpenSora-STDiT-v3",
         vae: str = "hpcai-tech/OpenSora-VAE-v1.2",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
-        # ======= scheduler =======
+        # ======== distributed ========
+        world_size: int = 1,
+        # ======== scheduler ========
         num_sampling_steps: int = 30,
         cfg_scale: float = 7.0,
-        # ======= vae ========
+        # ======== vae ========
         tiling_size: int = 4,
-        # ======= pab ========
+        # ======== speedup ========
+        enable_flash_attn: bool = False,
+        # ======== pab ========
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPABConfig(),
     ):
-        # ======= engine ========
+        # ======== distributed ========
         self.world_size = world_size
-
-        # ======= pipeline ========
+        # ======== model ========
         self.pipeline_cls = OpenSoraPipeline
-        self.transformer = model_path
+        self.transformer = transformer
         self.vae = vae
         self.text_encoder = text_encoder
-
-        # ======= scheduler ========
+        # ======== scheduler ========
         self.num_sampling_steps = num_sampling_steps
         self.cfg_scale = cfg_scale
-
-        # ======= vae ========
+        # ======== vae ========
         self.tiling_size = tiling_size
-
-        # ======= pab ========
+        # ======== speedup ========
+        self.enable_flash_attn = enable_flash_attn
+        # ======== pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config
 
@@ -197,16 +198,15 @@ class OpenSoraPipeline(VideoSysPipeline):
             tokenizer = AutoTokenizer.from_pretrained(config.text_encoder)
         if vae is None:
             vae = OpenSoraVAE_V1_2(
-                from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
+                from_pretrained=config.vae,
                 micro_frame_size=17,
                 micro_batch_size=config.tiling_size,
             ).to(dtype)
         if transformer is None:
             transformer = STDiT3_XL_2(
-                from_pretrained="hpcai-tech/OpenSora-STDiT-v3",
+                from_pretrained=config.transformer,
                 qk_norm=True,
-                enable_flash_attn=True,
-                enable_layernorm_kernel=True,
+                enable_flash_attn=config.enable_flash_attn,
                 in_channels=vae.out_channels,
                 caption_channels=text_encoder.config.d_model,
                 model_max_length=300,
