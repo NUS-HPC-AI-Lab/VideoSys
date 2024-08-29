@@ -50,8 +50,7 @@ class CogVideoXConfig:
         self,
         model_path: str = "THUDM/CogVideoX-2b",
         world_size: int = 1,
-        num_inference_steps: int = 50,
-        guidance_scale: float = 6.0,
+        vae_tiling: bool = True,
         enable_pab: bool = False,
         pab_config=CogVideoXPABConfig(),
     ):
@@ -61,15 +60,17 @@ class CogVideoXConfig:
         # ======= pipeline ========
         self.pipeline_cls = CogVideoXPipeline
 
+        self.vae_tiling = vae_tiling
+
         # ======= model ========
         self.model_path = model_path
-        self.num_inference_steps = num_inference_steps
-        self.guidance_scale = guidance_scale
         self.enable_pab = enable_pab
         self.pab_config = pab_config
 
 
 class CogVideoXPipeline(VideoSysPipeline):
+    _optional_components = []
+    model_cpu_offload_seq = "text_encoder->transformer->vae"
     _callback_tensor_inputs = [
         "latents",
         "prompt_embeds",
@@ -100,6 +101,8 @@ class CogVideoXPipeline(VideoSysPipeline):
             )
         if vae is None:
             vae = AutoencoderKLCogVideoX.from_pretrained(config.model_path, subfolder="vae", torch_dtype=self._dtype)
+            if config.vae_tiling:
+                vae.enable_tiling()
         if tokenizer is None:
             tokenizer = T5Tokenizer.from_pretrained(config.model_path, subfolder="tokenizer")
         if text_encoder is None:
