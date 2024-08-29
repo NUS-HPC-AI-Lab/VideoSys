@@ -32,10 +32,10 @@ from videosys.utils.utils import save_video
 class CogVideoXPABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 150,
+        steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 850],
-        spatial_range: int = 3,
+        spatial_range: int = 2,
     ):
         super().__init__(
             steps=steps,
@@ -50,8 +50,7 @@ class CogVideoXConfig:
         self,
         model_path: str = "THUDM/CogVideoX-2b",
         world_size: int = 1,
-        num_inference_steps: int = 50,
-        guidance_scale: float = 6.0,
+        vae_tiling: bool = True,
         enable_pab: bool = False,
         pab_config=CogVideoXPABConfig(),
     ):
@@ -61,15 +60,17 @@ class CogVideoXConfig:
         # ======= pipeline ========
         self.pipeline_cls = CogVideoXPipeline
 
+        self.vae_tiling = vae_tiling
+
         # ======= model ========
         self.model_path = model_path
-        self.num_inference_steps = num_inference_steps
-        self.guidance_scale = guidance_scale
         self.enable_pab = enable_pab
         self.pab_config = pab_config
 
 
 class CogVideoXPipeline(VideoSysPipeline):
+    _optional_components = []
+    model_cpu_offload_seq = "text_encoder->transformer->vae"
     _callback_tensor_inputs = [
         "latents",
         "prompt_embeds",
@@ -85,7 +86,7 @@ class CogVideoXPipeline(VideoSysPipeline):
         transformer: Optional[CogVideoXTransformer3DModel] = None,
         scheduler: Optional[CogVideoXDDIMScheduler] = None,
         device: torch.device = torch.device("cuda"),
-        dtype: torch.dtype = torch.bfloat16,
+        dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
         self._config = config
@@ -100,6 +101,8 @@ class CogVideoXPipeline(VideoSysPipeline):
             )
         if vae is None:
             vae = AutoencoderKLCogVideoX.from_pretrained(config.model_path, subfolder="vae", torch_dtype=self._dtype)
+            if config.vae_tiling:
+                vae.enable_tiling()
         if tokenizer is None:
             tokenizer = T5Tokenizer.from_pretrained(config.model_path, subfolder="tokenizer")
         if text_encoder is None:
