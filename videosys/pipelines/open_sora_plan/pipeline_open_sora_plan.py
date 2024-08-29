@@ -123,11 +123,20 @@ class OpenSoraPlanConfig:
     If you want to explore the detail of generation, please refer to the pipeline class below.
 
     Args:
-        model_path (str):
-            A path to the pretrained pipeline. Defaults to "LanguageBind/Open-Sora-Plan-v1.1.0".
-        world_size (int):
+        transformer (str):
+            The transformer model to use. Defaults to "LanguageBind/Open-Sora-Plan-v1.1.0".
+        ae (str):
+            The Autoencoder model to use. Defaults to "CausalVAEModel_4x8x8".
+        text_encoder (str):
+            The text encoder model to use. Defaults to "DeepFloyd/t5-v1_1-xxl".
+        num_frames (int):
+            The number of frames to generate. Must be one of [65, 221].
+        num_gpus (int):
             The number of GPUs to use. Defaults to 1.
-
+        enable_tiling (bool):
+            Whether to enable tiling. Defaults to True.
+        tile_overlap_factor (float):
+            The overlap factor for tiling. Defaults to 0.25.
         enable_pab (bool):
             Whether to enable Pyramid Attention Broadcast. Defaults to False.
         pab_config (CogVideoXPABConfig):
@@ -138,7 +147,7 @@ class OpenSoraPlanConfig:
         from videosys import OpenSoraPlanConfig, VideoSysEngine
 
         # num frames: 65 or 221
-        config = OpenSoraPlanConfig(num_frames=65, world_size=1)
+        config = OpenSoraPlanConfig(num_frames=65, num_gpus=1)
         engine = VideoSysEngine(config)
 
         prompt = "Sunset over the sea."
@@ -157,6 +166,7 @@ class OpenSoraPlanConfig:
         ae: str = "CausalVAEModel_4x8x8",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
         num_frames: int = 65,
+        # ======= distributed ========
         num_gpus: int = 1,
         # ======= vae =======
         enable_tiling: bool = True,
@@ -165,10 +175,6 @@ class OpenSoraPlanConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPlanPABConfig(),
     ):
-        # ======= distributed ========
-        self.num_gpus = num_gpus
-
-        # ======= model ========
         self.pipeline_cls = OpenSoraPlanPipeline
         self.ae = ae
         self.text_encoder = text_encoder
@@ -176,11 +182,11 @@ class OpenSoraPlanConfig:
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
         self.num_frames = num_frames
         self.version = f"{num_frames}x512x512"
-
+        # ======= distributed ========
+        self.num_gpus = num_gpus
         # ======= vae ========
         self.enable_tiling = enable_tiling
         self.tile_overlap_factor = tile_overlap_factor
-
         # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config

@@ -57,7 +57,7 @@ class CogVideoXConfig:
     Args:
         model_path (str):
             A path to the pretrained pipeline. Defaults to "THUDM/CogVideoX-2b".
-        world_size (int):
+        num_gpus (int):
             The number of GPUs to use. Defaults to 1.
         vae_tiling (bool):
             Whether to enable tiling for the VAE. Defaults to True.
@@ -71,7 +71,7 @@ class CogVideoXConfig:
         from videosys import CogVideoXConfig, VideoSysEngine
 
         # models: "THUDM/CogVideoX-2b" or "THUDM/CogVideoX-5b"
-        config = CogVideoXConfig("THUDM/CogVideoX-2b", world_size=1)
+        config = CogVideoXConfig("THUDM/CogVideoX-2b", num_gpus=1)
         engine = VideoSysEngine(config)
 
         prompt = "Sunset over the sea."
@@ -89,21 +89,21 @@ class CogVideoXConfig:
     def __init__(
         self,
         model_path: str = "THUDM/CogVideoX-2b",
+        # ======= distributed ========
         num_gpus: int = 1,
+        # ======= vae ========
         vae_tiling: bool = True,
+        # ======= pab ========
         enable_pab: bool = False,
         pab_config=CogVideoXPABConfig(),
     ):
-        # ======= engine ========
-        self.num_gpus = num_gpus
-
-        # ======= pipeline ========
-        self.pipeline_cls = CogVideoXPipeline
-
-        self.vae_tiling = vae_tiling
-
-        # ======= model ========
         self.model_path = model_path
+        self.pipeline_cls = CogVideoXPipeline
+        # ======= distributed ========
+        self.num_gpus = num_gpus
+        # ======= vae ========
+        self.vae_tiling = vae_tiling
+        # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config
 

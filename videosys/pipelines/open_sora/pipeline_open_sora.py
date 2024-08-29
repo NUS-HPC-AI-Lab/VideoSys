@@ -78,11 +78,22 @@ class OpenSoraConfig:
     If you want to explore the detail of generation, please refer to the pipeline class below.
 
     Args:
-        model_path (str):
-            A path to the pretrained pipeline. Defaults to "hpcai-tech/OpenSora-STDiT-v3".
-        world_size (int):
+        transformer (str):
+            The transformer model to use. Defaults to "hpcai-tech/OpenSora-STDiT-v3".
+        vae (str):
+            The VAE model to use. Defaults to "hpcai-tech/OpenSora-VAE-v1.2".
+        text_encoder (str):
+            The text encoder model to use. Defaults to "DeepFloyd/t5-v1_1-xxl".
+        num_gpus (int):
             The number of GPUs to use. Defaults to 1.
-
+        num_sampling_steps (int):
+            The number of sampling steps. Defaults to 30.
+        cfg_scale (float):
+            The configuration scale. Defaults to 7.0.
+        tiling_size (int):
+            The tiling size. Defaults to 4.
+        enable_flash_attn (bool):
+            Whether to enable Flash Attention. Defaults to False.
         enable_pab (bool):
             Whether to enable Pyramid Attention Broadcast. Defaults to False.
         pab_config (CogVideoXPABConfig):
@@ -92,7 +103,7 @@ class OpenSoraConfig:
         ```python
         from videosys import OpenSoraConfig, VideoSysEngine
 
-        config = OpenSoraConfig(world_size=1, num_sampling_steps=30, cfg_scale=7.0)
+        config = OpenSoraConfig(num_sampling_steps=30, cfg_scale=7.0, num_gpus=1)
         engine = VideoSysEngine(config)
 
         prompt = "Sunset over the sea."
@@ -127,13 +138,12 @@ class OpenSoraConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPABConfig(),
     ):
-        # ======== distributed ========
-        self.num_gpus = num_gpus
-        # ======== model ========
         self.pipeline_cls = OpenSoraPipeline
         self.transformer = transformer
         self.vae = vae
         self.text_encoder = text_encoder
+        # ======== distributed ========
+        self.num_gpus = num_gpus
         # ======== scheduler ========
         self.num_sampling_steps = num_sampling_steps
         self.cfg_scale = cfg_scale
