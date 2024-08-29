@@ -89,13 +89,13 @@ class CogVideoXConfig:
     def __init__(
         self,
         model_path: str = "THUDM/CogVideoX-2b",
-        world_size: int = 1,
+        num_gpus: int = 1,
         vae_tiling: bool = True,
         enable_pab: bool = False,
         pab_config=CogVideoXPABConfig(),
     ):
         # ======= engine ========
-        self.world_size = world_size
+        self.num_gpus = num_gpus
 
         # ======= pipeline ========
         self.pipeline_cls = CogVideoXPipeline

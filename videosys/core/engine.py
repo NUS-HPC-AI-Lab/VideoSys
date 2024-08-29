@@ -20,7 +20,7 @@ class VideoSysEngine:
         self._init_worker(config.pipeline_cls)
 
     def _init_worker(self, pipeline_cls):
-        world_size = self.config.world_size
+        world_size = self.config.num_gpus
 
         if "CUDA_VISIBLE_DEVICES" not in os.environ:
             os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(world_size))
@@ -68,7 +68,7 @@ class VideoSysEngine:
 
     # TODO: add more options here for pipeline, or wrap all options into config
     def _create_pipeline(self, pipeline_cls, rank=0, local_rank=0, distributed_init_method=None):
-        videosys.initialize(rank=rank, world_size=self.config.world_size, init_method=distributed_init_method, seed=42)
+        videosys.initialize(rank=rank, world_size=self.config.num_gpus, init_method=distributed_init_method, seed=42)
 
         pipeline = pipeline_cls(self.config)
         return pipeline

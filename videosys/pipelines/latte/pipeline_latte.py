@@ -119,7 +119,7 @@ class LatteConfig:
     def __init__(
         self,
         model_path: str = "maxin-cn/Latte-1",
-        world_size: int = 1,
+        num_gpus: int = 1,
         enable_vae_temporal_decoder: bool = True,
         # ======= scheduler ========
         beta_start: float = 0.0001,
@@ -131,7 +131,7 @@ class LatteConfig:
         pab_config: PABConfig = LattePABConfig(),
     ):
         # ======= engine ========
-        self.world_size = world_size
+        self.num_gpus = num_gpus
 
         # ======= pipeline ========
         self.pipeline_cls = LattePipeline

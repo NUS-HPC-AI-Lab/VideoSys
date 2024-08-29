@@ -2,7 +2,7 @@ from videosys import OpenSoraConfig, VideoSysEngine
 
 
 def run_base():
-    config = OpenSoraConfig(world_size=1)
+    config = OpenSoraConfig(num_gpus=1)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -11,7 +11,7 @@ def run_base():
 
 
 def run_pab():
-    config = OpenSoraConfig(world_size=1, enable_pab=True)
+    config = OpenSoraConfig(num_gpus=1, enable_pab=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."

@@ -157,7 +157,7 @@ class OpenSoraPlanConfig:
         ae: str = "CausalVAEModel_4x8x8",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
         num_frames: int = 65,
-        world_size: int = 1,
+        num_gpus: int = 1,
         # ======= vae =======
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
@@ -165,8 +165,8 @@ class OpenSoraPlanConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPlanPABConfig(),
     ):
-        # ======= engine ========
-        self.world_size = world_size
+        # ======= distributed ========
+        self.num_gpus = num_gpus
 
         # ======= model ========
         self.pipeline_cls = OpenSoraPlanPipeline

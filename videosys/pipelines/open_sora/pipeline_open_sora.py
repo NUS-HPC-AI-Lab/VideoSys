@@ -115,7 +115,7 @@ class OpenSoraConfig:
         vae: str = "hpcai-tech/OpenSora-VAE-v1.2",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
         # ======== distributed ========
-        world_size: int = 1,
+        num_gpus: int = 1,
         # ======== scheduler ========
         num_sampling_steps: int = 30,
         cfg_scale: float = 7.0,
@@ -128,7 +128,7 @@ class OpenSoraConfig:
         pab_config: PABConfig = OpenSoraPABConfig(),
     ):
         # ======== distributed ========
-        self.world_size = world_size
+        self.num_gpus = num_gpus
         # ======== model ========
         self.pipeline_cls = OpenSoraPipeline
         self.transformer = transformer

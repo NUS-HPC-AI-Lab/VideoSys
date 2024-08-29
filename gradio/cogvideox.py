@@ -21,7 +21,7 @@ dtype = torch.float16
 
 def load_model(enable_video_sys=False, pab_threshold=[100, 850], pab_range=2):
     pab_config = CogVideoXPABConfig(spatial_threshold=pab_threshold, spatial_range=pab_range)
-    config = CogVideoXConfig(world_size=1, enable_pab=enable_video_sys, pab_config=pab_config)
+    config = CogVideoXConfig(num_gpus=1, enable_pab=enable_video_sys, pab_config=pab_config)
     engine = VideoSysEngine(config)
     return engine
 
