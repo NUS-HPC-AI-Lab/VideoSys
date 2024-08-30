@@ -92,7 +92,8 @@ class CogVideoXConfig:
         model_path: str = "THUDM/CogVideoX-2b",
         # ======= distributed ========
         num_gpus: int = 1,
-        # ======= vae ========
+        # ======= memory =======
+        cpu_offload: bool = False,
         vae_tiling: bool = True,
         # ======= pab ========
         enable_pab: bool = False,
@@ -102,7 +103,8 @@ class CogVideoXConfig:
         self.pipeline_cls = CogVideoXPipeline
         # ======= distributed ========
         self.num_gpus = num_gpus
-        # ======= vae ========
+        # ======= memory ========
+        self.cpu_offload = cpu_offload
         self.vae_tiling = vae_tiling
         # ======= pab ========
         self.enable_pab = enable_pab
@@ -110,7 +112,7 @@ class CogVideoXConfig:
 
 
 class CogVideoXPipeline(VideoSysPipeline):
-    _optional_components = []
+    _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
     _callback_tensor_inputs = [
         "latents",
@@ -162,6 +164,10 @@ class CogVideoXPipeline(VideoSysPipeline):
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
+
+        # cpu offload
+        if config.cpu_offload:
+            self.enable_model_cpu_offload()
 
         # pab
         if config.enable_pab:
