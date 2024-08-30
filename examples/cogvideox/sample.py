@@ -19,7 +19,7 @@ def run_base():
 
 
 def run_pab():
-    config = CogVideoXConfig("THUDM/CogVideoX-2b", world_size=1, enable_pab=True)
+    config = CogVideoXConfig("THUDM/CogVideoX-2b", enable_pab=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -28,7 +28,7 @@ def run_pab():
 
 
 def run_low_mem():
-    config = CogVideoXConfig("THUDM/CogVideoX-2b", world_size=1, cpu_offload=True, vae_tiling=True)
+    config = CogVideoXConfig("THUDM/CogVideoX-2b", cpu_offload=True, vae_tiling=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -37,6 +37,6 @@ def run_low_mem():
 
 
 if __name__ == "__main__":
-    run_base()
+    # run_base()
     # run_pab()
-    # run_low_mem()
+    run_low_mem()

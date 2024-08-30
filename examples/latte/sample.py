@@ -17,7 +17,7 @@ def run_base():
 
 
 def run_pab():
-    config = LatteConfig("maxin-cn/Latte-1", num_gpus=1)
+    config = LatteConfig("maxin-cn/Latte-1", enable_pab=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
