@@ -71,6 +71,7 @@ class CogVideoXConfig:
         from videosys import CogVideoXConfig, VideoSysEngine
 
         # models: "THUDM/CogVideoX-2b" or "THUDM/CogVideoX-5b"
+        # change num_gpus for multi-gpu inference
         config = CogVideoXConfig("THUDM/CogVideoX-2b", num_gpus=1)
         engine = VideoSysEngine(config)
 

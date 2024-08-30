@@ -147,6 +147,7 @@ class OpenSoraPlanConfig:
         from videosys import OpenSoraPlanConfig, VideoSysEngine
 
         # num frames: 65 or 221
+        # change num_gpus for multi-gpu inference
         config = OpenSoraPlanConfig(num_frames=65, num_gpus=1)
         engine = VideoSysEngine(config)
 
