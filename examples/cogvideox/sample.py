@@ -27,6 +27,16 @@ def run_pab():
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
+def run_low_mem():
+    config = CogVideoXConfig("THUDM/CogVideoX-2b", world_size=1, cpu_offload=True, vae_tiling=True)
+    engine = VideoSysEngine(config)
+
+    prompt = "Sunset over the sea."
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
+
+
 if __name__ == "__main__":
     run_base()
     # run_pab()
+    # run_low_mem()

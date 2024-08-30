@@ -59,6 +59,8 @@ class CogVideoXConfig:
             A path to the pretrained pipeline. Defaults to "THUDM/CogVideoX-2b".
         num_gpus (int):
             The number of GPUs to use. Defaults to 1.
+        cpu_offload (bool):
+            Whether to enable CPU offload. Defaults to False.
         vae_tiling (bool):
             Whether to enable tiling for the VAE. Defaults to True.
         enable_pab (bool):
