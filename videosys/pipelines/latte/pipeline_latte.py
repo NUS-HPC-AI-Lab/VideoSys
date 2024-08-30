@@ -111,6 +111,7 @@ class LatteConfig:
         ```python
         from videosys import LatteConfig, VideoSysEngine
 
+        # change num_gpus for multi-gpu inference
         config = LatteConfig("maxin-cn/Latte-1", num_gpus=1)
         engine = VideoSysEngine(config)
 

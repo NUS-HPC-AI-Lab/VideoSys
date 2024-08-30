@@ -59,6 +59,8 @@ class CogVideoXConfig:
             A path to the pretrained pipeline. Defaults to "THUDM/CogVideoX-2b".
         num_gpus (int):
             The number of GPUs to use. Defaults to 1.
+        cpu_offload (bool):
+            Whether to enable CPU offload. Defaults to False.
         vae_tiling (bool):
             Whether to enable tiling for the VAE. Defaults to True.
         enable_pab (bool):
@@ -71,6 +73,7 @@ class CogVideoXConfig:
         from videosys import CogVideoXConfig, VideoSysEngine
 
         # models: "THUDM/CogVideoX-2b" or "THUDM/CogVideoX-5b"
+        # change num_gpus for multi-gpu inference
         config = CogVideoXConfig("THUDM/CogVideoX-2b", num_gpus=1)
         engine = VideoSysEngine(config)
 
@@ -91,7 +94,8 @@ class CogVideoXConfig:
         model_path: str = "THUDM/CogVideoX-2b",
         # ======= distributed ========
         num_gpus: int = 1,
-        # ======= vae ========
+        # ======= memory =======
+        cpu_offload: bool = False,
         vae_tiling: bool = True,
         # ======= pab ========
         enable_pab: bool = False,
@@ -101,7 +105,8 @@ class CogVideoXConfig:
         self.pipeline_cls = CogVideoXPipeline
         # ======= distributed ========
         self.num_gpus = num_gpus
-        # ======= vae ========
+        # ======= memory ========
+        self.cpu_offload = cpu_offload
         self.vae_tiling = vae_tiling
         # ======= pab ========
         self.enable_pab = enable_pab
@@ -109,7 +114,7 @@ class CogVideoXConfig:
 
 
 class CogVideoXPipeline(VideoSysPipeline):
-    _optional_components = []
+    _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
     _callback_tensor_inputs = [
         "latents",
@@ -141,8 +146,6 @@ class CogVideoXPipeline(VideoSysPipeline):
             )
         if vae is None:
             vae = AutoencoderKLCogVideoX.from_pretrained(config.model_path, subfolder="vae", torch_dtype=self._dtype)
-            if config.vae_tiling:
-                vae.enable_tiling()
         if tokenizer is None:
             tokenizer = T5Tokenizer.from_pretrained(config.model_path, subfolder="tokenizer")
         if text_encoder is None:
@@ -161,6 +164,14 @@ class CogVideoXPipeline(VideoSysPipeline):
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
+
+        # cpu offload
+        if config.cpu_offload:
+            self.enable_model_cpu_offload()
+
+        # vae tiling
+        if config.vae_tiling:
+            vae.enable_tiling()
 
         # pab
         if config.enable_pab:
