@@ -146,8 +146,6 @@ class CogVideoXPipeline(VideoSysPipeline):
             )
         if vae is None:
             vae = AutoencoderKLCogVideoX.from_pretrained(config.model_path, subfolder="vae", torch_dtype=self._dtype)
-            if config.vae_tiling:
-                vae.enable_tiling()
         if tokenizer is None:
             tokenizer = T5Tokenizer.from_pretrained(config.model_path, subfolder="tokenizer")
         if text_encoder is None:
@@ -170,6 +168,10 @@ class CogVideoXPipeline(VideoSysPipeline):
         # cpu offload
         if config.cpu_offload:
             self.enable_model_cpu_offload()
+
+        # vae tiling
+        if config.vae_tiling:
+            vae.enable_tiling()
 
         # pab
         if config.enable_pab:
