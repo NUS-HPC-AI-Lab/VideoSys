@@ -7,18 +7,18 @@ And then calculate Vbench, PSNR, LPIPS and SSIM based on the video generated.
 1. Generate video
 ```
 cd eval/pab
-python latte.py
-python opensora.py
-python open_sora_plan.py
+python experiments/latte.py
+python experiments/opensora.py
+python experiments/open_sora_plan.py
 ```
 
 2. Calculate Vbench score
 ```
 # vbench is calculated independently
 # get scores for all metrics
-python run_vbench.py --video_path aaa --save_path bbb
+python vbench/run_vbench.py --video_path aaa --save_path bbb
 # calculate final score
-python cal_vbench.py --score_dir bbb
+python vbench/cal_vbench.py --score_dir bbb
 ```
 
 3. Calculate other metrics
