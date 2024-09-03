@@ -8,6 +8,7 @@
 # diffusers: https://github.com/huggingface/diffusers
 # --------------------------------------------------------
 
+from functools import partial
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -21,8 +22,17 @@ from diffusers.utils import is_torch_version
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from torch import nn
 
+from videosys.core.comm import all_to_all_comm, gather_sequence, get_spatial_pad, set_spatial_pad, split_sequence
 from videosys.core.pab_mgr import enable_pab, if_broadcast_spatial
+from videosys.core.parallel_mgr import (
+    enable_sequence_parallel,
+    get_cfg_parallel_group,
+    get_cfg_parallel_size,
+    get_sequence_parallel_group,
+    get_sequence_parallel_size,
+)
 from videosys.models.modules.embeddings import apply_rotary_emb
+from videosys.utils.utils import batch_func
 
 from ..modules.embeddings import CogVideoXPatchEmbed
 from ..modules.normalization import AdaLayerNorm, CogVideoXLayerNormZero
@@ -62,12 +72,24 @@ class CogVideoXAttnProcessor2_0:
         key = attn.to_k(hidden_states)
         value = attn.to_v(hidden_states)
 
-        inner_dim = key.shape[-1]
-        head_dim = inner_dim // attn.heads
+        if enable_sequence_parallel():
+            assert (
+                attn.heads % get_sequence_parallel_size() == 0
+            ), f"Number of heads {attn.heads} must be divisible by sequence parallel size {get_sequence_parallel_size()}"
+            attn_heads = attn.heads // get_sequence_parallel_size()
+            query, key, value = map(
+                lambda x: all_to_all_comm(x, get_sequence_parallel_group(), scatter_dim=2, gather_dim=1),
+                [query, key, value],
+            )
+        else:
+            attn_heads = attn.heads
 
-        query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-        key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-        value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+        inner_dim = key.shape[-1]
+        head_dim = inner_dim // attn_heads
+
+        query = query.view(batch_size, -1, attn_heads, head_dim).transpose(1, 2)
+        key = key.view(batch_size, -1, attn_heads, head_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, attn_heads, head_dim).transpose(1, 2)
 
         if attn.norm_q is not None:
             query = attn.norm_q(query)
@@ -76,15 +98,23 @@ class CogVideoXAttnProcessor2_0:
 
         # Apply RoPE if needed
         if image_rotary_emb is not None:
-            query[:, :, text_seq_length:] = apply_rotary_emb(query[:, :, text_seq_length:], image_rotary_emb)
+            emb_len = image_rotary_emb[0].shape[0]
+            query[:, :, text_seq_length : emb_len + text_seq_length] = apply_rotary_emb(
+                query[:, :, text_seq_length : emb_len + text_seq_length], image_rotary_emb
+            )
             if not attn.is_cross_attention:
-                key[:, :, text_seq_length:] = apply_rotary_emb(key[:, :, text_seq_length:], image_rotary_emb)
+                key[:, :, text_seq_length : emb_len + text_seq_length] = apply_rotary_emb(
+                    key[:, :, text_seq_length : emb_len + text_seq_length], image_rotary_emb
+                )
 
         hidden_states = F.scaled_dot_product_attention(
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
 
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
+        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn_heads * head_dim)
+
+        if enable_sequence_parallel():
+            hidden_states = all_to_all_comm(hidden_states, get_sequence_parallel_group(), scatter_dim=1, gather_dim=2)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -456,6 +486,22 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
         image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         return_dict: bool = True,
     ):
+        if get_cfg_parallel_size() > 1:
+            (
+                hidden_states,
+                encoder_hidden_states,
+                timestep,
+                timestep_cond,
+                image_rotary_emb,
+            ) = batch_func(
+                partial(split_sequence, process_group=get_cfg_parallel_group(), dim=0),
+                hidden_states,
+                encoder_hidden_states,
+                timestep,
+                timestep_cond,
+                image_rotary_emb,
+            )
+
         batch_size, num_frames, channels, height, width = hidden_states.shape
 
         # 1. Time embedding
@@ -482,6 +528,10 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
 
         encoder_hidden_states = hidden_states[:, :text_seq_length]
         hidden_states = hidden_states[:, text_seq_length:]
+
+        if enable_sequence_parallel():
+            set_spatial_pad(hidden_states.shape[1])
+            hidden_states = split_sequence(hidden_states, get_sequence_parallel_group(), dim=1, pad=get_spatial_pad())
 
         # 4. Transformer blocks
         for i, block in enumerate(self.transformer_blocks):
@@ -511,6 +561,9 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
                     timestep=timesteps if enable_pab() else None,
                 )
 
+        if enable_sequence_parallel():
+            hidden_states = gather_sequence(hidden_states, get_sequence_parallel_group(), dim=1, pad=get_spatial_pad())
+
         if not self.config.use_rotary_positional_embeddings:
             # CogVideoX-2B
             hidden_states = self.norm_final(hidden_states)
@@ -528,6 +581,9 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
         p = self.config.patch_size
         output = hidden_states.reshape(batch_size, num_frames, height // p, width // p, channels, p, p)
         output = output.permute(0, 1, 4, 2, 5, 3, 6).flatten(5, 6).flatten(3, 4)
+
+        if get_cfg_parallel_size() > 1:
+            output = gather_sequence(output, get_cfg_parallel_group(), dim=0)
 
         if not return_dict:
             return (output,)
