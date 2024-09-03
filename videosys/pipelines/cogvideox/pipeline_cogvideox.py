@@ -159,7 +159,7 @@ class CogVideoXPipeline(VideoSysPipeline):
             )
 
         # set eval and device
-        self.set_eval_and_device(self._device, text_encoder, vae, transformer)
+        self.set_eval_and_device(self._device, vae, transformer)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
@@ -168,6 +168,8 @@ class CogVideoXPipeline(VideoSysPipeline):
         # cpu offload
         if config.cpu_offload:
             self.enable_model_cpu_offload()
+        else:
+            self.set_eval_and_device(self._device, text_encoder)
 
         # vae tiling
         if config.vae_tiling:
