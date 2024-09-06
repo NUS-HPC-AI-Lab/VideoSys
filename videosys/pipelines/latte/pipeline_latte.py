@@ -25,14 +25,7 @@ from diffusers.schedulers import DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from videosys.core.pab_mgr import (
-    PABConfig,
-    get_diffusion_skip,
-    get_diffusion_skip_timestep,
-    set_pab_manager,
-    skip_diffusion_timestep,
-    update_steps,
-)
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_size
 from videosys.models.transformers.latte_transformer_3d import LatteT2V
@@ -47,25 +40,22 @@ class LattePABConfig(PABConfig):
         steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 800],
-        spatial_gap: int = 2,
+        spatial_range: int = 2,
         temporal_broadcast: bool = True,
         temporal_threshold: list = [100, 800],
-        temporal_gap: int = 3,
+        temporal_range: int = 3,
         cross_broadcast: bool = True,
         cross_threshold: list = [100, 800],
-        cross_gap: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
-        mlp_skip: bool = True,
-        mlp_spatial_skip_config: dict = {
+        cross_range: int = 6,
+        mlp_broadcast: bool = True,
+        mlp_spatial_broadcast_config: dict = {
             720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             480: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             400: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
         },
-        mlp_temporal_skip_config: dict = {
+        mlp_temporal_broadcast_config: dict = {
             720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
             560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
@@ -77,27 +67,73 @@ class LattePABConfig(PABConfig):
             steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
+            spatial_range=spatial_range,
             temporal_broadcast=temporal_broadcast,
             temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
+            temporal_range=temporal_range,
             cross_broadcast=cross_broadcast,
             cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
-            mlp_skip=mlp_skip,
-            mlp_spatial_skip_config=mlp_spatial_skip_config,
-            mlp_temporal_skip_config=mlp_temporal_skip_config,
+            cross_range=cross_range,
+            mlp_broadcast=mlp_broadcast,
+            mlp_spatial_broadcast_config=mlp_spatial_broadcast_config,
+            mlp_temporal_broadcast_config=mlp_temporal_broadcast_config,
         )
 
 
 class LatteConfig:
+    """
+    This config is to instantiate a `LattePipeline` class for video generation.
+
+    To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
+    In the engine, it will be used to instantiate the corresponding pipeline class.
+    And the engine will call the `generate` function of the pipeline to generate the video.
+    If you want to explore the detail of generation, please refer to the pipeline class below.
+
+    Args:
+        model_path (str):
+            A path to the pretrained pipeline. Defaults to "maxin-cn/Latte-1".
+        num_gpus (int):
+            The number of GPUs to use. Defaults to 1.
+        enable_vae_temporal_decoder (bool):
+            Whether to enable VAE Temporal Decoder. Defaults to True.
+        beta_start (float):
+            The initial value of beta for DDIM. Defaults to 0.0001.
+        beta_end (float):
+            The final value of beta for DDIM. Defaults to 0.02.
+        beta_schedule (str):
+            The schedule of beta for DDIM. Defaults to "linear".
+        variance_type (str):
+            The type of variance for DDIM. Defaults to "learned_range".
+        enable_pab (bool):
+            Whether to enable Pyramid Attention Broadcast. Defaults to False.
+        pab_config (CogVideoXPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `LattePABConfig()`.
+
+    Examples:
+        ```python
+        from videosys import LatteConfig, VideoSysEngine
+
+        # change num_gpus for multi-gpu inference
+        config = LatteConfig("maxin-cn/Latte-1", num_gpus=1)
+        engine = VideoSysEngine(config)
+
+        prompt = "Sunset over the sea."
+        # video size is fixed to 16 frames, 512x512.
+        video = engine.generate(
+            prompt=prompt,
+            guidance_scale=7.5,
+            num_inference_steps=50,
+        ).video[0]
+        engine.save_video(video, f"./outputs/{prompt}.mp4")
+        ```
+    """
+
     def __init__(
         self,
-        world_size: int = 1,
         model_path: str = "maxin-cn/Latte-1",
+        # ======= distributed =======
+        num_gpus: int = 1,
+        # ======= vae ========
         enable_vae_temporal_decoder: bool = True,
         # ======= scheduler ========
         beta_start: float = 0.0001,
@@ -108,22 +144,17 @@ class LatteConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = LattePABConfig(),
     ):
-        # ======= engine ========
-        self.world_size = world_size
-
-        # ======= pipeline ========
-        self.pipeline_cls = LattePipeline
-
-        # ======= model ========
         self.model_path = model_path
+        self.pipeline_cls = LattePipeline
+        # ======= distributed =======
+        self.num_gpus = num_gpus
+        # ======= vae ========
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
-
         # ======= scheduler ========
         self.beta_start = beta_start
         self.beta_end = beta_end
         self.beta_schedule = beta_schedule
         self.variance_type = variance_type
-
         # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config
@@ -752,33 +783,7 @@ class LattePipeline(VideoSysPipeline):
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
-        # timesteps = self.scheduler.timesteps # NOTE change timestep_respacing here
-
-        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            # TODO add assertion for timestep_respacing
-            # timestep_respacing = get_diffusion_skip_timestep()
-            # timesteps = space_timesteps(1000, timestep_respacing)
-
-            diffusion_skip_timestep = get_diffusion_skip_timestep()
-            timesteps = skip_diffusion_timestep(self.scheduler.timesteps, diffusion_skip_timestep)
-
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-            orignal_timesteps = self.scheduler.timesteps
-
-            if verbose and dist.get_rank() == 0:
-                print("============================")
-                print("skip diffusion steps!!!")
-                print("============================")
-                print(f"orignal sample timesteps: {orignal_timesteps}")
-                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
-                print("============================")
-                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
-                print(f"sample timesteps: {timesteps}")
-                print(f"num_inference_steps: {len(timesteps)}")
-                print("============================")
-        else:
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-            timesteps = self.scheduler.timesteps
+        timesteps = self.scheduler.timesteps
 
         # 5. Prepare latents.
         latent_channels = self.transformer.config.in_channels

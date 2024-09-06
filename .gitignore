@@ -164,5 +164,4 @@ coverage.xml
 pretrained
 samples
 cache_dir
-taming
-evaluations/pab/datasets/
+test_outputs

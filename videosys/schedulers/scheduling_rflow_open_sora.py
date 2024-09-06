@@ -13,8 +13,6 @@ from einops import rearrange
 from torch.distributions import LogisticNormal
 from tqdm import tqdm
 
-from videosys.core.pab_mgr import get_diffusion_skip, get_diffusion_skip_timestep, skip_diffusion_timestep
-
 
 def _extract_into_tensor(arr, timesteps, broadcast_shape):
     """
@@ -213,23 +211,6 @@ class RFLOW:
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
             timesteps = [timestep_transform(t, model_args, num_timesteps=self.num_timesteps) for t in timesteps]
-
-        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            orignal_timesteps = timesteps
-            diffusion_skip_timestep = get_diffusion_skip_timestep()
-            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
-
-            if verbose and dist.get_rank() == 0:
-                print("============================")
-                print("skip diffusion steps!!!")
-                print("============================")
-                print(f"orignal sample timesteps: {orignal_timesteps}")
-                print(f"orignal diffusion steps: {len(orignal_timesteps)}")
-                print("============================")
-                print(f"skip diffusion steps: {get_diffusion_skip_timestep()}")
-                print(f"sample timesteps: {timesteps}")
-                print(f"num_inference_steps: {len(timesteps)}")
-                print("============================")
 
         if mask is not None:
             noise_added = torch.zeros_like(mask, dtype=torch.bool)

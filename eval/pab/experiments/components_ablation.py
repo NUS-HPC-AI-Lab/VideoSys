@@ -1,16 +1,15 @@
 from utils import generate_func, read_prompt_list
 
 import videosys
-from videosys import OpenSoraConfig, OpenSoraPipeline
-from videosys.models.open_sora import OpenSoraPABConfig
+from videosys import OpenSoraConfig, OpenSoraPABConfig, VideoSysEngine
 
 
 def wo_spatial(prompt_list):
     pab_config = OpenSoraPABConfig(spatial_broadcast=False)
     config = OpenSoraConfig(enable_pab=True, pab_config=pab_config)
-    pipeline = OpenSoraPipeline(config)
+    engine = VideoSysEngine(config)
 
-    generate_func(pipeline, prompt_list, "./samples/components_ablation/wo_spatial")
+    generate_func(engine, prompt_list, "./samples/components_ablation/wo_spatial")
 
 
 def wo_temporal(prompt_list):

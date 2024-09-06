@@ -24,14 +24,7 @@ from diffusers.schedulers import PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from videosys.core.pab_mgr import (
-    PABConfig,
-    get_diffusion_skip,
-    get_diffusion_skip_timestep,
-    set_pab_manager,
-    skip_diffusion_timestep,
-    update_steps,
-)
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_rank
 from videosys.utils.logging import logger
@@ -63,18 +56,15 @@ class OpenSoraPlanPABConfig(PABConfig):
         steps: int = 150,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 850],
-        spatial_gap: int = 2,
+        spatial_range: int = 2,
         temporal_broadcast: bool = True,
         temporal_threshold: list = [100, 850],
-        temporal_gap: int = 4,
+        temporal_range: int = 4,
         cross_broadcast: bool = True,
         cross_threshold: list = [100, 850],
-        cross_gap: int = 6,
-        diffusion_skip: bool = False,
-        diffusion_timestep_respacing: list = None,
-        diffusion_skip_timestep: list = None,
-        mlp_skip: bool = True,
-        mlp_spatial_skip_config: dict = {
+        cross_range: int = 6,
+        mlp_broadcast: bool = True,
+        mlp_spatial_broadcast_config: dict = {
             738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
             714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
             690: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
@@ -90,7 +80,7 @@ class OpenSoraPlanPABConfig(PABConfig):
             450: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
             426: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
         },
-        mlp_temporal_skip_config: dict = {
+        mlp_temporal_broadcast_config: dict = {
             738: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
             714: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
             690: {"block": [0, 1, 2, 3, 4, 5, 6], "skip_count": 2},
@@ -111,30 +101,75 @@ class OpenSoraPlanPABConfig(PABConfig):
             steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
-            spatial_gap=spatial_gap,
+            spatial_range=spatial_range,
             temporal_broadcast=temporal_broadcast,
             temporal_threshold=temporal_threshold,
-            temporal_gap=temporal_gap,
+            temporal_range=temporal_range,
             cross_broadcast=cross_broadcast,
             cross_threshold=cross_threshold,
-            cross_gap=cross_gap,
-            diffusion_skip=diffusion_skip,
-            diffusion_timestep_respacing=diffusion_timestep_respacing,
-            diffusion_skip_timestep=diffusion_skip_timestep,
-            mlp_skip=mlp_skip,
-            mlp_spatial_skip_config=mlp_spatial_skip_config,
-            mlp_temporal_skip_config=mlp_temporal_skip_config,
+            cross_range=cross_range,
+            mlp_broadcast=mlp_broadcast,
+            mlp_spatial_broadcast_config=mlp_spatial_broadcast_config,
+            mlp_temporal_broadcast_config=mlp_temporal_broadcast_config,
         )
 
 
 class OpenSoraPlanConfig:
+    """
+    This config is to instantiate a `OpenSoraPlanPipeline` class for video generation.
+
+    To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
+    In the engine, it will be used to instantiate the corresponding pipeline class.
+    And the engine will call the `generate` function of the pipeline to generate the video.
+    If you want to explore the detail of generation, please refer to the pipeline class below.
+
+    Args:
+        transformer (str):
+            The transformer model to use. Defaults to "LanguageBind/Open-Sora-Plan-v1.1.0".
+        ae (str):
+            The Autoencoder model to use. Defaults to "CausalVAEModel_4x8x8".
+        text_encoder (str):
+            The text encoder model to use. Defaults to "DeepFloyd/t5-v1_1-xxl".
+        num_frames (int):
+            The number of frames to generate. Must be one of [65, 221].
+        num_gpus (int):
+            The number of GPUs to use. Defaults to 1.
+        enable_tiling (bool):
+            Whether to enable tiling. Defaults to True.
+        tile_overlap_factor (float):
+            The overlap factor for tiling. Defaults to 0.25.
+        enable_pab (bool):
+            Whether to enable Pyramid Attention Broadcast. Defaults to False.
+        pab_config (CogVideoXPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `LattePABConfig()`.
+
+    Examples:
+        ```python
+        from videosys import OpenSoraPlanConfig, VideoSysEngine
+
+        # num frames: 65 or 221
+        # change num_gpus for multi-gpu inference
+        config = OpenSoraPlanConfig(num_frames=65, num_gpus=1)
+        engine = VideoSysEngine(config)
+
+        prompt = "Sunset over the sea."
+        video = engine.generate(
+            prompt=prompt,
+            guidance_scale=7.5,
+            num_inference_steps=150,
+        ).video[0]
+        engine.save_video(video, f"./outputs/{prompt}.mp4")
+        ```
+    """
+
     def __init__(
         self,
-        world_size: int = 1,
-        model_path: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
-        num_frames: int = 65,
+        transformer: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
         ae: str = "CausalVAEModel_4x8x8",
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
+        num_frames: int = 65,
+        # ======= distributed ========
+        num_gpus: int = 1,
         # ======= vae =======
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
@@ -142,24 +177,18 @@ class OpenSoraPlanConfig:
         enable_pab: bool = False,
         pab_config: PABConfig = OpenSoraPlanPABConfig(),
     ):
-        # ======= engine ========
-        self.world_size = world_size
-
-        # ======= pipeline ========
         self.pipeline_cls = OpenSoraPlanPipeline
         self.ae = ae
         self.text_encoder = text_encoder
-
-        # ======= model ========
-        self.model_path = model_path
+        self.transformer = transformer
         assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
         self.num_frames = num_frames
         self.version = f"{num_frames}x512x512"
-
+        # ======= distributed ========
+        self.num_gpus = num_gpus
         # ======= vae ========
         self.enable_tiling = enable_tiling
         self.tile_overlap_factor = tile_overlap_factor
-
         # ======= pab ========
         self.enable_pab = enable_pab
         self.pab_config = pab_config
@@ -214,9 +243,9 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         if text_encoder is None:
             text_encoder = T5EncoderModel.from_pretrained(config.text_encoder, torch_dtype=torch.float16)
         if vae is None:
-            vae = getae_wrapper(config.ae)(config.model_path, subfolder="vae").to(dtype=dtype)
+            vae = getae_wrapper(config.ae)(config.transformer, subfolder="vae").to(dtype=dtype)
         if transformer is None:
-            transformer = LatteT2V.from_pretrained(config.model_path, subfolder=config.version, torch_dtype=dtype)
+            transformer = LatteT2V.from_pretrained(config.transformer, subfolder=config.version, torch_dtype=dtype)
         if scheduler is None:
             scheduler = PNDMScheduler()
 
@@ -800,18 +829,6 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
 
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
-        if get_diffusion_skip() and get_diffusion_skip_timestep() is not None:
-            diffusion_skip_timestep = get_diffusion_skip_timestep()
-
-            # warmup_timesteps = timesteps[:num_warmup_steps]
-            # after_warmup_timesteps = skip_diffusion_timestep(timesteps[num_warmup_steps:], diffusion_skip_timestep)
-            # timesteps = torch.cat((warmup_timesteps, after_warmup_timesteps))
-
-            timesteps = skip_diffusion_timestep(timesteps, diffusion_skip_timestep)
-
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-
         progress_wrap = tqdm.tqdm if verbose and dist.get_rank() == 0 else (lambda x: x)
         for i, t in progress_wrap(list(enumerate(timesteps))):
             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
