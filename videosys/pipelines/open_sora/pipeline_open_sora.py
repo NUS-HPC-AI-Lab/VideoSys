@@ -132,6 +132,8 @@ class OpenSoraConfig:
         # ======== scheduler ========
         num_sampling_steps: int = 30,
         cfg_scale: float = 7.0,
+        # ======= memory =======
+        cpu_offload: bool = False,
         # ======== vae ========
         tiling_size: int = 4,
         # ======== speedup ========
@@ -151,6 +153,8 @@ class OpenSoraConfig:
         self.cfg_scale = cfg_scale
         # ======== vae ========
         self.tiling_size = tiling_size
+        # ======= memory ========
+        self.cpu_offload = cpu_offload
         # ======== speedup ========
         self.enable_flash_attn = enable_flash_attn
         # ======== pab ========
@@ -233,11 +237,17 @@ class OpenSoraPipeline(VideoSysPipeline):
             set_pab_manager(config.pab_config)
 
         # set eval and device
-        self.set_eval_and_device(device, text_encoder, vae, transformer)
+        self.set_eval_and_device(device, vae, transformer)
 
         self.register_modules(
             text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler, tokenizer=tokenizer
         )
+
+        # cpu offload
+        if config.cpu_offload:
+            self.enable_model_cpu_offload()
+        else:
+            self.set_eval_and_device(self._device, text_encoder)
 
     def get_text_embeddings(self, texts):
         text_tokens_and_mask = self.tokenizer(
@@ -249,9 +259,9 @@ class OpenSoraPipeline(VideoSysPipeline):
             add_special_tokens=True,
             return_tensors="pt",
         )
-
-        input_ids = text_tokens_and_mask["input_ids"].to(self.device)
-        attention_mask = text_tokens_and_mask["attention_mask"].to(self.device)
+        device = self._execution_device
+        input_ids = text_tokens_and_mask["input_ids"].to(device)
+        attention_mask = text_tokens_and_mask["attention_mask"].to(device)
         with torch.no_grad():
             text_encoder_embs = self.text_encoder(
                 input_ids=input_ids,
