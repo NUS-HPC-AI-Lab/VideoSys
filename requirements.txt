@@ -9,7 +9,7 @@ imageio
 imageio-ffmpeg
 matplotlib
 ninja
-numpy
+numpy<2.0.0
 omegaconf
 packaging
 psutil
