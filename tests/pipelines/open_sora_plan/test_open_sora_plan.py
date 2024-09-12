@@ -10,7 +10,7 @@ def test_base(num_gpus):
 
     prompt = "Sunset over the sea."
     video = engine.generate(prompt).video[0]
-    engine.save_video(video, f"./test_outputs/{prompt}_open_sora_pab_{num_gpus}.mp4")
+    engine.save_video(video, f"./test_outputs/{prompt}_open_sora_plan_{num_gpus}.mp4")
 
 
 @pytest.mark.parametrize("num_gpus", [1])
