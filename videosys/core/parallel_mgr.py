@@ -85,7 +85,7 @@ def initialize(
     init_method=None,
     seed: Optional[int] = None,
     sp_size: Optional[int] = None,
-    enable_cp: bool = True,
+    enable_cp: bool = False,
 ):
     if not dist.is_initialized():
         try:
@@ -107,7 +107,8 @@ def initialize(
         dp_size = dist.get_world_size() // sp_size
 
     # update cfg parallel
-    if enable_cp and sp_size % 2 == 0:
+    # NOTE: enable cp parallel will be slower. disable it for now.
+    if False and enable_cp and sp_size % 2 == 0:
         sp_size = sp_size // 2
         cp_size = 2
     else:

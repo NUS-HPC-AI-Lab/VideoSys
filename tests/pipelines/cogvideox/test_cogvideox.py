@@ -3,7 +3,7 @@ import pytest
 from videosys import CogVideoXConfig, VideoSysEngine
 
 
-@pytest.mark.parametrize("num_gpus", [1])
+@pytest.mark.parametrize("num_gpus", [1, 2])
 def test_base(num_gpus):
     config = CogVideoXConfig(num_gpus=num_gpus)
     engine = VideoSysEngine(config)
