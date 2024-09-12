@@ -178,7 +178,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         transformer ([`STDiT3`]):
             A text conditioned `STDiT3` to denoise the encoded video latents.
         scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded image latents.
+            A scheduler to be used in combination with `transformer` to denoise the encoded video latents.
     """
     bad_punct_regex = re.compile(
         r"[" + "#®•©™&@·º½¾¿¡§~" + "\)" + "\(" + "\]" + "\[" + "\}" + "\{" + "\|" + "\\" + "\/" + "\*" + r"]{1,}"
