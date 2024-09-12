@@ -25,7 +25,7 @@ def test_pab(num_gpus):
 
 @pytest.mark.parametrize("num_gpus", [1])
 def test_low_mem(num_gpus):
-    config = CogVideoXConfig(cpu_offload=True, vae_tiling=True)
+    config = CogVideoXConfig(num_gpus=num_gpus, cpu_offload=True, vae_tiling=True)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
