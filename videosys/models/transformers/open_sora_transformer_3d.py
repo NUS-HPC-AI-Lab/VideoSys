@@ -46,7 +46,7 @@ from videosys.core.parallel_mgr import (
     get_sequence_parallel_group,
 )
 from videosys.models.modules.activations import approx_gelu
-from videosys.models.modules.attentions import Attention, MultiHeadCrossAttention
+from videosys.models.modules.attentions import OpenSoraAttention, OpenSoraMultiHeadCrossAttention
 from videosys.models.modules.embeddings import (
     OpenSoraCaptionEmbedder,
     OpenSoraPatchEmbed3D,
@@ -127,11 +127,8 @@ class STDiT3Block(nn.Module):
         self.hidden_size = hidden_size
         self.enable_flash_attn = enable_flash_attn
 
-        attn_cls = Attention
-        mha_cls = MultiHeadCrossAttention
-
         self.norm1 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
-        self.attn = attn_cls(
+        self.attn = OpenSoraAttention(
             hidden_size,
             num_heads=num_heads,
             qkv_bias=True,
@@ -139,7 +136,7 @@ class STDiT3Block(nn.Module):
             rope=rope,
             enable_flash_attn=enable_flash_attn,
         )
-        self.cross_attn = mha_cls(hidden_size, num_heads)
+        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn)
         self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
