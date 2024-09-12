@@ -1,11 +1,15 @@
+from dataclasses import dataclass
+from typing import Iterable, List, Tuple
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.checkpoint
 
 from videosys.models.modules.normalization import LlamaRMSNorm
 
 
-class Attention(nn.Module):
+class OpenSoraAttention(nn.Module):
     def __init__(
         self,
         dim: int,
@@ -76,14 +80,7 @@ class Attention(nn.Module):
                 softmax_scale=self.scale,
             )
         else:
-            dtype = q.dtype
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)  # translate attn to float32
-            attn = attn.to(torch.float32)
-            attn = attn.softmax(dim=-1)
-            attn = attn.to(dtype)  # cast back attn to original dtype
-            attn = self.attn_drop(attn)
-            x = attn @ v
+            x = F.scaled_dot_product_attention(q, k, v)
 
         x_output_shape = (B, N, C)
         if not enable_flash_attn:
@@ -94,9 +91,9 @@ class Attention(nn.Module):
         return x
 
 
-class MultiHeadCrossAttention(nn.Module):
-    def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0):
-        super(MultiHeadCrossAttention, self).__init__()
+class OpenSoraMultiHeadCrossAttention(nn.Module):
+    def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, enable_flash_attn=False):
+        super(OpenSoraMultiHeadCrossAttention, self).__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
         self.d_model = d_model
@@ -108,6 +105,7 @@ class MultiHeadCrossAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(d_model, d_model)
         self.proj_drop = nn.Dropout(proj_drop)
+        self.enable_flash_attn = enable_flash_attn
 
     def forward(self, x, cond, mask=None):
         # query/value: img tokens; key: condition; mask: if padding tokens
@@ -117,15 +115,91 @@ class MultiHeadCrossAttention(nn.Module):
         kv = self.kv_linear(cond).view(1, -1, 2, self.num_heads, self.head_dim)
         k, v = kv.unbind(2)
 
-        attn_bias = None
-        # TODO: support torch computation
-        import xformers.ops
+        if self.enable_flash_attn:
+            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
+        else:
+            x = self.torch_impl(q, k, v, mask, B, N, C)
 
-        if mask is not None:
-            attn_bias = xformers.ops.fmha.BlockDiagonalMask.from_seqlens([N] * B, mask)
-        x = xformers.ops.memory_efficient_attention(q, k, v, p=self.attn_drop.p, attn_bias=attn_bias)
-
-        x = x.view(B, -1, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+
+    def flash_attn_impl(self, q, k, v, mask, B, N, C):
+        from flash_attn import flash_attn_varlen_func
+
+        q_seqinfo = _SeqLenInfo.from_seqlens([N] * B)
+        k_seqinfo = _SeqLenInfo.from_seqlens(mask)
+
+        x = flash_attn_varlen_func(
+            q.view(-1, self.num_heads, self.head_dim),
+            k.view(-1, self.num_heads, self.head_dim),
+            v.view(-1, self.num_heads, self.head_dim),
+            cu_seqlens_q=q_seqinfo.seqstart.cuda(),
+            cu_seqlens_k=k_seqinfo.seqstart.cuda(),
+            max_seqlen_q=q_seqinfo.max_seqlen,
+            max_seqlen_k=k_seqinfo.max_seqlen,
+            dropout_p=self.attn_drop.p if self.training else 0.0,
+        )
+        x = x.view(B, N, C)
+        return x
+
+    def torch_impl(self, q, k, v, mask, B, N, C):
+        q = q.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_mask = torch.zeros(B, 1, N, k.shape[2], dtype=torch.bool, device=q.device)
+        for i, m in enumerate(mask):
+            attn_mask[i, :, :, :m] = -1e9
+
+        out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
+        x = out.transpose(1, 2).contiguous().view(B, N, C)
+        return x
+
+
+@dataclass
+class _SeqLenInfo:
+    """
+    from xformers
+
+    (Internal) Represents the division of a dimension into blocks.
+    For example, to represents a dimension of length 7 divided into
+    three blocks of lengths 2, 3 and 2, use `from_seqlength([2, 3, 2])`.
+    The members will be:
+        max_seqlen: 3
+        min_seqlen: 2
+        seqstart_py: [0, 2, 5, 7]
+        seqstart: torch.IntTensor([0, 2, 5, 7])
+    """
+
+    seqstart: torch.Tensor
+    max_seqlen: int
+    min_seqlen: int
+    seqstart_py: List[int]
+
+    def to(self, device: torch.device) -> None:
+        self.seqstart = self.seqstart.to(device, non_blocking=True)
+
+    def intervals(self) -> Iterable[Tuple[int, int]]:
+        yield from zip(self.seqstart_py, self.seqstart_py[1:])
+
+    @classmethod
+    def from_seqlens(cls, seqlens: Iterable[int]) -> "_SeqLenInfo":
+        """
+        Input tensors are assumed to be in shape [B, M, *]
+        """
+        assert not isinstance(seqlens, torch.Tensor)
+        seqstart_py = [0]
+        max_seqlen = -1
+        min_seqlen = -1
+        for seqlen in seqlens:
+            min_seqlen = min(min_seqlen, seqlen) if min_seqlen != -1 else seqlen
+            max_seqlen = max(max_seqlen, seqlen)
+            seqstart_py.append(seqstart_py[len(seqstart_py) - 1] + seqlen)
+        seqstart = torch.tensor(seqstart_py, dtype=torch.int32)
+        return cls(
+            max_seqlen=max_seqlen,
+            min_seqlen=min_seqlen,
+            seqstart=seqstart,
+            seqstart_py=seqstart_py,
+        )
