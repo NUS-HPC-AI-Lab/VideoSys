@@ -175,8 +175,8 @@ class OpenSoraPipeline(VideoSysPipeline):
         tokenizer (`T5Tokenizer`):
             Tokenizer of class
             [T5Tokenizer](https://huggingface.co/docs/transformers/model_doc/t5#transformers.T5Tokenizer).
-        transformer ([`Transformer2DModel`]):
-            A text conditioned `Transformer2DModel` to denoise the encoded image latents.
+        transformer ([`STDiT3`]):
+            A text conditioned `STDiT3` to denoise the encoded video latents.
         scheduler ([`SchedulerMixin`]):
             A scheduler to be used in combination with `transformer` to denoise the encoded image latents.
     """
