@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, T5EncoderModel
 from videosys.core.pab_mgr import PABConfig, set_pab_manager
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
-from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2
+from videosys.models.transformers.open_sora_transformer_3d import STDiT3
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
 from videosys.utils.utils import save_video
 
@@ -193,7 +193,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         text_encoder: Optional[T5EncoderModel] = None,
         tokenizer: Optional[AutoTokenizer] = None,
         vae: Optional[AutoencoderKL] = None,
-        transformer: Optional[STDiT3_XL_2] = None,
+        transformer: Optional[STDiT3] = None,
         scheduler: Optional[RFLOW] = None,
         device: torch.device = torch.device("cuda"),
         dtype: torch.dtype = torch.bfloat16,
@@ -215,14 +215,9 @@ class OpenSoraPipeline(VideoSysPipeline):
                 micro_batch_size=config.tiling_size,
             ).to(dtype)
         if transformer is None:
-            transformer = STDiT3_XL_2(
-                from_pretrained=config.transformer,
-                qk_norm=True,
-                enable_flash_attn=config.enable_flash_attn,
-                in_channels=vae.out_channels,
-                caption_channels=text_encoder.config.d_model,
-                model_max_length=300,
-            ).to(device, dtype)
+            transformer = STDiT3.from_pretrained(config.transformer, enable_flash_attn=config.enable_flash_attn).to(
+                dtype
+            )
         if scheduler is None:
             scheduler = RFLOW(
                 use_timestep_transform=True, num_sampling_steps=config.num_sampling_steps, cfg_scale=config.cfg_scale
