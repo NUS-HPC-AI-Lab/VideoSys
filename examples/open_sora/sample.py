@@ -21,7 +21,7 @@ def run_base():
 
 
 def run_low_mem():
-    config = OpenSoraConfig(cpu_offload=True)
+    config = OpenSoraConfig(cpu_offload=True, tiling_size=1)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."

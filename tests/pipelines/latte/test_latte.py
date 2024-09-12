@@ -21,3 +21,13 @@ def test_pab(num_gpus):
     prompt = "Sunset over the sea."
     video = engine.generate(prompt).video[0]
     engine.save_video(video, f"./test_outputs/{prompt}_latte_pab_{num_gpus}.mp4")
+
+
+@pytest.mark.parametrize("num_gpus", [1])
+def test_low_mem(num_gpus):
+    config = LatteConfig(num_gpus=num_gpus, cpu_offload=True)
+    engine = VideoSysEngine(config)
+
+    prompt = "Sunset over the sea."
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./test_outputs/{prompt}_latte_low_mem_{num_gpus}.mp4")
