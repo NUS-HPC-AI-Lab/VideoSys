@@ -245,7 +245,6 @@ class LattePipeline(VideoSysPipeline):
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
 
-
         # cpu offload
         if config.cpu_offload:
             self.enable_model_cpu_offload()
