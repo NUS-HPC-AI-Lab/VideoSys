@@ -7,7 +7,6 @@
 # OpenSora: https://github.com/hpcaitech/Open-Sora
 # --------------------------------------------------------
 
-import os
 from typing import Tuple, Union
 
 import numpy as np
@@ -727,7 +726,6 @@ def OpenSoraVAE_V1_2(
     micro_batch_size=4,
     micro_frame_size=17,
     from_pretrained=None,
-    local_files_only=False,
     freeze_vae_2d=False,
     cal_loss=False,
 ):
@@ -736,7 +734,6 @@ def OpenSoraVAE_V1_2(
         from_pretrained="PixArt-alpha/pixart_sigma_sdxlvae_T5_diffusers",
         subfolder="vae",
         micro_batch_size=micro_batch_size,
-        local_files_only=local_files_only,
     )
     vae_temporal = dict(
         type="VAE_Temporal_SD",
@@ -754,9 +751,5 @@ def OpenSoraVAE_V1_2(
         scale=scale,
     )
 
-    if from_pretrained is not None and not os.path.isdir(from_pretrained):
-        model = VideoAutoencoderPipeline.from_pretrained(from_pretrained, **kwargs)
-    else:
-        config = VideoAutoencoderPipelineConfig(**kwargs)
-        model = VideoAutoencoderPipeline(config)
+    model = VideoAutoencoderPipeline.from_pretrained(from_pretrained, **kwargs)
     return model
