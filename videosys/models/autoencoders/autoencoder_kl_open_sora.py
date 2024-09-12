@@ -671,6 +671,9 @@ class VideoAutoencoderPipeline(PreTrainedModel):
             return (z - self.shift) / self.scale
 
     def decode(self, z, num_frames=None):
+        device = z.device
+        self.scale = self.scale.to(device)
+        self.shift = self.shift.to(device)
         if not self.cal_loss:
             z = z * self.scale.to(z.dtype) + self.shift.to(z.dtype)
 

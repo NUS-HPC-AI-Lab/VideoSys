@@ -188,7 +188,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         r"[" + "#®•©™&@·º½¾¿¡§~" + "\)" + "\(" + "\]" + "\[" + "\}" + "\{" + "\|" + "\\" + "\/" + "\*" + r"]{1,}"
     )  # noqa
 
-    _optional_components = ["tokenizer", "text_encoder"]
+    _optional_components = ["tokenizer", "text_encoder", "vae.temporal_vae", "vae.spatial_vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
     def __init__(
@@ -275,7 +275,8 @@ class OpenSoraPipeline(VideoSysPipeline):
         return dict(y=caption_embs, mask=emb_masks)
 
     def null_embed(self, n):
-        null_y = self.transformer.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None]
+        device = self._execution_device
+        null_y = self.transformer.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None].to(device)
         return null_y
 
     @staticmethod
