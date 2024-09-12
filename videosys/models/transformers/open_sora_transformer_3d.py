@@ -8,7 +8,6 @@
 # --------------------------------------------------------
 
 
-import os
 from collections.abc import Iterable
 from functools import partial
 
@@ -635,12 +634,3 @@ class STDiT3(PreTrainedModel):
         # unpad
         x = x[:, :, :R_t, :R_h, :R_w]
         return x
-
-
-def STDiT3_XL_2(from_pretrained=None, **kwargs):
-    if from_pretrained is not None and not os.path.isdir(from_pretrained):
-        model = STDiT3.from_pretrained(from_pretrained, **kwargs)
-    else:
-        config = STDiT3Config(depth=28, hidden_size=1152, patch_size=(1, 2, 2), num_heads=16, **kwargs)
-        model = STDiT3(config)
-    return model
