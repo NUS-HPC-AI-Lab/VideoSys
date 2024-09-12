@@ -126,7 +126,6 @@ def dynamic_switch(x, to_spatial_shard: bool, scatter_dim: int = 0, gather_dim: 
 
     if x.shape[scatter_dim] % get_sequence_parallel_size() != 0 or x.shape[gather_dim] < get_sequence_parallel_size():
         return x
-
     x = all_to_all_with_pad(
         x,
         get_sequence_parallel_group(),
@@ -253,7 +252,6 @@ def _forward_decoder(
 
 def _forward_conv3d_opensora(self, x):
     time_causal_padding = list(self.time_causal_padding)
-    width_pad = time_causal_padding[0]
     if get_sequence_parallel_rank() == 0:
         time_causal_padding[1] = 0
     elif get_sequence_parallel_rank() == get_sequence_parallel_size() - 1:

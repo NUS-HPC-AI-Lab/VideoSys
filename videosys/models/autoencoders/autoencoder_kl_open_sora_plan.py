@@ -228,6 +228,54 @@ class Encoder(nn.Module):
             padding=1,
         )
 
+    def set_sequence_parallel(self):
+        self.conv_out.set_sequence_parallel()
+        _replace_groupnorm_fwd(self.norm_out)
+        self.mid.block_1.set_sequence_parallel()
+        self.mid.block_2.set_sequence_parallel()
+        for i_level in range(self.num_resolutions):
+            for i_block in range(self.num_res_blocks):
+                if self.down[i_level].block[i_block].__class__.__name__ == "ResnetBlock3D":
+                    self.down[i_level].block[i_block].set_sequence_parallel()
+            if hasattr(self.down[i_level], "time_downsample"):
+                self.down[i_level].time_downsample.set_sequence_parallel()
+
+    def _forward_sp(self, x):
+        x = dynamic_switch(x, to_spatial_shard=False)
+        hs = [self.conv_in(x)]
+        hs[-1] = dynamic_switch(hs[-1], to_spatial_shard=True)
+        for i_level in range(self.num_resolutions):
+            for i_block in range(self.num_res_blocks):
+                if self.down[i_level].block[i_block].__class__.__name__ == "ResnetBlock3D":
+                    h = self.down[i_level].block[i_block](hs[-1])
+                else:
+                    h_ = dynamic_switch(hs[-1], to_spatial_shard=False)
+                    h = self.down[i_level].block[i_block](h_)
+                    h = dynamic_switch(h, to_spatial_shard=True)
+                if len(self.down[i_level].attn) > 0:
+                    h = dynamic_switch(h, to_spatial_shard=False)
+                    h = self.down[i_level].attn[i_block](h)
+                    h = dynamic_switch(h, to_spatial_shard=True)
+                hs.append(h)
+            if hasattr(self.down[i_level], "downsample"):
+                h_ = dynamic_switch(hs[-1], to_spatial_shard=False)
+                hs.append(self.down[i_level].downsample(h_))
+                hs[-1] = dynamic_switch(hs[-1], to_spatial_shard=True)
+            if hasattr(self.down[i_level], "time_downsample"):
+                hs_down = self.down[i_level].time_downsample(hs[-1])
+                hs.append(hs_down)
+
+        h = self.mid.block_1(h)
+        h = dynamic_switch(h, to_spatial_shard=False)
+        h = self.mid.attn_1(h)
+        h = dynamic_switch(h, to_spatial_shard=True)
+        h = self.mid.block_2(h)
+
+        h = self.norm_out(h)
+        h = nonlinearity(h)
+        h = self.conv_out(h)
+        return h
+
     def forward(self, x):
         hs = [self.conv_in(x)]
         for i_level in range(self.num_resolutions):
@@ -362,13 +410,13 @@ class Decoder(nn.Module):
             for i_block in range(self.num_res_blocks + 1):
                 h = self.up[i_level].block[i_block](h)
                 if len(self.up[i_level].attn) > 0:
-                    dynamic_switch(h, to_spatial_shard=False)
+                    h = dynamic_switch(h, to_spatial_shard=False)
                     h = self.up[i_level].attn[i_block](h)
-                    dynamic_switch(h, to_spatial_shard=True)
+                    h = dynamic_switch(h, to_spatial_shard=True)
             if hasattr(self.up[i_level], "upsample"):
-                dynamic_switch(h, to_spatial_shard=False)
+                h = dynamic_switch(h, to_spatial_shard=False)
                 h = self.up[i_level].upsample(h)
-                dynamic_switch(h, to_spatial_shard=True)
+                h = dynamic_switch(h, to_spatial_shard=True)
             if hasattr(self.up[i_level], "time_upsample"):
                 h = self.up[i_level].time_upsample(h)
         h = self.norm_out(h)
@@ -516,7 +564,10 @@ class CausalVAEModel(VideoBaseAE_PL):
 
     def set_sequence_parallel(self):
         # TODO: sequence parallel for encoder
+        print("set_sequence_parallel")
         self.post_quant_conv.set_sequence_parallel()
+        self.quant_conv.set_sequence_parallel()
+        self.encoder.set_sequence_parallel()
         self.decoder.set_sequence_parallel()
         self.sp = True
 
@@ -527,7 +578,21 @@ class CausalVAEModel(VideoBaseAE_PL):
             or x.shape[-3] > self.tile_sample_min_size_t
         ):
             return self.tiled_encode(x)
+        if enable_sequence_parallel():
+            b, c, t, h, w = x.shape
+            x = x.view(b * c, t, h, w)
+            padding_f = t % get_sequence_parallel_size()
+            padding_s = w % get_sequence_parallel_size()
+            x = F.pad(x, (0, padding_s, 0, 0, 0, padding_f))
+            x = x.view(b, c, t + padding_f, h, w + padding_s)
+            x = split_sequence(x, get_sequence_parallel_group(), dim=4)
+            print(x.shape)
         h = self.encoder(x)
+        if enable_sequence_parallel():
+            h = gather_sequence(h, get_sequence_parallel_group(), dim=4)
+            # h = h.narrow(4, 0, h.shape[4] - padding_s)
+            # h = h.narrow(2, 0, h.shape[2] - padding_f)
+            print(h.shape)
         moments = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(moments)
         return posterior
@@ -762,8 +827,21 @@ class CausalVAEModel(VideoBaseAE_PL):
                     i : i + self.tile_sample_min_size,
                     j : j + self.tile_sample_min_size,
                 ]
+                if enable_sequence_parallel():
+                    b, c, t, h, w = tile.shape
+                    tile = tile.view(b * c, t, h, w)
+                    padding_f = t % get_sequence_parallel_size()
+                    padding_s = w % get_sequence_parallel_size()
+                    tile = F.pad(tile, (0, padding_s, 0, 0, 0, padding_f))
+                    tile = tile.view(b, c, t + padding_f, h, w + padding_s)
+                    tile = split_sequence(tile, get_sequence_parallel_group(), dim=4)
+                    print(tile.shape)
                 tile = self.encoder(tile)
                 tile = self.quant_conv(tile)
+                if enable_sequence_parallel():
+                    tile = gather_sequence(tile, get_sequence_parallel_group(), dim=4)
+                    tile = tile.narrow(4, 0, tile.shape[4] - padding_s)
+                    tile = tile.narrow(2, 0, tile.shape[2] - padding_f)
                 row.append(tile)
             rows.append(row)
         result_rows = []
@@ -1664,6 +1742,9 @@ class TimeDownsampleRes2x(nn.Module):
         self.avg_pool = nn.AvgPool3d((kernel_size, 1, 1), stride=(2, 1, 1))
         self.conv = nn.Conv3d(in_channels, out_channels, self.kernel_size, stride=(2, 1, 1), padding=(0, 1, 1))
         self.mix_factor = torch.nn.Parameter(torch.Tensor([mix_factor]))
+
+    def set_sequence_parallel(self):
+        _replace_conv_fwd(self.conv)
 
     def forward(self, x):
         alpha = torch.sigmoid(self.mix_factor)

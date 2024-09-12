@@ -18,7 +18,7 @@ from diffusers.models import AutoencoderKL, AutoencoderKLTemporalDecoder
 from einops import rearrange
 from transformers import PretrainedConfig, PreTrainedModel
 from videosys.utils.vae_utils import _replace_conv_fwd, _replace_groupnorm_fwd, _replace_conv_opensora_fwd, dynamic_switch
-from videosys.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_sequence_parallel_size
+from videosys.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_group, get_sequence_parallel_size, get_sequence_parallel_rank
 from videosys.core.comm import split_sequence, gather_sequence
 
 class DiagonalGaussianDistribution(object):
@@ -269,6 +269,19 @@ class Encoder(nn.Module):
         self.norm1 = nn.GroupNorm(self.num_groups, prev_filters)
 
         self.conv2 = self.conv_fn(prev_filters, self.embedding_dim, kernel_size=(1, 1, 1), padding="same")
+
+    def set_sequence_parallel(self):
+        self.conv_in.set_sequence_parallel()
+        for i in range(self.num_blocks):
+            for j in range(self.num_res_blocks):
+                self.block_res_blocks[i][j].set_sequence_parallel()
+            if i < self.num_blocks - 1:
+                if isinstance(self.conv_blocks[i], CausalConv3d):
+                    self.conv_blocks[i].set_sequence_parallel()
+        for i in range(self.num_res_blocks):
+            self.res_blocks[i].set_sequence_parallel()
+        _replace_groupnorm_fwd(self.norm1)
+        self.conv2.set_sequence_parallel()
 
     def forward(self, x):
         x = self.conv_in(x)
@@ -707,12 +720,23 @@ class VideoAutoencoderPipeline(PreTrainedModel):
             self.set_sequence_parallel()
 
     def set_sequence_parallel(self):
+        self.temporal_vae.encoder.set_sequence_parallel()
         self.temporal_vae.decoder.set_sequence_parallel()
+        self.temporal_vae.quant_conv.set_sequence_parallel()
         self.temporal_vae.post_quant_conv.set_sequence_parallel()
 
     def encode(self, x):
+        if enable_sequence_parallel():
+            padding_f = x.shape[2] % get_sequence_parallel_size()
+            x = F.pad(x, (0, 0, 0, 0, 0, padding_f))
+            x = split_sequence(x, get_sequence_parallel_group(), dim=2)
         x_z = self.spatial_vae.encode(x)
-
+        padding_s = 0
+        if enable_sequence_parallel():
+            padding_s = x_z.shape[4] % get_sequence_parallel_size()
+            x_z = F.pad(x_z, (0, padding_s, 0, 0, 0, 0))
+            x_z = dynamic_switch(x_z, True, 2, 4)
+            x_z = x_z.narrow(2, 0, x_z.shape[2] - padding_f)
         if self.micro_frame_size is None:
             posterior = self.temporal_vae.encode(x_z)
             z = posterior.sample()
@@ -723,6 +747,10 @@ class VideoAutoencoderPipeline(PreTrainedModel):
                 posterior = self.temporal_vae.encode(x_z_bs)
                 z_list.append(posterior.sample())
             z = torch.cat(z_list, dim=2)
+        
+        if enable_sequence_parallel():
+            z = gather_sequence(z, get_sequence_parallel_group(), dim=4)
+            z = z.narrow(4, 0, z.shape[4] - padding_s)
 
         if self.cal_loss:
             return z, posterior, x_z
