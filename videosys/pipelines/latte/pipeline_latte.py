@@ -27,9 +27,11 @@ from transformers import T5EncoderModel, T5Tokenizer
 
 from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_size
 from videosys.models.transformers.latte_transformer_3d import LatteT2V
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video
+from videosys.utils.vae_utils import _replace_decoder_fwd, _replace_mid_fwd, _replace_stres_fwd, _replace_up_fwd
 
 
 class LattePABConfig(PABConfig):
@@ -253,6 +255,19 @@ class LattePipeline(VideoSysPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
+
+        if enable_sequence_parallel():
+            self.set_sequence_parallel()
+
+    def set_sequence_parallel(self):
+        resnets = self.vae.decoder.mid_block.resnets
+        _replace_mid_fwd(self.vae.decoder.mid_block)
+        _replace_decoder_fwd(self.vae.decoder)
+        for up_block in self.vae.decoder.up_blocks:
+            resnets += up_block.resnets
+            _replace_up_fwd(up_block)
+        for resnet in resnets:
+            _replace_stres_fwd(resnet)
 
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
@@ -910,7 +925,7 @@ class LattePipeline(VideoSysPipeline):
         latents = einops.rearrange(latents, "b c f h w -> (b f) c h w")
         video = []
 
-        decode_chunk_size = 14
+        decode_chunk_size = 14 * get_sequence_parallel_size()
         for frame_idx in range(0, latents.shape[0], decode_chunk_size):
             num_frames_in = latents[frame_idx : frame_idx + decode_chunk_size].shape[0]
 

@@ -26,6 +26,7 @@ from transformers import T5EncoderModel, T5Tokenizer
 
 from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.core.parallel_mgr import enable_sequence_parallel, get_sequence_parallel_rank
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video
 
@@ -906,6 +907,8 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         return VideoSysPipelineOutput(video=video)
 
     def decode_latents(self, latents):
+        if enable_sequence_parallel() and not self.vae.vae.sp:
+            self.vae.vae.set_sequence_parallel()
         video = self.vae.decode(latents)  # b t c h w
         # b t c h w -> b t h w c
         video = ((video / 2.0 + 0.5).clamp(0, 1) * 255).to(dtype=torch.uint8).cpu().permute(0, 1, 3, 4, 2).contiguous()
