@@ -18,6 +18,7 @@ pydantic
 ray
 rich
 safetensors
+sentencepiece
 timm
 torch>=1.13
 tqdm

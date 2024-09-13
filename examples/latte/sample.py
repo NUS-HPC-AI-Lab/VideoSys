@@ -8,10 +8,12 @@ def run_base():
 
     prompt = "Sunset over the sea."
     # video size is fixed to 16 frames, 512x512.
+    # seed=-1 means random seed. >0 means fixed seed.
     video = engine.generate(
         prompt=prompt,
         guidance_scale=7.5,
         num_inference_steps=50,
+        seed=-1,
     ).video[0]
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 

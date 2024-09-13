@@ -683,6 +683,7 @@ class LattePipeline(VideoSysPipeline):
         negative_prompt: str = "",
         num_inference_steps: int = 50,
         guidance_scale: float = 7.5,
+        seed: int = -1,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
@@ -770,6 +771,7 @@ class LattePipeline(VideoSysPipeline):
         width = 512
         update_steps(num_inference_steps)
         self.check_inputs(prompt, height, width, negative_prompt, callback_steps, prompt_embeds, negative_prompt_embeds)
+        self._set_seed(seed)
 
         # 2. Default height and width to transformer
         if prompt is not None and isinstance(prompt, str):

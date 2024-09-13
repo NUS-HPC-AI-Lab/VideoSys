@@ -500,6 +500,7 @@ class CogVideoXPipeline(VideoSysPipeline):
         num_frames: int = 49,
         num_inference_steps: int = 50,
         timesteps: Optional[List[int]] = None,
+        seed: int = -1,
         guidance_scale: float = 6,
         use_dynamic_cfg: bool = False,
         num_videos_per_prompt: int = 1,
@@ -597,6 +598,7 @@ class CogVideoXPipeline(VideoSysPipeline):
                 "The number of frames must be less than 49 for now due to static positional embeddings. This will be updated in the future to remove this limitation."
             )
         update_steps(num_inference_steps)
+        self._set_seed(seed)
 
         if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
             callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs

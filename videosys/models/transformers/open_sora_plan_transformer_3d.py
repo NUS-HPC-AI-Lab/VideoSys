@@ -2379,12 +2379,11 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
         self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
 
-        for name, module in self.named_modules():
-            if "spatial_blocks" in name or "temporal_blocks" in name or name == "":
-                if hasattr(module, "_sequence_parallel"):
-                    module._sequence_parallel = self.parallel_manager.sp_group
-                if hasattr(module, "_cfg_parallel"):
-                    module._cfg_parallel = self.parallel_manager.cp_group
+        for _, module in self.named_modules():
+            if hasattr(module, "_sequence_parallel"):
+                module._sequence_parallel = self.parallel_manager.sp_group
+            if hasattr(module, "_cfg_parallel"):
+                module._cfg_parallel = self.parallel_manager.cp_group
 
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value

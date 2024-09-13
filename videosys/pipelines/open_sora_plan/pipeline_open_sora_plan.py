@@ -710,6 +710,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         guidance_scale: float = 7.5,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
+        seed: int = -1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -798,6 +799,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         num_frames = self._config.num_frames
         update_steps(num_inference_steps)
         self.check_inputs(prompt, height, width, negative_prompt, callback_steps, prompt_embeds, negative_prompt_embeds)
+        self._set_seed(seed)
 
         # 2. Default height and width to transformer
         if prompt is not None and isinstance(prompt, str):

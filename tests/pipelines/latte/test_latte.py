@@ -9,7 +9,7 @@ def test_base(num_gpus):
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
-    video = engine.generate(prompt).video[0]
+    video = engine.generate(prompt, seed=0).video[0]
     engine.save_video(video, f"./test_outputs/{prompt}_latte_{num_gpus}.mp4")
 
 
@@ -19,7 +19,7 @@ def test_pab(num_gpus):
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
-    video = engine.generate(prompt).video[0]
+    video = engine.generate(prompt, seed=0).video[0]
     engine.save_video(video, f"./test_outputs/{prompt}_latte_pab_{num_gpus}.mp4")
 
 
@@ -29,5 +29,5 @@ def test_low_mem(num_gpus):
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
-    video = engine.generate(prompt).video[0]
+    video = engine.generate(prompt, seed=0).video[0]
     engine.save_video(video, f"./test_outputs/{prompt}_latte_low_mem_{num_gpus}.mp4")
