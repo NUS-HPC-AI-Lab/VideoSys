@@ -278,7 +278,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             set_seed(seed, self.transformer.parallel_manager.dp_rank)
 
     def _set_parallel(
-        self, dp_size: Optional[int] = None, sp_size: Optional[int] = None, enable_cp: Optional[bool] = True
+        self, dp_size: Optional[int] = None, sp_size: Optional[int] = None, enable_cp: Optional[bool] = False
     ):
         # init sequence parallel
         if sp_size is None:
