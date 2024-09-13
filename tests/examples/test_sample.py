@@ -12,12 +12,19 @@ import examples.latte.sample as latte
 import examples.open_sora.sample as open_sora
 import examples.open_sora_plan.sample as open_sora_plan
 
+files = [cogvideox, latte, open_sora, open_sora_plan]
+members = []
 
-@pytest.mark.parametrize("file", [cogvideox, latte, open_sora, open_sora_plan])
-def test_examples(file):
-    funcs = inspect.getmembers(file, inspect.isfunction)
-    for name, func in funcs:
-        try:
-            func()
-        except Exception as e:
-            raise Exception(f"Failed to run {name} in {file.__file__}") from e
+for file in files:
+    for m in inspect.getmembers(file, inspect.isfunction):
+        members.append(m)
+print(members)
+
+
+@pytest.mark.parametrize("members", members)
+def test_examples(members):
+    name, func = members
+    try:
+        func()
+    except Exception as e:
+        raise Exception(f"Failed to run {name} in {file.__file__}") from e
