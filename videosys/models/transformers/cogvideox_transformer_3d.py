@@ -43,9 +43,6 @@ class CogVideoXAttnProcessor2_0:
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError("CogVideoXAttnProcessor requires PyTorch 2.0, to use it, please upgrade PyTorch to 2.0.")
 
-        # parallel
-        self._sequence_parallel = None
-
     def __call__(
         self,
         attn: Attention,
@@ -70,14 +67,14 @@ class CogVideoXAttnProcessor2_0:
         key = attn.to_k(hidden_states)
         value = attn.to_v(hidden_states)
 
-        if self._sequence_parallel:
-            sp_size = dist.get_world_size(self._sequence_parallel)
+        if attn._sequence_parallel:
+            sp_size = dist.get_world_size(attn._sequence_parallel)
             assert (
                 attn.heads % sp_size == 0
             ), f"Number of heads {attn.heads} must be divisible by sequence parallel size {sp_size}"
             attn_heads = attn.heads // sp_size
             query, key, value = map(
-                lambda x: all_to_all_comm(x, self._sequence_parallel, scatter_dim=2, gather_dim=1),
+                lambda x: all_to_all_comm(x, attn._sequence_parallel, scatter_dim=2, gather_dim=1),
                 [query, key, value],
             )
         else:
@@ -112,8 +109,8 @@ class CogVideoXAttnProcessor2_0:
 
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn_heads * head_dim)
 
-        if self._sequence_parallel:
-            hidden_states = all_to_all_comm(hidden_states, self._sequence_parallel, scatter_dim=1, gather_dim=2)
+        if attn._sequence_parallel:
+            hidden_states = all_to_all_comm(hidden_states, attn._sequence_parallel, scatter_dim=1, gather_dim=2)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -264,6 +261,9 @@ class CogVideoXBlock(nn.Module):
             out_bias=attention_out_bias,
             processor=CogVideoXAttnProcessor2_0(),
         )
+
+        # parallel
+        self.attn1._sequence_parallel = None
 
         # 2. Feed Forward
         self.norm2 = CogVideoXLayerNormZero(time_embed_dim, dim, norm_elementwise_affine, norm_eps, bias=True)
