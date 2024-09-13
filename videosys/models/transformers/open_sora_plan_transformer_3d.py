@@ -2482,7 +2482,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
             `tuple` where the first element is the sample tensor.
         """
         # 0. Split batch
-        if self._cfg_parallel > 1:
+        if self._cfg_parallel:
             (
                 hidden_states,
                 timestep,
@@ -2596,8 +2596,8 @@ class LatteT2V(ModelMixin, ConfigMixin):
             )
 
         if self._sequence_parallel:
-            set_pad("temporal", frame + use_image_num)
-            set_pad("spatial", num_patches)
+            set_pad("temporal", frame + use_image_num, self._sequence_parallel)
+            set_pad("spatial", num_patches, self._sequence_parallel)
             hidden_states = self.split_from_second_dim(hidden_states, input_batch_size)
             encoder_hidden_states_spatial = self.split_from_second_dim(encoder_hidden_states_spatial, input_batch_size)
             timestep_spatial = self.split_from_second_dim(timestep_spatial, input_batch_size)
@@ -2781,7 +2781,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
             output = rearrange(output, "(b f) c h w -> b c f h w", b=input_batch_size).contiguous()
 
         # 3. Gather batch for data parallelism
-        if self._cfg_parallel > 1:
+        if self._cfg_parallel:
             output = gather_sequence(output, self._cfg_parallel, dim=0)
 
         if not return_dict:

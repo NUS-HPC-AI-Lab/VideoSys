@@ -554,7 +554,7 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
         hidden_states = hidden_states[:, text_seq_length:]
 
         if self._sequence_parallel:
-            set_pad("pad", hidden_states.shape[1])
+            set_pad("pad", hidden_states.shape[1], self._sequence_parallel)
             hidden_states = split_sequence(hidden_states, self._sequence_parallel, dim=1, pad=get_pad("pad"))
 
         # 4. Transformer blocks

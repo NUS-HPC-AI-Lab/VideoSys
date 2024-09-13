@@ -1309,8 +1309,8 @@ class LatteT2V(ModelMixin, ConfigMixin):
         timestep_temp = repeat(timestep, "b d -> (b p) d", p=num_patches).contiguous()
 
         if self._sequence_parallel:
-            set_pad("temporal", frame + use_image_num)
-            set_pad("spatial", num_patches)
+            set_pad("temporal", frame + use_image_num, self._sequence_parallel)
+            set_pad("spatial", num_patches, self._sequence_parallel)
             hidden_states = self.split_from_second_dim(hidden_states, input_batch_size)
             encoder_hidden_states_spatial = self.split_from_second_dim(encoder_hidden_states_spatial, input_batch_size)
             timestep_spatial = self.split_from_second_dim(timestep_spatial, input_batch_size)
