@@ -3,6 +3,7 @@ from functools import partial
 from typing import Any, Optional
 
 import torch
+import torch.distributed as dist
 
 import videosys
 
@@ -21,9 +22,6 @@ class VideoSysEngine:
 
     def _init_worker(self, pipeline_cls):
         world_size = self.config.num_gpus
-
-        if "CUDA_VISIBLE_DEVICES" not in os.environ:
-            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(world_size))
 
         # Disable torch async compiling which won't work with daemonic processes
         os.environ["TORCHINDUCTOR_COMPILE_THREADS"] = "1"
@@ -124,7 +122,7 @@ class VideoSysEngine:
     def shutdown(self):
         if (worker_monitor := getattr(self, "worker_monitor", None)) is not None:
             worker_monitor.close()
-        torch.distributed.destroy_process_group()
+        dist.destroy_process_group()
 
     def __del__(self):
         self.shutdown()

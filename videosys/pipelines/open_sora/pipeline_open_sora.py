@@ -189,11 +189,8 @@ class OpenSoraPipeline(VideoSysPipeline):
     )  # noqa
 
     _optional_components = [
-        "tokenizer",
         "text_encoder",
-        "vae",
-        "transformer",
-        "scheduler",
+        "tokenizer",
     ]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
@@ -276,8 +273,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         return dict(y=caption_embs, mask=emb_masks)
 
     def null_embed(self, n):
-        device = self._execution_device
-        null_y = self.transformer.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None].to(device)
+        null_y = self.transformer.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None].to(self._execution_device)
         return null_y
 
     @staticmethod
