@@ -1,6 +1,9 @@
 from typing import List
 
 from setuptools import find_packages, setup
+from setuptools.command.develop import develop
+from setuptools.command.egg_info import egg_info
+from setuptools.command.install import install
 
 
 def fetch_requirements(path) -> List[str]:
@@ -14,7 +17,9 @@ def fetch_requirements(path) -> List[str]:
         The lines in the requirements file.
     """
     with open(path, "r") as fd:
-        return [r.strip() for r in fd.readlines()]
+        requirements = [r.strip() for r in fd.readlines()]
+        requirements.remove("colossalai")
+        return requirements
 
 
 def fetch_readme() -> str:
@@ -26,6 +31,28 @@ def fetch_readme() -> str:
     """
     with open("README.md", encoding="utf-8") as f:
         return f.read()
+
+
+def custom_install():
+    return ["pip", "install", "colossalai", "--no-deps"]
+
+
+class CustomInstallCommand(install):
+    def run(self):
+        install.run(self)
+        self.spawn(custom_install())
+
+
+class CustomDevelopCommand(develop):
+    def run(self):
+        develop.run(self)
+        self.spawn(custom_install())
+
+
+class CustomEggInfoCommand(egg_info):
+    def run(self):
+        egg_info.run(self)
+        self.spawn(custom_install())
 
 
 setup(
@@ -44,7 +71,12 @@ setup(
     long_description_content_type="text/markdown",
     license="Apache Software License 2.0",
     install_requires=fetch_requirements("requirements.txt"),
-    python_requires=">=3.6",
+    python_requires=">=3.7",
+    cmdclass={
+        "install": CustomInstallCommand,
+        "develop": CustomDevelopCommand,
+        "egg_info": CustomEggInfoCommand,
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
