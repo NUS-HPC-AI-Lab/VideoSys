@@ -4,7 +4,7 @@ from videosys import OpenSoraConfig, VideoSysEngine
 def run_base():
     # change num_gpus for multi-gpu inference
     # sampling parameters are defined in the config
-    config = OpenSoraConfig(num_sampling_steps=30, cfg_scale=7.0, num_gpus=1)
+    config = OpenSoraConfig(num_sampling_steps=30, cfg_scale=7.0, num_gpus=2)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."

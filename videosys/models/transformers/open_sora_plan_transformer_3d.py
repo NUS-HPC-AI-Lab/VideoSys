@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
@@ -46,15 +47,7 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import nn
 
-from videosys.core.comm import (
-    all_to_all_with_pad,
-    gather_sequence,
-    get_spatial_pad,
-    get_temporal_pad,
-    set_spatial_pad,
-    set_temporal_pad,
-    split_sequence,
-)
+from videosys.core.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
 from videosys.core.pab_mgr import (
     enable_pab,
     get_mlp_output,
@@ -64,12 +57,7 @@ from videosys.core.pab_mgr import (
     if_broadcast_temporal,
     save_mlp_output,
 )
-from videosys.core.parallel_mgr import (
-    enable_sequence_parallel,
-    get_cfg_parallel_group,
-    get_cfg_parallel_size,
-    get_sequence_parallel_group,
-)
+from videosys.core.parallel_mgr import ParallelManager
 from videosys.utils.logging import logger
 from videosys.utils.utils import batch_func
 
@@ -1550,6 +1538,9 @@ class BasicTransformerBlock_(nn.Module):
         self.block_idx = block_idx
         self.temp_mlp_count = 0
 
+        # parallel
+        self._sequence_parallel = None
+
     def set_last_out(self, last_out: torch.Tensor):
         self.last_out = last_out
 
@@ -1612,7 +1603,7 @@ class BasicTransformerBlock_(nn.Module):
             if self.pos_embed is not None:
                 norm_hidden_states = self.pos_embed(norm_hidden_states)
 
-            if enable_sequence_parallel():
+            if self._sequence_parallel:
                 norm_hidden_states = self.dynamic_switch(norm_hidden_states, to_spatial_shard=True)
 
             attn_output = self.attn1(
@@ -1625,7 +1616,7 @@ class BasicTransformerBlock_(nn.Module):
                 **cross_attention_kwargs,
             )
 
-            if enable_sequence_parallel():
+            if self._sequence_parallel:
                 attn_output = self.dynamic_switch(attn_output, to_spatial_shard=False)
 
             if self.use_ada_layer_norm_zero:
@@ -1737,15 +1728,15 @@ class BasicTransformerBlock_(nn.Module):
     def dynamic_switch(self, x, to_spatial_shard: bool):
         if to_spatial_shard:
             scatter_dim, gather_dim = 0, 1
-            scatter_pad = get_spatial_pad()
-            gather_pad = get_temporal_pad()
+            scatter_pad = get_pad("spatial")
+            gather_pad = get_pad("temporal")
         else:
             scatter_dim, gather_dim = 1, 0
-            scatter_pad = get_temporal_pad()
-            gather_pad = get_spatial_pad()
+            scatter_pad = get_pad("temporal")
+            gather_pad = get_pad("spatial")
         x = all_to_all_with_pad(
             x,
-            get_sequence_parallel_group(),
+            self._sequence_parallel,
             scatter_dim=scatter_dim,
             gather_dim=gather_dim,
             scatter_pad=scatter_pad,
@@ -2384,6 +2375,31 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
         self.gradient_checkpointing = False
 
+        # parallel
+        self.parallel_manager = None
+        self._sequence_parallel = None
+        self._cfg_parallel = None
+
+    def enable_parallel(self, dp_size, sp_size, enable_cp):
+        if dist.get_world_size() == 1:
+            return
+
+        # update cfg parallel
+        if enable_cp and sp_size % 2 == 0:
+            sp_size = sp_size // 2
+            cp_size = 2
+        else:
+            cp_size = 1
+
+        self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
+
+        for name, module in self.named_modules():
+            if "spatial_blocks" in name or "temporal_blocks" in name or name == "":
+                if hasattr(module, "_sequence_parallel"):
+                    module._sequence_parallel = self.parallel_manager.sp_group
+                if hasattr(module, "_cfg_parallel"):
+                    module._cfg_parallel = self.parallel_manager.cp_group
+
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value
 
@@ -2466,7 +2482,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
             `tuple` where the first element is the sample tensor.
         """
         # 0. Split batch
-        if get_cfg_parallel_size() > 1:
+        if self._cfg_parallel > 1:
             (
                 hidden_states,
                 timestep,
@@ -2475,7 +2491,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                 attention_mask,
                 encoder_attention_mask,
             ) = batch_func(
-                partial(split_sequence, process_group=get_cfg_parallel_group(), dim=0),
+                partial(split_sequence, process_group=self._cfg_parallel, dim=0),
                 hidden_states,
                 timestep,
                 encoder_hidden_states,
@@ -2579,16 +2595,16 @@ class LatteT2V(ModelMixin, ConfigMixin):
                 input_batch_size, frame, use_image_num, height, width, hidden_states.device
             )
 
-        if enable_sequence_parallel():
-            set_temporal_pad(frame + use_image_num)
-            set_spatial_pad(num_patches)
+        if self._sequence_parallel:
+            set_pad("temporal", frame + use_image_num)
+            set_pad("spatial", num_patches)
             hidden_states = self.split_from_second_dim(hidden_states, input_batch_size)
             encoder_hidden_states_spatial = self.split_from_second_dim(encoder_hidden_states_spatial, input_batch_size)
             timestep_spatial = self.split_from_second_dim(timestep_spatial, input_batch_size)
             attention_mask = self.split_from_second_dim(attention_mask, input_batch_size)
             attention_mask_compress = self.split_from_second_dim(attention_mask_compress, input_batch_size)
             temp_pos_embed = split_sequence(
-                self.temp_pos_embed, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad()
+                self.temp_pos_embed, self._sequence_parallel, dim=1, grad_scale="down", pad=get_pad("temporal")
             )
         else:
             temp_pos_embed = self.temp_pos_embed
@@ -2733,7 +2749,7 @@ class LatteT2V(ModelMixin, ConfigMixin):
                             hidden_states, "(b t) f d -> (b f) t d", b=input_batch_size
                         ).contiguous()
 
-        if enable_sequence_parallel():
+        if self._sequence_parallel:
             hidden_states = self.gather_from_second_dim(hidden_states, input_batch_size)
 
         if self.is_input_patches:
@@ -2765,8 +2781,8 @@ class LatteT2V(ModelMixin, ConfigMixin):
             output = rearrange(output, "(b f) c h w -> b c f h w", b=input_batch_size).contiguous()
 
         # 3. Gather batch for data parallelism
-        if get_cfg_parallel_size() > 1:
-            output = gather_sequence(output, get_cfg_parallel_group(), dim=0)
+        if self._cfg_parallel > 1:
+            output = gather_sequence(output, self._cfg_parallel, dim=0)
 
         if not return_dict:
             return (output,)
@@ -2789,13 +2805,13 @@ class LatteT2V(ModelMixin, ConfigMixin):
 
     def split_from_second_dim(self, x, batch_size):
         x = x.view(batch_size, -1, *x.shape[1:])
-        x = split_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad())
+        x = split_sequence(x, self._sequence_parallel, dim=1, grad_scale="down", pad=get_pad("temporal"))
         x = x.reshape(-1, *x.shape[2:])
         return x
 
     def gather_from_second_dim(self, x, batch_size):
         x = x.view(batch_size, -1, *x.shape[1:])
-        x = gather_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="up", pad=get_temporal_pad())
+        x = gather_sequence(x, self._sequence_parallel, dim=1, grad_scale="up", pad=get_pad("temporal"))
         x = x.reshape(-1, *x.shape[2:])
         return x
 
