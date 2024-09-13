@@ -20,6 +20,15 @@ def run_base():
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
+def run_low_mem():
+    config = OpenSoraConfig(cpu_offload=True, tiling_size=1)
+    engine = VideoSysEngine(config)
+
+    prompt = "Sunset over the sea."
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
+
+
 def run_pab():
     config = OpenSoraConfig(enable_pab=True)
     engine = VideoSysEngine(config)
@@ -31,4 +40,5 @@ def run_pab():
 
 if __name__ == "__main__":
     run_base()
+    # run_low_mem()
     # run_pab()

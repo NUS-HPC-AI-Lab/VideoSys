@@ -169,7 +169,8 @@ class OpenSoraPlanConfig:
         num_frames: int = 65,
         # ======= distributed ========
         num_gpus: int = 1,
-        # ======= vae =======
+        # ======= memory =======
+        cpu_offload: bool = False,
         enable_tiling: bool = True,
         tile_overlap_factor: float = 0.25,
         # ======= pab ========
@@ -185,7 +186,8 @@ class OpenSoraPlanConfig:
         self.version = f"{num_frames}x512x512"
         # ======= distributed ========
         self.num_gpus = num_gpus
-        # ======= vae ========
+        # ======= memory ========
+        self.cpu_offload = cpu_offload
         self.enable_tiling = enable_tiling
         self.tile_overlap_factor = tile_overlap_factor
         # ======= pab ========
@@ -256,7 +258,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         transformer.force_images = False
 
         # set eval and device
-        self.set_eval_and_device(device, text_encoder, vae, transformer)
+        self.set_eval_and_device(device, vae, transformer)
 
         # pab
         if config.enable_pab:
@@ -265,6 +267,12 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
+
+        # cpu offload
+        if config.cpu_offload:
+            self.enable_model_cpu_offload()
+        else:
+            self.set_eval_and_device(device, text_encoder)
 
         # self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
@@ -345,7 +353,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         embeds_initially_provided = prompt_embeds is not None and negative_prompt_embeds is not None
 
         if device is None:
-            device = self.text_encoder.device or self._execution_device
+            device = self._execution_device
 
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
@@ -799,7 +807,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         else:
             batch_size = prompt_embeds.shape[0]
 
-        device = self.text_encoder.device or self._execution_device
+        device = self._execution_device
 
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`

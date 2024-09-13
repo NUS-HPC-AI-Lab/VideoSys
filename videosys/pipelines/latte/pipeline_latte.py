@@ -138,6 +138,8 @@ class LatteConfig:
         beta_end: float = 0.02,
         beta_schedule: str = "linear",
         variance_type: str = "learned_range",
+        # ======= memory =======
+        cpu_offload: bool = False,
         # ======= pab ========
         enable_pab: bool = False,
         pab_config: PABConfig = LattePABConfig(),
@@ -148,6 +150,8 @@ class LatteConfig:
         self.num_gpus = num_gpus
         # ======= vae ========
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
+        # ======= memory ========
+        self.cpu_offload = cpu_offload
         # ======= scheduler ========
         self.beta_start = beta_start
         self.beta_end = beta_end
@@ -235,11 +239,17 @@ class LattePipeline(VideoSysPipeline):
             set_pab_manager(config.pab_config)
 
         # set eval and device
-        self.set_eval_and_device(device, text_encoder, vae, transformer)
+        self.set_eval_and_device(device, vae, transformer)
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
+
+        # cpu offload
+        if config.cpu_offload:
+            self.enable_model_cpu_offload()
+        else:
+            self.set_eval_and_device(device, text_encoder)
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
@@ -769,7 +779,7 @@ class LattePipeline(VideoSysPipeline):
         else:
             batch_size = prompt_embeds.shape[0]
 
-        device = self.text_encoder.device or self._execution_device
+        device = self._execution_device
 
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
