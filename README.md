@@ -4,7 +4,8 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
-<p align="center">| <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#installation">Quick Start</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#usage">Supported Models</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#acceleration-techniques">Accelerations</a> | <a href="https://discord.gg/WhPmYm9FeG">Discord</a> | <a href="https://oahzxl.notion.site/VideoSys-News-42391db7e0a44f96a1f0c341450ae472?pvs=4">Media</a> |</p>
+<p align="center">| <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#installation">Quick Start</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#usage">Supported Models</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#acceleration-techniques">Accelerations</a> | <a href="https://discord.gg/WhPmYm9FeG">Discord</a> | <a href="https://oahzxl.notion.site/VideoSys-News-42391db7e0a44f96a1f0c341450ae472?pvs=4">Media</a> |
+</p>
 
 ### Latest News 🔥
 - [2024/08] 🔥 Evole from [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0) to <b>VideoSys: An easy and efficient system for video generation.</b>
