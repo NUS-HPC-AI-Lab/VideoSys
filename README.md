@@ -4,6 +4,8 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
+<p align="center">| <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#installation">[Quick Start]</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#usage">[Supported Models]</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#acceleration-techniques">[Accelerations]</a> | <a href="https://discord.gg/WhPmYm9FeG">[Discord]</a> |</p>
+</p>
 </p>
 
 ### Latest News 🔥
