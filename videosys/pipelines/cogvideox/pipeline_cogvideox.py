@@ -13,6 +13,7 @@ import math
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.video_processor import VideoProcessor
@@ -26,7 +27,7 @@ from videosys.models.transformers.cogvideox_transformer_3d import CogVideoXTrans
 from videosys.schedulers.scheduling_ddim_cogvideox import CogVideoXDDIMScheduler
 from videosys.schedulers.scheduling_dpm_cogvideox import CogVideoXDPMScheduler
 from videosys.utils.logging import logger
-from videosys.utils.utils import save_video
+from videosys.utils.utils import save_video, set_seed
 
 
 class CogVideoXPABConfig(PABConfig):
@@ -186,6 +187,31 @@ class CogVideoXPipeline(VideoSysPipeline):
             self.vae.config.temporal_compression_ratio if hasattr(self, "vae") and self.vae is not None else 4
         )
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
+
+        # parallel
+        self._set_parallel()
+
+    def _set_seed(self, seed):
+        if dist.get_world_size() == 1:
+            set_seed(seed)
+        else:
+            set_seed(seed, self.transformer.parallel_manager.dp_rank)
+
+    def _set_parallel(
+        self, dp_size: Optional[int] = None, sp_size: Optional[int] = None, enable_cp: Optional[bool] = False
+    ):
+        # init sequence parallel
+        if sp_size is None:
+            sp_size = dist.get_world_size()
+            dp_size = 1
+        else:
+            assert (
+                dist.get_world_size() % sp_size == 0
+            ), f"world_size {dist.get_world_size()} must be divisible by sp_size"
+            dp_size = dist.get_world_size() // sp_size
+
+        # transformer parallel
+        self.transformer.enable_parallel(dp_size, sp_size, enable_cp)
 
     def _get_t5_prompt_embeds(
         self,
@@ -474,6 +500,7 @@ class CogVideoXPipeline(VideoSysPipeline):
         num_frames: int = 49,
         num_inference_steps: int = 50,
         timesteps: Optional[List[int]] = None,
+        seed: int = -1,
         guidance_scale: float = 6,
         use_dynamic_cfg: bool = False,
         num_videos_per_prompt: int = 1,
@@ -571,6 +598,7 @@ class CogVideoXPipeline(VideoSysPipeline):
                 "The number of frames must be less than 49 for now due to static positional embeddings. This will be updated in the future to remove this limitation."
             )
         update_steps(num_inference_steps)
+        self._set_seed(seed)
 
         if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
             callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs

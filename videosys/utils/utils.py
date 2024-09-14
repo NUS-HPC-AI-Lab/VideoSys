@@ -16,7 +16,17 @@ def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
         p.requires_grad = flag
 
 
-def set_seed(seed):
+def set_seed(seed, dp_rank=None):
+    if seed == -1:
+        seed = random.randint(0, 1000000)
+
+    if dp_rank is not None:
+        seed = torch.tensor(seed, dtype=torch.int64).cuda()
+        if dist.get_world_size() > 1:
+            dist.broadcast(seed, 0)
+        seed = seed + dp_rank
+
+    seed = int(seed)
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)

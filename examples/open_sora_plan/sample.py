@@ -8,10 +8,12 @@ def run_base():
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
+    # seed=-1 means random seed. >0 means fixed seed.
     video = engine.generate(
         prompt=prompt,
         guidance_scale=7.5,
         num_inference_steps=150,
+        seed=-1,
     ).video[0]
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 

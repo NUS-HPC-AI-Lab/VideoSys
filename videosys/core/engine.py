@@ -66,7 +66,7 @@ class VideoSysEngine:
 
     # TODO: add more options here for pipeline, or wrap all options into config
     def _create_pipeline(self, pipeline_cls, rank=0, local_rank=0, distributed_init_method=None):
-        videosys.initialize(rank=rank, world_size=self.config.num_gpus, init_method=distributed_init_method, seed=42)
+        videosys.initialize(rank=rank, world_size=self.config.num_gpus, init_method=distributed_init_method)
 
         pipeline = pipeline_cls(self.config)
         return pipeline

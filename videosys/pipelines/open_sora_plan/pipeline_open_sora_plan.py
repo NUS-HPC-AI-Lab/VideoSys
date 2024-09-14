@@ -27,7 +27,7 @@ from transformers import T5EncoderModel, T5Tokenizer
 from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.utils.logging import logger
-from videosys.utils.utils import save_video
+from videosys.utils.utils import save_video, set_seed
 
 from ...models.autoencoders.autoencoder_kl_open_sora_plan import ae_stride_config, getae_wrapper
 from ...models.transformers.open_sora_plan_transformer_3d import LatteT2V
@@ -275,6 +275,31 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
             self.set_eval_and_device(device, text_encoder)
 
         # self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
+
+        # parallel
+        self._set_parallel()
+
+    def _set_seed(self, seed):
+        if dist.get_world_size() == 1:
+            set_seed(seed)
+        else:
+            set_seed(seed, self.transformer.parallel_manager.dp_rank)
+
+    def _set_parallel(
+        self, dp_size: Optional[int] = None, sp_size: Optional[int] = None, enable_cp: Optional[bool] = False
+    ):
+        # init sequence parallel
+        if sp_size is None:
+            sp_size = dist.get_world_size()
+            dp_size = 1
+        else:
+            assert (
+                dist.get_world_size() % sp_size == 0
+            ), f"world_size {dist.get_world_size()} must be divisible by sp_size"
+            dp_size = dist.get_world_size() // sp_size
+
+        # transformer parallel
+        self.transformer.enable_parallel(dp_size, sp_size, enable_cp)
 
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
@@ -685,6 +710,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         guidance_scale: float = 7.5,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
+        seed: int = -1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -773,6 +799,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         num_frames = self._config.num_frames
         update_steps(num_inference_steps)
         self.check_inputs(prompt, height, width, negative_prompt, callback_steps, prompt_embeds, negative_prompt_embeds)
+        self._set_seed(seed)
 
         # 2. Default height and width to transformer
         if prompt is not None and isinstance(prompt, str):

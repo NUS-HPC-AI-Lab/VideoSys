@@ -20,15 +20,7 @@ from timm.models.vision_transformer import Mlp
 from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 from transformers import PretrainedConfig, PreTrainedModel
 
-from videosys.core.comm import (
-    all_to_all_with_pad,
-    gather_sequence,
-    get_spatial_pad,
-    get_temporal_pad,
-    set_spatial_pad,
-    set_temporal_pad,
-    split_sequence,
-)
+from videosys.core.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
 from videosys.core.pab_mgr import (
     enable_pab,
     get_mlp_output,
@@ -38,12 +30,7 @@ from videosys.core.pab_mgr import (
     if_broadcast_temporal,
     save_mlp_output,
 )
-from videosys.core.parallel_mgr import (
-    enable_sequence_parallel,
-    get_cfg_parallel_size,
-    get_data_parallel_group,
-    get_sequence_parallel_group,
-)
+from videosys.core.parallel_mgr import ParallelManager
 from videosys.models.modules.activations import approx_gelu
 from videosys.models.modules.attentions import OpenSoraAttention, OpenSoraMultiHeadCrossAttention
 from videosys.models.modules.embeddings import (
@@ -143,6 +130,9 @@ class STDiT3Block(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
+        # parallel
+        self.parallel_manager: ParallelManager = None
+
         # pab
         self.block_idx = block_idx
         self.attn_count = 0
@@ -203,12 +193,12 @@ class STDiT3Block(nn.Module):
 
             # attention
             if self.temporal:
-                if enable_sequence_parallel():
+                if self.parallel_manager.sp_size > 1:
                     x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True)
                 x_m = rearrange(x_m, "B (T S) C -> (B S) T C", T=T, S=S)
                 x_m = self.attn(x_m)
                 x_m = rearrange(x_m, "(B S) T C -> B (T S) C", T=T, S=S)
-                if enable_sequence_parallel():
+                if self.parallel_manager.sp_size > 1:
                     x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False)
             else:
                 x_m = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
@@ -287,17 +277,17 @@ class STDiT3Block(nn.Module):
     def dynamic_switch(self, x, s, t, to_spatial_shard: bool):
         if to_spatial_shard:
             scatter_dim, gather_dim = 2, 1
-            scatter_pad = get_spatial_pad()
-            gather_pad = get_temporal_pad()
+            scatter_pad = get_pad("spatial")
+            gather_pad = get_pad("temporal")
         else:
             scatter_dim, gather_dim = 1, 2
-            scatter_pad = get_temporal_pad()
-            gather_pad = get_spatial_pad()
+            scatter_pad = get_pad("temporal")
+            gather_pad = get_pad("spatial")
 
         x = rearrange(x, "b (t s) d -> b t s d", t=t, s=s)
         x = all_to_all_with_pad(
             x,
-            get_sequence_parallel_group(),
+            self.parallel_manager.sp_group,
             scatter_dim=scatter_dim,
             gather_dim=gather_dim,
             scatter_pad=scatter_pad,
@@ -449,6 +439,24 @@ class STDiT3(PreTrainedModel):
             for param in self.y_embedder.parameters():
                 param.requires_grad = False
 
+        # parallel
+        self.parallel_manager: ParallelManager = None
+
+    def enable_parallel(self, dp_size, sp_size, enable_cp):
+        # update cfg parallel
+        if enable_cp and sp_size % 2 == 0:
+            sp_size = sp_size // 2
+            cp_size = 2
+        else:
+            cp_size = 1
+
+        self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
+
+        for name, module in self.named_modules():
+            if "spatial_blocks" in name or "temporal_blocks" in name:
+                if hasattr(module, "parallel_manager"):
+                    module.parallel_manager = self.parallel_manager
+
     def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):
@@ -501,9 +509,14 @@ class STDiT3(PreTrainedModel):
         self, x, timestep, all_timesteps, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
     ):
         # === Split batch ===
-        if get_cfg_parallel_size() > 1:
+        if self.parallel_manager.cp_size > 1:
             x, timestep, y, x_mask, mask = batch_func(
-                partial(split_sequence, process_group=get_data_parallel_group(), dim=0), x, timestep, y, x_mask, mask
+                partial(split_sequence, process_group=self.parallel_manager.cp_group, dim=0),
+                x,
+                timestep,
+                y,
+                x_mask,
+                mask,
             )
 
         dtype = self.x_embedder.proj.weight.dtype
@@ -547,14 +560,14 @@ class STDiT3(PreTrainedModel):
         x = x + pos_emb
 
         # shard over the sequence dim if sp is enabled
-        if enable_sequence_parallel():
-            set_temporal_pad(T)
-            set_spatial_pad(S)
-            x = split_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad())
+        if self.parallel_manager.sp_size > 1:
+            set_pad("temporal", T, self.parallel_manager.sp_group)
+            set_pad("spatial", S, self.parallel_manager.sp_group)
+            x = split_sequence(x, self.parallel_manager.sp_group, dim=1, grad_scale="down", pad=get_pad("temporal"))
             T = x.shape[1]
             x_mask_org = x_mask
             x_mask = split_sequence(
-                x_mask, get_sequence_parallel_group(), dim=1, grad_scale="down", pad=get_temporal_pad()
+                x_mask, self.parallel_manager.sp_group, dim=1, grad_scale="down", pad=get_pad("temporal")
             )
 
         x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
@@ -589,9 +602,9 @@ class STDiT3(PreTrainedModel):
                 all_timesteps=all_timesteps,
             )
 
-        if enable_sequence_parallel():
+        if self.parallel_manager.sp_size > 1:
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
-            x = gather_sequence(x, get_sequence_parallel_group(), dim=1, grad_scale="up", pad=get_temporal_pad())
+            x = gather_sequence(x, self.parallel_manager.sp_group, dim=1, grad_scale="up", pad=get_pad("temporal"))
             T, S = x.shape[1], x.shape[2]
             x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
             x_mask = x_mask_org
@@ -604,8 +617,8 @@ class STDiT3(PreTrainedModel):
         x = x.to(torch.float32)
 
         # === Gather Output ===
-        if get_cfg_parallel_size() > 1:
-            x = gather_sequence(x, get_data_parallel_group(), dim=0)
+        if self.parallel_manager.cp_size > 1:
+            x = gather_sequence(x, self.parallel_manager.cp_group, dim=0)
 
         return x
 

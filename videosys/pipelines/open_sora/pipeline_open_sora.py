@@ -2,10 +2,13 @@ import html
 import json
 import os
 import re
+import urllib.parse as ul
 from typing import Optional, Tuple, Union
 
 import ftfy
 import torch
+import torch.distributed as dist
+from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL
 from transformers import AutoTokenizer, T5EncoderModel
 
@@ -14,7 +17,7 @@ from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
-from videosys.utils.utils import save_video
+from videosys.utils.utils import save_video, set_seed
 
 from .data_process import get_image_size, get_num_frames, prepare_multi_resolution_info, read_from_path
 
@@ -247,6 +250,31 @@ class OpenSoraPipeline(VideoSysPipeline):
         else:
             self.set_eval_and_device(self._device, text_encoder)
 
+        # parallel
+        self._set_parallel()
+
+    def _set_seed(self, seed):
+        if dist.get_world_size() == 1:
+            set_seed(seed)
+        else:
+            set_seed(seed, self.transformer.parallel_manager.dp_rank)
+
+    def _set_parallel(
+        self, dp_size: Optional[int] = None, sp_size: Optional[int] = None, enable_cp: Optional[bool] = False
+    ):
+        # init sequence parallel
+        if sp_size is None:
+            sp_size = dist.get_world_size()
+            dp_size = 1
+        else:
+            assert (
+                dist.get_world_size() % sp_size == 0
+            ), f"world_size {dist.get_world_size()} must be divisible by sp_size"
+            dp_size = dist.get_world_size() // sp_size
+
+        # transformer parallel
+        self.transformer.enable_parallel(dp_size, sp_size, enable_cp)
+
     def get_text_embeddings(self, texts):
         text_tokens_and_mask = self.tokenizer(
             texts,
@@ -283,10 +311,6 @@ class OpenSoraPipeline(VideoSysPipeline):
         return text.strip()
 
     def _clean_caption(self, caption):
-        import urllib.parse as ul
-
-        from bs4 import BeautifulSoup
-
         caption = str(caption)
         caption = ul.unquote_plus(caption)
         caption = caption.strip().lower()
@@ -418,6 +442,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         loop: int = 1,
         llm_refine: bool = False,
         negative_prompt: str = "",
+        seed: int = -1,
         ms: Optional[str] = "",
         refs: Optional[str] = "",
         aes: float = 6.5,
@@ -460,10 +485,6 @@ class OpenSoraPipeline(VideoSysPipeline):
                 usually at the expense of lower image quality.
             num_images_per_prompt (`int`, *optional*, defaults to 1):
                 The number of images to generate per prompt.
-            height (`int`, *optional*, defaults to self.unet.config.sample_size):
-                The height in pixels of the generated image.
-            width (`int`, *optional*, defaults to self.unet.config.sample_size):
-                The width in pixels of the generated image.
             eta (`float`, *optional*, defaults to 0.0):
                 Corresponds to parameter eta (η) in the DDIM paper: https://arxiv.org/abs/2010.02502. Only applies to
                 [`schedulers.DDIMScheduler`], will be ignored for others.
@@ -508,6 +529,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         fps = 24
         image_size = get_image_size(resolution, aspect_ratio)
         num_frames = get_num_frames(num_frames)
+        self._set_seed(seed)
 
         # == prepare batch prompts ==
         batch_prompts = [prompt]
