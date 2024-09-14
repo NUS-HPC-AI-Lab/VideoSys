@@ -4,7 +4,7 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
-<p align="center">| <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#installation">Quick Start</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#usage">Supported Models</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#acceleration-techniques">Accelerations</a> | <a href="https://discord.gg/WhPmYm9FeG">Discord</a> | <a href="https://oahzxl.notion.site/VideoSys-News-42391db7e0a44f96a1f0c341450ae472?pvs=4">Media</a> |</p>
+<p align="center">| <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#installation">Quick Start</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#usage">Supported Models</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#acceleration-techniques">Accelerations</a> | <a href="https://discord.gg/WhPmYm9FeG" target="_blank">Discord</a> | <a href="https://oahzxl.notion.site/VideoSys-News-42391db7e0a44f96a1f0c341450ae472?pvs=4" target="_blank">Media</a> |</p>
 
 ### Latest News 🔥
 - [2024/08] 🔥 Evole from [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0) to <b>VideoSys: An easy and efficient system for video generation.</b>
@@ -60,40 +60,40 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <th rowspan="2">Usage</th>
     </tr>
     <tr>
-        <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc">DSP</a></th>
-        <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc">PAB</a></th>
+        <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc" target="_blank">DSP</a></th>
+        <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc" target="_blank">PAB</a></th>
     </tr>
     <tr>
-        <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
+        <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora" target="_blank">source</a>]</td>
         <td align="center">🟡</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/open_sora/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/open_sora/sample.py" target="_blank">Code</a></td>
     </tr>
     <tr>
-        <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
+        <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan" target="_blank">source</a>]</td>
         <td align="center">/</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/open_sora_plan/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/open_sora_plan/sample.py" target="_blank">Code</a></td>
     </tr>
     <tr>
-        <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
+        <td>Latte [<a href="https://github.com/Vchitect/Latte" target="_blank">source</a>]</td>
         <td align="center">/</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/latte/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/latte/sample.py" target="_blank">Code</a></td>
     </tr>
     <tr>
-        <td>CogVideoX [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
+        <td>CogVideoX [<a href="https://github.com/THUDM/CogVideo" target="_blank">source</a>]</td>
         <td align="center">/</td>
         <td align="center">✅</td>
         <td align="center">/</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/cogvideox/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/cogvideox/sample.py" target="_blank">Code</a></td>
     </tr>
 </table>
 
