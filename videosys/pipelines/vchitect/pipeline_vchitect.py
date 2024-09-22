@@ -16,28 +16,14 @@ import torch
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models.autoencoders import AutoencoderKL
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
-from diffusers.utils import replace_example_docstring
 from diffusers.utils.torch_utils import randn_tensor
-from transformers import CLIPTokenizer, PretrainedConfig, T5TokenizerFast
+from torch.amp import autocast
+from tqdm import tqdm
+from transformers import CLIPTextModelWithProjection, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
+from videosys.core.pipeline import VideoSysPipeline
 from videosys.models.transformers.vchitect_transformer_3d import VchitectXLTransformerModel
 from videosys.utils.logging import logger
-
-EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import VchitectXLPipeline
-
-        >>> pipe = VchitectXLPipeline.from_pretrained(
-        ...     "stabilityai/stable-diffusion-3-medium-diffusers", torch_dtype=torch.float16
-        ... )
-        >>> pipe.to("cuda")
-        >>> prompt = "A cat holding a sign that says hello world"
-        >>> image = pipe(prompt).images[0]
-        >>> image.save("sd3.png")
-        ```
-"""
 
 
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
@@ -100,37 +86,87 @@ def retrieve_timesteps(
     return timesteps, num_inference_steps
 
 
-def load_text_encoders(load_path, class_one, class_two, class_three, precision="fp16"):
-    text_encoder_one = class_one.from_pretrained(load_path, subfolder="text_encoder", revision=None, variant=precision)
-    text_encoder_two = class_two.from_pretrained(
-        load_path, subfolder="text_encoder_2", revision=None, variant=precision
-    )
-    text_encoder_three = class_three.from_pretrained(
-        load_path, subfolder="text_encoder_3", revision=None, variant=precision
-    )
-    return text_encoder_one, text_encoder_two, text_encoder_three
+class VchitectConfig:
+    """
+    This config is to instantiate a `OpenSoraPlanPipeline` class for video generation.
+
+    To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
+    In the engine, it will be used to instantiate the corresponding pipeline class.
+    And the engine will call the `generate` function of the pipeline to generate the video.
+    If you want to explore the detail of generation, please refer to the pipeline class below.
+
+    Args:
+        transformer (str):
+            The transformer model to use. Defaults to "LanguageBind/Open-Sora-Plan-v1.1.0".
+        ae (str):
+            The Autoencoder model to use. Defaults to "CausalVAEModel_4x8x8".
+        text_encoder (str):
+            The text encoder model to use. Defaults to "DeepFloyd/t5-v1_1-xxl".
+        num_frames (int):
+            The number of frames to generate. Must be one of [65, 221].
+        num_gpus (int):
+            The number of GPUs to use. Defaults to 1.
+        enable_tiling (bool):
+            Whether to enable tiling. Defaults to True.
+        tile_overlap_factor (float):
+            The overlap factor for tiling. Defaults to 0.25.
+        enable_pab (bool):
+            Whether to enable Pyramid Attention Broadcast. Defaults to False.
+        pab_config (CogVideoXPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `LattePABConfig()`.
+
+    Examples:
+        ```python
+        from videosys import OpenSoraPlanConfig, VideoSysEngine
+
+        # num frames: 65 or 221
+        # change num_gpus for multi-gpu inference
+        config = OpenSoraPlanConfig(num_frames=65, num_gpus=1)
+        engine = VideoSysEngine(config)
+
+        prompt = "Sunset over the sea."
+        video = engine.generate(
+            prompt=prompt,
+            guidance_scale=7.5,
+            num_inference_steps=150,
+        ).video[0]
+        engine.save_video(video, f"./outputs/{prompt}.mp4")
+        ```
+    """
+
+    def __init__(
+        self,
+        transformer: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
+        ae: str = "CausalVAEModel_4x8x8",
+        text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
+        num_frames: int = 65,
+        # ======= distributed ========
+        num_gpus: int = 1,
+        # ======= memory =======
+        cpu_offload: bool = False,
+        enable_tiling: bool = True,
+        tile_overlap_factor: float = 0.25,
+        # ======= pab ========
+        enable_pab: bool = False,
+    ):
+        self.ae = ae
+        self.text_encoder = text_encoder
+        self.transformer = transformer
+        assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
+        self.num_frames = num_frames
+        self.version = f"{num_frames}x512x512"
+        # ======= distributed ========
+        self.num_gpus = num_gpus
+        # ======= memory ========
+        self.cpu_offload = cpu_offload
+        self.enable_tiling = enable_tiling
+        self.tile_overlap_factor = tile_overlap_factor
+        # ======= pab ========
+        self.enable_pab = enable_pab
+        # self.pab_config = pab_config
 
 
-def import_model_class_from_model_name_or_path(
-    pretrained_model_name_or_path: str, revision: str, subfolder: str = "text_encoder"
-):
-    text_encoder_config = PretrainedConfig.from_pretrained(
-        pretrained_model_name_or_path, subfolder=subfolder, revision=revision
-    )
-    model_class = text_encoder_config.architectures[0]
-    if model_class == "CLIPTextModelWithProjection":
-        from transformers import CLIPTextModelWithProjection
-
-        return CLIPTextModelWithProjection
-    elif model_class == "T5EncoderModel":
-        from transformers import T5EncoderModel
-
-        return T5EncoderModel
-    else:
-        raise ValueError(f"{model_class} is not supported.")
-
-
-class VchitectXLPipeline:
+class VchitectXLPipeline(VideoSysPipeline):
     r"""
     Args:
         transformer ([`VchitectXLTransformerModel`]):
@@ -170,57 +206,48 @@ class VchitectXLPipeline:
 
     def __init__(
         self,
-        load_path=None,
-        device=None,
+        config: VchitectConfig,
+        model_path="Vchitect/Vchitect-2.0-2B",
+        device="cuda",
+        dtype=torch.bfloat16,
     ):
         super().__init__()
+        self._config = config
 
-        # Load the tokenizers
-        self.tokenizer = CLIPTokenizer.from_pretrained(
-            load_path,
-            subfolder="tokenizer",
-            revision=None,
+        self.text_encoder = CLIPTextModelWithProjection.from_pretrained(
+            model_path, subfolder="text_encoder", torch_dtype=dtype
         )
-        self.tokenizer_2 = CLIPTokenizer.from_pretrained(
-            load_path,
-            subfolder="tokenizer_2",
-            revision=None,
+        self.text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(
+            model_path, subfolder="text_encoder_2", torch_dtype=dtype
         )
-        self.tokenizer_3 = T5TokenizerFast.from_pretrained(
-            load_path,
-            subfolder="tokenizer_3",
-            revision=None,
-        )
+        self.text_encoder_3 = T5EncoderModel.from_pretrained(model_path, subfolder="text_encoder_3", torch_dtype=dtype)
 
-        # import correct text encoder classes
-        text_encoder_cls_one = import_model_class_from_model_name_or_path(load_path, None)
-        text_encoder_cls_two = import_model_class_from_model_name_or_path(load_path, None, subfolder="text_encoder_2")
-        text_encoder_cls_three = import_model_class_from_model_name_or_path(load_path, None, subfolder="text_encoder_3")
-        # Load scheduler and models
-        self.text_encoder, self.text_encoder_2, self.text_encoder_3 = load_text_encoders(
-            load_path, text_encoder_cls_one, text_encoder_cls_two, text_encoder_cls_three, None
-        )
-        self.text_encoder, self.text_encoder_2, self.text_encoder_3 = (
-            self.text_encoder.to(device),
-            self.text_encoder_2.to(device),
-            self.text_encoder_3.to(device),
-        )
+        self.tokenizer = CLIPTokenizer.from_pretrained(model_path, subfolder="tokenizer")
+        self.tokenizer_2 = CLIPTokenizer.from_pretrained(model_path, subfolder="tokenizer_2")
+        self.tokenizer_3 = T5TokenizerFast.from_pretrained(model_path, subfolder="tokenizer_3")
 
-        self.vae = AutoencoderKL.from_pretrained(
-            load_path,
-            subfolder="vae",
-            revision=None,
-            variant=None,
-        ).to(device)
+        self.vae = AutoencoderKL.from_pretrained(model_path, subfolder="vae", torch_dtype=dtype)
 
-        # self.transformer = VchitectXLTransformerModel.from_pretrained_temporal(load_path,torch_dtype=torch.bfloat16,logger=None,subfolder="transformer").to(device)
         self.transformer = VchitectXLTransformerModel.from_pretrained(
-            load_path, torch_dtype=torch.bfloat16, subfolder="transformer"
-        ).to(device)
-        self.transformer.eval()
+            model_path, subfolder="transformer", torch_dtype=dtype
+        )
 
-        self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(load_path, subfolder="scheduler")
+        self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(model_path, subfolder="scheduler")
 
+        self.set_eval_and_device(
+            device, self.text_encoder, self.text_encoder_2, self.text_encoder_3, self.transformer, self.vae
+        )
+        self.register_modules(
+            tokenizer=self.tokenizer,
+            tokenizer_2=self.tokenizer_2,
+            tokenizer_3=self.tokenizer_3,
+            text_encoder=self.text_encoder,
+            text_encoder_2=self.text_encoder_2,
+            text_encoder_3=self.text_encoder_3,
+            vae=self.vae,
+            transformer=self.transformer,
+            scheduler=self.scheduler,
+        )
         self.execution_device = "cuda"
 
         self.vae_scale_factor = (
@@ -654,7 +681,7 @@ class VchitectXLPipeline:
         return self._interrupt
 
     @torch.no_grad()
-    @replace_example_docstring(EXAMPLE_DOC_STRING)
+    @autocast("cuda", dtype=torch.bfloat16)
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
@@ -857,9 +884,7 @@ class VchitectXLPipeline:
 
         # 6. Denoising loop
         # with self.progress_bar(total=num_inference_steps) as progress_bar:
-        from tqdm import tqdm
-
-        for i, t in tqdm(enumerate(timesteps)):
+        for i, t in tqdm(enumerate(timesteps), total=len(timesteps)):
             if self.interrupt:
                 continue
 

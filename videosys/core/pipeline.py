@@ -13,9 +13,10 @@ class VideoSysPipeline(DiffusionPipeline):
 
     @staticmethod
     def set_eval_and_device(device: torch.device, *modules):
-        for module in modules:
-            module.eval()
-            module.to(device)
+        modules = list(modules)
+        for i in range(len(modules)):
+            modules[i] = modules[i].eval()
+            modules[i] = modules[i].to(device)
 
     @abstractmethod
     def generate(self, *args, **kwargs):

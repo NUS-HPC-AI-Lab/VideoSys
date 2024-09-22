@@ -16,7 +16,6 @@ import torch.nn as nn
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import FromOriginalModelMixin, PeftAdapterMixin
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
-from diffusers.models.attention import Attention
 from diffusers.models.embeddings import CombinedTimestepTextProjEmbeddings, PatchEmbed
 from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.normalization import AdaLayerNormContinuous, AdaLayerNormZero
@@ -28,7 +27,7 @@ from torch import nn
 from torch.distributed._tensor import Replicate, Shard
 from torch.distributed.tensor.parallel import PrepareModuleOutput, parallelize_module
 
-from videosys.models.modules.attentions import VchitectAttnProcessor
+from videosys.models.modules.attentions import VchitectAttention, VchitectAttnProcessor
 
 
 def _chunked_feed_forward(ff: nn.Module, hidden_states: torch.Tensor, chunk_dim: int, chunk_size: int):
@@ -86,7 +85,7 @@ class JointTransformerBlock(nn.Module):
         #         "The current PyTorch version does not support the `scaled_dot_product_attention` function."
         #     )
         processor = VchitectAttnProcessor()
-        self.attn = Attention(
+        self.attn = VchitectAttention(
             query_dim=dim,
             cross_attention_dim=None,
             added_kv_proj_dim=dim,
@@ -96,7 +95,6 @@ class JointTransformerBlock(nn.Module):
             context_pre_only=context_pre_only,
             bias=True,
             processor=processor,
-            tp_size=tp_size,
         )
 
         self.norm2 = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
@@ -466,7 +464,7 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         self.original_attn_processors = self.attn_processors
 
         for module in self.modules():
-            if isinstance(module, Attention):
+            if isinstance(module, VchitectAttention):
                 module.fuse_projections(fuse=True)
 
     # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.unfuse_qkv_projections
