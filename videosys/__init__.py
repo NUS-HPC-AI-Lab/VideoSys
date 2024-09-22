@@ -4,6 +4,7 @@ from .pipelines.cogvideox import CogVideoXConfig, CogVideoXPABConfig, CogVideoXP
 from .pipelines.latte import LatteConfig, LattePABConfig, LattePipeline
 from .pipelines.open_sora import OpenSoraConfig, OpenSoraPABConfig, OpenSoraPipeline
 from .pipelines.open_sora_plan import OpenSoraPlanConfig, OpenSoraPlanPABConfig, OpenSoraPlanPipeline
+from .pipelines.vchitect import VchitectXLPipeline
 
 __all__ = [
     "initialize",
@@ -11,5 +12,6 @@ __all__ = [
     "LattePipeline", "LatteConfig", "LattePABConfig",
     "OpenSoraPlanPipeline", "OpenSoraPlanConfig", "OpenSoraPlanPABConfig",
     "OpenSoraPipeline", "OpenSoraConfig", "OpenSoraPABConfig",
-    "CogVideoXConfig", "CogVideoXPipeline", "CogVideoXPABConfig"
+    "CogVideoXConfig", "CogVideoXPipeline", "CogVideoXPABConfig",
+    "VchitectXLPipeline"
 ]  # fmt: skip

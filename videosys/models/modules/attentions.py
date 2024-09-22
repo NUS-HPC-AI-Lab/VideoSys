@@ -1,25 +1,13 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
-import inspect
-import math
-from importlib import import_module
-from typing import Callable, List, Optional, Union
-from diffusers.models.attention import Attention
+from typing import Iterable, List, Optional, Tuple
 
-import torch
-import torch.nn.functional as F
-from torch import nn
-
-from diffusers.image_processor import IPAdapterMaskProcessor
-from diffusers.utils import deprecate, logging
-from diffusers.utils.import_utils import is_torch_npu_available, is_xformers_available
-from diffusers.utils.torch_utils import maybe_allow_in_graph
-from diffusers.models.lora import LoRALinearLayer
-from einops import rearrange
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from diffusers.models.attention import Attention
+from einops import rearrange
+from torch import nn
 
 from videosys.models.modules.normalization import LlamaRMSNorm
 
@@ -221,7 +209,6 @@ class _SeqLenInfo:
 
 
 class VchitectAttnProcessor:
-
     def __init__(self):
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError("AttnProcessor2_0 requires PyTorch 2.0, to use it, please upgrade PyTorch to 2.0.")
@@ -230,8 +217,7 @@ class VchitectAttnProcessor:
         ndim = x.ndim
         assert 0 <= 1 < ndim
         assert freqs_cis.shape == (x.shape[1], x.shape[-1])
-        shape = [d if i == 1 or i == ndim - 1 else 1
-                 for i, d in enumerate(x.shape)]
+        shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
         return freqs_cis.view(*shape)
 
     def apply_rotary_emb(
@@ -248,7 +234,6 @@ class VchitectAttnProcessor:
             xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
             return xq_out.type_as(xq), xk_out.type_as(xk)
 
-        
     def __call__(
         self,
         attn: Attention,
@@ -289,7 +274,6 @@ class VchitectAttnProcessor:
         encoder_hidden_states_query_proj = attn.add_q_proj(encoder_hidden_states)
         encoder_hidden_states_key_proj = attn.add_k_proj(encoder_hidden_states)
         encoder_hidden_states_value_proj = attn.add_v_proj(encoder_hidden_states)
-        
 
         query_cross = torch.cat([query_cross, encoder_hidden_states_query_proj], dim=1)
         # attention
@@ -303,7 +287,6 @@ class VchitectAttnProcessor:
 
         key_y = encoder_hidden_states_key_proj[0].unsqueeze(0)
         value_y = encoder_hidden_states_value_proj[0].unsqueeze(0)
-
 
         inner_dim = key.shape[-1]
         head_dim = inner_dim // attn.heads
@@ -340,8 +323,10 @@ class VchitectAttnProcessor:
         xk_gather_temporal = rearrange(xk_gather_t, "(B T) S H C -> (B S) T H C", T=Frame, B=batchsize)
         xv_gather_temporal = rearrange(xv_gather_t, "(B T) S H C -> (B S) T H C", T=Frame, B=batchsize)
 
-        freqs_cis_temporal = freqs_cis[:xq_gather_temporal.shape[1],:]
-        xq_gather_temporal, xk_gather_temporal = self.apply_rotary_emb(xq_gather_temporal, xk_gather_temporal, freqs_cis=freqs_cis_temporal)
+        freqs_cis_temporal = freqs_cis[: xq_gather_temporal.shape[1], :]
+        xq_gather_temporal, xk_gather_temporal = self.apply_rotary_emb(
+            xq_gather_temporal, xk_gather_temporal, freqs_cis=freqs_cis_temporal
+        )
 
         query_spatial = query_spatial.transpose(1, 2)
         key_spatial = key_spatial.transpose(1, 2)
@@ -359,7 +344,7 @@ class VchitectAttnProcessor:
         hidden_states_temp = hidden_states_temp.to(query.dtype)
         hidden_states_temp = rearrange(hidden_states_temp, "(B S) T C -> (B T) S C", T=Frame, B=batchsize)
         #######
-        
+
         hidden_states = hidden_states = F.scaled_dot_product_attention(
             query_spatial, key_spatial, value_spatial, dropout_p=0.0, is_causal=False
         )
@@ -375,16 +360,14 @@ class VchitectAttnProcessor:
         key_y = key_y.transpose(1, 2)
         value_y = value_y.transpose(1, 2)
 
-        cross_output = F.scaled_dot_product_attention(
-            query_y, key_y, value_y, dropout_p=0.0, is_causal=False
-        )
+        cross_output = F.scaled_dot_product_attention(query_y, key_y, value_y, dropout_p=0.0, is_causal=False)
         cross_output = cross_output.transpose(1, 2).reshape(batchsize, -1, attn.heads * head_dim)
         cross_output = cross_output.to(query.dtype)
 
         cross_output = rearrange(cross_output, "B (S T) C -> (B T) S C", T=Frame, B=batchsize)
         cross_output = attn.to_out_context(cross_output)
 
-        hidden_states = hidden_states*1.1 + cross_output
+        hidden_states = hidden_states * 1.1 + cross_output
 
         # Split the attention outputs.
         hidden_states, encoder_hidden_states = (
@@ -404,7 +387,7 @@ class VchitectAttnProcessor:
         if Frame == 1:
             hidden_states_temporal = hidden_states_temporal * 0
         hidden_states = hidden_states + hidden_states_temporal
-        
+
         if not attn.context_pre_only:
             encoder_hidden_states = attn.to_add_out(encoder_hidden_states)
         encoder_hidden_states_temporal = attn.to_add_out_temporal(encoder_hidden_states_temporal)

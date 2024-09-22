@@ -9,40 +9,26 @@
 # --------------------------------------------------------
 
 
-from typing import Any, Dict, Optional, Union, Tuple, List
+from typing import Any, Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import FromOriginalModelMixin, PeftAdapterMixin
-from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.normalization import AdaLayerNormContinuous
-from diffusers.utils import USE_PEFT_BACKEND, is_torch_version, logging, scale_lora_layers, unscale_lora_layers
-from diffusers.models.embeddings import CombinedTimestepTextProjEmbeddings, PatchEmbed
-from diffusers.models.transformers.transformer_2d import Transformer2DModelOutput
-
-from einops import rearrange
-from torch.distributed._tensor import Shard, Replicate
-from torch.distributed.tensor.parallel import (
-    parallelize_module,
-    PrepareModuleOutput
-)
-from typing import Any, Dict, Optional
-
-import torch
-import torch.nn.functional as F
-from torch import nn
-
-from diffusers.utils import deprecate, logging
-from diffusers.utils.torch_utils import maybe_allow_in_graph
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
-from diffusers.models.embeddings import SinusoidalPositionalEmbedding
-from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormContinuous, AdaLayerNormZero, RMSNorm
 from diffusers.models.attention import Attention
-from ..modules.attentions import VchitectAttnProcessor
+from diffusers.models.embeddings import CombinedTimestepTextProjEmbeddings, PatchEmbed
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.models.normalization import AdaLayerNormContinuous, AdaLayerNormZero
+from diffusers.models.transformers.transformer_2d import Transformer2DModelOutput
+from diffusers.utils import USE_PEFT_BACKEND, deprecate, unscale_lora_layers
+from diffusers.utils.torch_utils import maybe_allow_in_graph
+from einops import rearrange
+from torch import nn
+from torch.distributed._tensor import Replicate, Shard
+from torch.distributed.tensor.parallel import PrepareModuleOutput, parallelize_module
 
-logger = logging.get_logger(__name__)
+from videosys.models.modules.attentions import VchitectAttnProcessor
 
 
 def _chunked_feed_forward(ff: nn.Module, hidden_states: torch.Tensor, chunk_dim: int, chunk_size: int):
@@ -110,7 +96,7 @@ class JointTransformerBlock(nn.Module):
             context_pre_only=context_pre_only,
             bias=True,
             processor=processor,
-            tp_size = tp_size
+            tp_size=tp_size,
         )
 
         self.norm2 = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
@@ -126,7 +112,6 @@ class JointTransformerBlock(nn.Module):
         # let chunk size default to None
         self._chunk_size = None
         self._chunk_dim = 0
-    
 
     # Copied from diffusers.models.attention.BasicTransformerBlock.set_chunk_feed_forward
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
@@ -135,7 +120,13 @@ class JointTransformerBlock(nn.Module):
         self._chunk_dim = dim
 
     def forward(
-        self, hidden_states: torch.FloatTensor, encoder_hidden_states: torch.FloatTensor, temb: torch.FloatTensor, freqs_cis: torch.Tensor, full_seqlen: int, Frame: int
+        self,
+        hidden_states: torch.FloatTensor,
+        encoder_hidden_states: torch.FloatTensor,
+        temb: torch.FloatTensor,
+        freqs_cis: torch.Tensor,
+        full_seqlen: int,
+        Frame: int,
     ):
         norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=temb)
         if self.context_pre_only:
@@ -147,7 +138,8 @@ class JointTransformerBlock(nn.Module):
 
         # Attention.
         attn_output, context_attn_output = self.attn(
-            hidden_states=norm_hidden_states, encoder_hidden_states=norm_encoder_hidden_states,
+            hidden_states=norm_hidden_states,
+            encoder_hidden_states=norm_encoder_hidden_states,
             freqs_cis=freqs_cis,
             full_seqlen=full_seqlen,
             Frame=Frame,
@@ -187,7 +179,6 @@ class JointTransformerBlock(nn.Module):
             encoder_hidden_states = encoder_hidden_states + c_gate_mlp.unsqueeze(1) * context_ff_output
 
         return encoder_hidden_states, hidden_states
-
 
 
 class FeedForward(nn.Module):
@@ -248,6 +239,7 @@ class FeedForward(nn.Module):
             hidden_states = module(hidden_states)
         return hidden_states
 
+
 class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin):
     """
     The Transformer model introduced in Stable Diffusion 3.
@@ -286,7 +278,7 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         out_channels: int = 16,
         pos_embed_max_size: int = 96,
         tp_size: int = 1,
-        rope_scaling_factor: float = 1.,
+        rope_scaling_factor: float = 1.0,
     ):
         super().__init__()
         default_out_channels = in_channels
@@ -314,7 +306,7 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
                     num_attention_heads=self.config.num_attention_heads,
                     attention_head_dim=self.inner_dim,
                     context_pre_only=i == num_layers - 1,
-                    tp_size = tp_size
+                    tp_size=tp_size,
                 )
                 for i in range(self.config.num_layers)
             ]
@@ -328,10 +320,13 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         # Video param
         # self.scatter_dim_zero = Identity()
         self.freqs_cis = VchitectXLTransformerModel.precompute_freqs_cis(
-            self.inner_dim // self.config.num_attention_heads, 1000000, theta=1e6, rope_scaling_factor=rope_scaling_factor  # todo max pos embeds
+            self.inner_dim // self.config.num_attention_heads,
+            1000000,
+            theta=1e6,
+            rope_scaling_factor=rope_scaling_factor,  # todo max pos embeds
         )
 
-        #self.vid_token = nn.Parameter(torch.empty(self.inner_dim))
+        # self.vid_token = nn.Parameter(torch.empty(self.inner_dim))
 
     @staticmethod
     def tp_parallelize(model, tp_mesh):
@@ -339,32 +334,25 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
             layer_tp_plan = {
                 # Attention layer
                 "attn.gather_seq_scatter_hidden": PrepareModuleOutput(
-                    output_layouts=Replicate(),
-                    desired_output_layouts=Shard(-2)
+                    output_layouts=Replicate(), desired_output_layouts=Shard(-2)
                 ),
                 "attn.gather_hidden_scatter_seq": PrepareModuleOutput(
                     output_layouts=Shard(-2),
                     desired_output_layouts=Replicate(),
-                )
+                ),
             }
-            parallelize_module(
-                module=transformer_block,
-                device_mesh=tp_mesh,
-                parallelize_plan=layer_tp_plan
-            )
+            parallelize_module(module=transformer_block, device_mesh=tp_mesh, parallelize_plan=layer_tp_plan)
         return model
 
     @staticmethod
     def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, rope_scaling_factor: float = 1.0):
-        freqs = 1.0 / (theta ** (
-                torch.arange(0, dim, 2)[: (dim // 2)].float() / dim
-        ))
+        freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
         t = torch.arange(end, device=freqs.device, dtype=torch.float)
         t = t / rope_scaling_factor
-        freqs = torch.outer(t, freqs).float()  
+        freqs = torch.outer(t, freqs).float()
         freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
         return freqs_cis
-    
+
     # Copied from diffusers.models.unets.unet_3d_condition.UNet3DConditionModel.enable_forward_chunking
     def enable_forward_chunking(self, chunk_size: Optional[int] = None, dim: int = 0) -> None:
         """
@@ -406,7 +394,9 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         # set recursively
         processors = {}
 
-        def fn_recursive_add_processors(name: str, module: torch.nn.Module, processors: Dict[str, VchitectAttnProcessor]):
+        def fn_recursive_add_processors(
+            name: str, module: torch.nn.Module, processors: Dict[str, VchitectAttnProcessor]
+        ):
             if hasattr(module, "get_processor"):
                 processors[f"{name}.processor"] = module.get_processor(return_deprecated_lora=True)
 
@@ -501,14 +491,14 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         pH = pW = self.patch_size
         B, F, C, H, W = x.size()
         x = rearrange(x, "b f c h w -> (b f) c h w")
-        x = self.pos_embed(x) # [B L D]
+        x = self.pos_embed(x)  # [B L D]
         # x = torch.cat([
         #     x,
         #     self.vid_token.view(1, 1, -1).expand(B*F, 1, -1),
-        # ], dim=1) 
+        # ], dim=1)
 
         return x, F, [(H, W)] * B
-    
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -559,7 +549,9 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         height, width = hidden_states.shape[-2:]
 
         batch_size = hidden_states.shape[0]
-        hidden_states, F_num, _ = self.patchify_and_embed(hidden_states)  # takes care of adding positional embeddings too.
+        hidden_states, F_num, _ = self.patchify_and_embed(
+            hidden_states
+        )  # takes care of adding positional embeddings too.
         full_seq = batch_size * F_num
 
         self.freqs_cis = self.freqs_cis.to(hidden_states.device)
@@ -597,9 +589,14 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
 
         for block_idx, block in enumerate(self.transformer_blocks):
             encoder_hidden_states, hidden_states = block(
-                hidden_states=hidden_states, encoder_hidden_states=encoder_hidden_states, temb=temb.repeat(F_num,1), freqs_cis=freqs_cis, full_seqlen=full_seq, Frame=F_num
+                hidden_states=hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                temb=temb.repeat(F_num, 1),
+                freqs_cis=freqs_cis,
+                full_seqlen=full_seq,
+                Frame=F_num,
             )
-            
+
         hidden_states = self.norm_out(hidden_states, temb)
         hidden_states = self.proj_out(hidden_states)
 
@@ -630,30 +627,29 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
 
     def get_fsdp_wrap_module_list(self) -> List[nn.Module]:
         return list(self.transformer_blocks)
-    
+
     @classmethod
     def from_pretrained_temporal(cls, pretrained_model_path, torch_dtype, logger, subfolder=None, tp_size=1):
-
-        import os
         import json
+        import os
 
         if subfolder is not None:
             pretrained_model_path = os.path.join(pretrained_model_path, subfolder)
 
-        config_file = os.path.join(pretrained_model_path, 'config.json')
+        config_file = os.path.join(pretrained_model_path, "config.json")
 
         with open(config_file, "r") as f:
             config = json.load(f)
 
         config["tp_size"] = tp_size
-        from diffusers.utils import WEIGHTS_NAME
-        from safetensors.torch import load_file,load_model
+        from safetensors.torch import load_file
+
         model = cls.from_config(config)
         # model_file = os.path.join(pretrained_model_path, WEIGHTS_NAME)
-    
+
         model_files = [
-            os.path.join(pretrained_model_path, 'diffusion_pytorch_model.bin'),
-            os.path.join(pretrained_model_path, 'diffusion_pytorch_model.safetensors')
+            os.path.join(pretrained_model_path, "diffusion_pytorch_model.bin"),
+            os.path.join(pretrained_model_path, "diffusion_pytorch_model.safetensors"),
         ]
 
         model_file = None
@@ -667,9 +663,8 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
 
         if not os.path.isfile(model_file):
             raise RuntimeError(f"{model_file} does not exist")
-        
 
-        state_dict = load_file(model_file,device="cpu")
+        state_dict = load_file(model_file, device="cpu")
         m, u = model.load_state_dict(state_dict, strict=False)
         model = model.to(torch_dtype)
 
@@ -681,5 +676,5 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
             logger.info(f"### missing keys: {len(m)}; \n### unexpected keys: {len(u)};")
             logger.info(f"### Temporal Module Parameters: {sum(params) / 1e6} M")
             logger.info(f"### Total Parameters: {sum(total_params) / 1e6} M")
-        
+
         return model

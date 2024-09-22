@@ -9,32 +9,19 @@
 # --------------------------------------------------------
 
 import inspect
+import math
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
-from transformers import (
-    CLIPTextModelWithProjection,
-    CLIPTokenizer,
-    T5TokenizerFast,
-)
-from transformers.models.t5.modeling_t5 import T5EncoderModel
-from videosys.models.transformers.vchitect_transformer_3d import VchitectXLTransformerModel
-from transformers import AutoTokenizer, PretrainedConfig, CLIPTextModel, CLIPTextModelWithProjection
 from diffusers.image_processor import VaeImageProcessor
-from diffusers.loaders import FromSingleFileMixin, SD3LoraLoaderMixin
 from diffusers.models.autoencoders import AutoencoderKL
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
-from diffusers.utils import (
-    is_torch_xla_available,
-    logging,
-    replace_example_docstring,
-)
+from diffusers.utils import replace_example_docstring
 from diffusers.utils.torch_utils import randn_tensor
-from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+from transformers import CLIPTokenizer, PretrainedConfig, T5TokenizerFast
 
-import math
-
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+from videosys.models.transformers.vchitect_transformer_3d import VchitectXLTransformerModel
+from videosys.utils.logging import logger
 
 EXAMPLE_DOC_STRING = """
     Examples:
@@ -112,10 +99,9 @@ def retrieve_timesteps(
         timesteps = scheduler.timesteps
     return timesteps, num_inference_steps
 
+
 def load_text_encoders(load_path, class_one, class_two, class_three, precision="fp16"):
-    text_encoder_one = class_one.from_pretrained(
-        load_path, subfolder="text_encoder", revision=None, variant=precision
-    )
+    text_encoder_one = class_one.from_pretrained(load_path, subfolder="text_encoder", revision=None, variant=precision)
     text_encoder_two = class_two.from_pretrained(
         load_path, subfolder="text_encoder_2", revision=None, variant=precision
     )
@@ -143,7 +129,8 @@ def import_model_class_from_model_name_or_path(
     else:
         raise ValueError(f"{model_class} is not supported.")
 
-class VchitectXLPipeline():
+
+class VchitectXLPipeline:
     r"""
     Args:
         transformer ([`VchitectXLTransformerModel`]):
@@ -183,8 +170,8 @@ class VchitectXLPipeline():
 
     def __init__(
         self,
-        load_path = None,
-        device = None,
+        load_path=None,
+        device=None,
     ):
         super().__init__()
 
@@ -206,20 +193,18 @@ class VchitectXLPipeline():
         )
 
         # import correct text encoder classes
-        text_encoder_cls_one = import_model_class_from_model_name_or_path(
-            load_path, None
-        )
-        text_encoder_cls_two = import_model_class_from_model_name_or_path(
-            load_path, None, subfolder="text_encoder_2"
-        )
-        text_encoder_cls_three = import_model_class_from_model_name_or_path(
-            load_path, None, subfolder="text_encoder_3"
-        )
+        text_encoder_cls_one = import_model_class_from_model_name_or_path(load_path, None)
+        text_encoder_cls_two = import_model_class_from_model_name_or_path(load_path, None, subfolder="text_encoder_2")
+        text_encoder_cls_three = import_model_class_from_model_name_or_path(load_path, None, subfolder="text_encoder_3")
         # Load scheduler and models
         self.text_encoder, self.text_encoder_2, self.text_encoder_3 = load_text_encoders(
             load_path, text_encoder_cls_one, text_encoder_cls_two, text_encoder_cls_three, None
         )
-        self.text_encoder, self.text_encoder_2, self.text_encoder_3 = self.text_encoder.to(device), self.text_encoder_2.to(device), self.text_encoder_3.to(device)
+        self.text_encoder, self.text_encoder_2, self.text_encoder_3 = (
+            self.text_encoder.to(device),
+            self.text_encoder_2.to(device),
+            self.text_encoder_3.to(device),
+        )
 
         self.vae = AutoencoderKL.from_pretrained(
             load_path,
@@ -229,12 +214,12 @@ class VchitectXLPipeline():
         ).to(device)
 
         # self.transformer = VchitectXLTransformerModel.from_pretrained_temporal(load_path,torch_dtype=torch.bfloat16,logger=None,subfolder="transformer").to(device)
-        self.transformer = VchitectXLTransformerModel.from_pretrained(load_path,torch_dtype=torch.bfloat16,subfolder="transformer").to(device)
+        self.transformer = VchitectXLTransformerModel.from_pretrained(
+            load_path, torch_dtype=torch.bfloat16, subfolder="transformer"
+        ).to(device)
         self.transformer.eval()
 
-        self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
-            load_path, subfolder="scheduler"
-        )
+        self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(load_path, subfolder="scheduler")
 
         self.execution_device = "cuda"
 
@@ -622,7 +607,7 @@ class VchitectXLPipeline():
     ):
         if latents is not None:
             return latents.to(device=device, dtype=dtype)
-        #1, 60, 16, 32, 32
+        # 1, 60, 16, 32, 32
         shape = (
             batch_size,
             frames,
@@ -824,7 +809,6 @@ class VchitectXLPipeline():
             batch_size = prompt_embeds.shape[0]
 
         device = self.execution_device
-        
 
         (
             prompt_embeds,
@@ -874,6 +858,7 @@ class VchitectXLPipeline():
         # 6. Denoising loop
         # with self.progress_bar(total=num_inference_steps) as progress_bar:
         from tqdm import tqdm
+
         for i, t in tqdm(enumerate(timesteps)):
             if self.interrupt:
                 continue
@@ -883,19 +868,19 @@ class VchitectXLPipeline():
             # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
             timestep = t.expand(latents.shape[0])
             noise_pred_uncond = self.transformer(
-                hidden_states=latent_model_input[0,:].unsqueeze(0),
+                hidden_states=latent_model_input[0, :].unsqueeze(0),
                 timestep=timestep,
-                encoder_hidden_states=prompt_embeds[0,:].unsqueeze(0),
-                pooled_projections=pooled_prompt_embeds[0,:].unsqueeze(0),
+                encoder_hidden_states=prompt_embeds[0, :].unsqueeze(0),
+                pooled_projections=pooled_prompt_embeds[0, :].unsqueeze(0),
                 joint_attention_kwargs=self.joint_attention_kwargs,
                 return_dict=False,
             )[0]
 
             noise_pred_text = self.transformer(
-                hidden_states=latent_model_input[1,:].unsqueeze(0),
+                hidden_states=latent_model_input[1, :].unsqueeze(0),
                 timestep=timestep,
-                encoder_hidden_states=prompt_embeds[1,:].unsqueeze(0),
-                pooled_projections=pooled_prompt_embeds[1,:].unsqueeze(0),
+                encoder_hidden_states=prompt_embeds[1, :].unsqueeze(0),
+                pooled_projections=pooled_prompt_embeds[1, :].unsqueeze(0),
                 joint_attention_kwargs=self.joint_attention_kwargs,
                 return_dict=False,
             )[0]
@@ -933,7 +918,6 @@ class VchitectXLPipeline():
             # if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
             #     progress_bar.update()
 
-
         # if output_type == "latent":
         #     image = latents
 
@@ -941,8 +925,8 @@ class VchitectXLPipeline():
         latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
         videos = []
         for v_idx in range(latents.shape[1]):
-            image = self.vae.decode(latents[:,v_idx], return_dict=False)[0]
+            image = self.vae.decode(latents[:, v_idx], return_dict=False)[0]
             image = self.image_processor.postprocess(image, output_type=output_type)
             videos.append(image[0])
-        
+
         return videos
