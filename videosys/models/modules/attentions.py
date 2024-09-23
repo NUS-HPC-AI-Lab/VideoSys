@@ -12,6 +12,7 @@ from einops import rearrange
 from torch import nn
 from torch.amp import autocast
 
+from videosys.core.comm import all_to_all_with_pad, get_pad, set_pad
 from videosys.models.modules.normalization import LlamaRMSNorm, VchitectSpatialNorm
 from videosys.utils.logging import logger
 
@@ -417,9 +418,8 @@ class VchitectAttention(nn.Module):
         # set attention processor
         self.set_processor(processor)
 
-        # Used for gathering and scattering inputs
-        self.gather_seq_scatter_hidden = nn.Identity()
-        self.gather_hidden_scatter_seq = nn.Identity()
+        # parallel
+        self.parallel_manager = None
 
     def set_processor(self, processor: "AttnProcessor") -> None:
         r"""
@@ -606,7 +606,9 @@ class VchitectAttnProcessor:
 
         inner_dim = key.shape[-1]
         head_dim = inner_dim // attn.heads
-        batchsize = query.shape[0] // Frame
+        batchsize = full_seqlen // Frame
+        # same as Frame if shard, otherwise sharded frame
+        cur_frame = batch_size // batchsize
 
         query = query.view(batch_size, -1, attn.heads, head_dim)
         key = key.view(batch_size, -1, attn.heads, head_dim)
@@ -623,21 +625,18 @@ class VchitectAttnProcessor:
         # temporal
         xq, xk = query.to(value.dtype), key.to(value.dtype)
 
-        xq_gather = attn.gather_seq_scatter_hidden(xq)
-        xk_gather = attn.gather_seq_scatter_hidden(xk)
-        xv_gather = attn.gather_seq_scatter_hidden(value)
+        query_t, key_t = query_t.to(value_t.dtype), key_t.to(value_t.dtype)
 
-        xq_t, xk_t = query_t.to(value_t.dtype), key_t.to(value_t.dtype)
+        query_spatial, key_spatial, value_spatial = xq, xk, value
 
-        xq_gather_t = attn.gather_seq_scatter_hidden(xq_t)
-        xk_gather_t = attn.gather_seq_scatter_hidden(xk_t)
-        xv_gather_t = attn.gather_seq_scatter_hidden(value_t)
+        if attn.parallel_manager.sp_size > 1:
+            func = lambda x: self.dynamic_switch(attn, x, batchsize, to_spatial_shard=True)
+            xq_gather_temporal, xk_gather_temporal, xv_gather_temporal = map(func, [query_t, key_t, value_t])
 
-        query_spatial, key_spatial, value_spatial = xq_gather.clone(), xk_gather.clone(), xv_gather.clone()
-
-        xq_gather_temporal = rearrange(xq_gather_t, "(B T) S H C -> (B S) T H C", T=Frame, B=batchsize)
-        xk_gather_temporal = rearrange(xk_gather_t, "(B T) S H C -> (B S) T H C", T=Frame, B=batchsize)
-        xv_gather_temporal = rearrange(xv_gather_t, "(B T) S H C -> (B S) T H C", T=Frame, B=batchsize)
+        func = lambda x: rearrange(x, "(B T) S H C -> (B S) T H C", T=Frame, B=batchsize)
+        xq_gather_temporal, xk_gather_temporal, xv_gather_temporal = map(
+            func, [xq_gather_temporal, xk_gather_temporal, xv_gather_temporal]
+        )
 
         freqs_cis_temporal = freqs_cis[: xq_gather_temporal.shape[1], :]
         xq_gather_temporal, xk_gather_temporal = self.apply_rotary_emb(
@@ -659,6 +658,8 @@ class VchitectAttnProcessor:
         hidden_states_temp = hidden_states_temp.transpose(1, 2).reshape(batch_size_temp, -1, attn.heads * head_dim)
         hidden_states_temp = hidden_states_temp.to(query.dtype)
         hidden_states_temp = rearrange(hidden_states_temp, "(B S) T C -> (B T) S C", T=Frame, B=batchsize)
+        if attn.parallel_manager.sp_size > 1:
+            hidden_states_temp = self.dynamic_switch(attn, hidden_states_temp, batchsize, to_spatial_shard=False)
         #######
 
         hidden_states = hidden_states = F.scaled_dot_product_attention(
@@ -667,10 +668,7 @@ class VchitectAttnProcessor:
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
         hidden_states = hidden_states.to(query.dtype)
 
-        hidden_states = attn.gather_hidden_scatter_seq(hidden_states)
-        hidden_states_temp = attn.gather_hidden_scatter_seq(hidden_states_temp)
-
-        query_y = rearrange(query_y, "(B T) S H C -> B (S T) H C", T=Frame, B=batchsize)
+        query_y = rearrange(query_y, "(B T) S H C -> B (S T) H C", T=cur_frame, B=batchsize)
 
         query_y = query_y.transpose(1, 2)
         key_y = key_y.transpose(1, 2)
@@ -680,7 +678,7 @@ class VchitectAttnProcessor:
         cross_output = cross_output.transpose(1, 2).reshape(batchsize, -1, attn.heads * head_dim)
         cross_output = cross_output.to(query.dtype)
 
-        cross_output = rearrange(cross_output, "B (S T) C -> (B T) S C", T=Frame, B=batchsize)
+        cross_output = rearrange(cross_output, "B (S T) C -> (B T) S C", T=cur_frame, B=batchsize)
         cross_output = attn.to_out_context(cross_output)
 
         hidden_states = hidden_states * 1.1 + cross_output
@@ -700,14 +698,14 @@ class VchitectAttnProcessor:
         hidden_states = attn.to_out[0](hidden_states)
         # dropout
         hidden_states = attn.to_out[1](hidden_states)
-        if Frame == 1:
+        if cur_frame == 1:
             hidden_states_temporal = hidden_states_temporal * 0
         hidden_states = hidden_states + hidden_states_temporal
 
         if not attn.context_pre_only:
             encoder_hidden_states = attn.to_add_out(encoder_hidden_states)
         encoder_hidden_states_temporal = attn.to_add_out_temporal(encoder_hidden_states_temporal)
-        if Frame == 1:
+        if cur_frame == 1:
             encoder_hidden_states_temporal = encoder_hidden_states_temporal * 0
         encoder_hidden_states = encoder_hidden_states + encoder_hidden_states_temporal
 
@@ -717,3 +715,26 @@ class VchitectAttnProcessor:
             encoder_hidden_states = encoder_hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
 
         return hidden_states, encoder_hidden_states
+
+    def dynamic_switch(self, attn, x, batchsize, to_spatial_shard: bool):
+        if to_spatial_shard:
+            scatter_dim, gather_dim = 2, 1
+            set_pad("spatial", x.shape[1], attn.parallel_manager.sp_group)
+            scatter_pad = get_pad("spatial")
+            gather_pad = get_pad("temporal")
+        else:
+            scatter_dim, gather_dim = 1, 2
+            scatter_pad = get_pad("temporal")
+            gather_pad = get_pad("spatial")
+
+        x = rearrange(x, "(B T) S ... -> B T S ...", B=batchsize)
+        x = all_to_all_with_pad(
+            x,
+            attn.parallel_manager.sp_group,
+            scatter_dim=scatter_dim,
+            gather_dim=gather_dim,
+            scatter_pad=scatter_pad,
+            gather_pad=gather_pad,
+        )
+        x = rearrange(x, "B T ... -> (B T) ...")
+        return x

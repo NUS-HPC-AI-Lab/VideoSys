@@ -279,6 +279,25 @@ class VchitectXLPipeline(VideoSysPipeline):
             else 128
         )
 
+        # parallel
+        self._set_parallel()
+
+    def _set_parallel(
+        self, dp_size: Optional[int] = None, sp_size: Optional[int] = None, enable_cp: Optional[bool] = False
+    ):
+        # init sequence parallel
+        if sp_size is None:
+            sp_size = dist.get_world_size()
+            dp_size = 1
+        else:
+            assert (
+                dist.get_world_size() % sp_size == 0
+            ), f"world_size {dist.get_world_size()} must be divisible by sp_size"
+            dp_size = dist.get_world_size() // sp_size
+
+        # transformer parallel
+        self.transformer.enable_parallel(dp_size, sp_size, enable_cp)
+
     def _get_t5_prompt_embeds(
         self,
         prompt: Union[str, List[str]] = None,

@@ -24,9 +24,9 @@ from diffusers.utils import USE_PEFT_BACKEND, deprecate, unscale_lora_layers
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange
 from torch import nn
-from torch.distributed._tensor import Replicate, Shard
-from torch.distributed.tensor.parallel import PrepareModuleOutput, parallelize_module
 
+from videosys.core.comm import gather_from_second_dim, set_pad, split_from_second_dim
+from videosys.core.parallel_mgr import ParallelManager
 from videosys.models.modules.attentions import VchitectAttention, VchitectAttnProcessor
 
 
@@ -60,7 +60,7 @@ class JointTransformerBlock(nn.Module):
             processing of `context` conditions.
     """
 
-    def __init__(self, dim, num_attention_heads, attention_head_dim, context_pre_only=False, tp_size=1):
+    def __init__(self, dim, num_attention_heads, attention_head_dim, context_pre_only=False):
         super().__init__()
 
         self.context_pre_only = context_pre_only
@@ -78,12 +78,6 @@ class JointTransformerBlock(nn.Module):
             raise ValueError(
                 f"Unknown context_norm_type: {context_norm_type}, currently only support `ada_norm_continous`, `ada_norm_zero`"
             )
-        # if hasattr(F, "scaled_dot_product_attention"):
-        #     processor = VchitectAttnProcessor()
-        # else:
-        #     raise ValueError(
-        #         "The current PyTorch version does not support the `scaled_dot_product_attention` function."
-        #     )
         processor = VchitectAttnProcessor()
         self.attn = VchitectAttention(
             query_dim=dim,
@@ -275,7 +269,6 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         pooled_projection_dim: int = 2048,
         out_channels: int = 16,
         pos_embed_max_size: int = 96,
-        tp_size: int = 1,
         rope_scaling_factor: float = 1.0,
     ):
         super().__init__()
@@ -304,7 +297,6 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
                     num_attention_heads=self.config.num_attention_heads,
                     attention_head_dim=self.inner_dim,
                     context_pre_only=i == num_layers - 1,
-                    tp_size=tp_size,
                 )
                 for i in range(self.config.num_layers)
             ]
@@ -326,21 +318,22 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
 
         # self.vid_token = nn.Parameter(torch.empty(self.inner_dim))
 
-    @staticmethod
-    def tp_parallelize(model, tp_mesh):
-        for layer_id, transformer_block in enumerate(model.transformer_blocks):
-            layer_tp_plan = {
-                # Attention layer
-                "attn.gather_seq_scatter_hidden": PrepareModuleOutput(
-                    output_layouts=Replicate(), desired_output_layouts=Shard(-2)
-                ),
-                "attn.gather_hidden_scatter_seq": PrepareModuleOutput(
-                    output_layouts=Shard(-2),
-                    desired_output_layouts=Replicate(),
-                ),
-            }
-            parallelize_module(module=transformer_block, device_mesh=tp_mesh, parallelize_plan=layer_tp_plan)
-        return model
+        # parallel
+        self.parallel_manager = None
+
+    def enable_parallel(self, dp_size, sp_size, enable_cp):
+        # update cfg parallel
+        if enable_cp and sp_size % 2 == 0:
+            sp_size = sp_size // 2
+            cp_size = 2
+        else:
+            cp_size = 1
+
+        self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
+
+        for _, module in self.named_modules():
+            if hasattr(module, "parallel_manager"):
+                module.parallel_manager = self.parallel_manager
 
     @staticmethod
     def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, rope_scaling_factor: float = 1.0):
@@ -530,14 +523,6 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         else:
             lora_scale = 1.0
 
-        # if USE_PEFT_BACKEND:
-        #     # weight the lora layers by setting `lora_scale` for each PEFT layer
-        #     scale_lora_layers(self, lora_scale)
-        # else:
-        #     logger.warning(
-        #         "Passing `scale` via `joint_attention_kwargs` when not using the PEFT backend is ineffective."
-        #     )
-
         height, width = hidden_states.shape[-2:]
 
         batch_size = hidden_states.shape[0]
@@ -553,41 +538,25 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
         temb = self.time_text_embed(timestep, pooled_projections)
         encoder_hidden_states = self.context_embedder(encoder_hidden_states)
 
-        # for block in self.transformer_blocks:
-        #     if self.training and self.gradient_checkpointing:
-
-        #         def create_custom_forward(module, return_dict=None):
-        #             def custom_forward(*inputs):
-        #                 if return_dict is not None:
-        #                     return module(*inputs, return_dict=return_dict)
-        #                 else:
-        #                     return module(*inputs)
-
-        #             return custom_forward
-
-        #         ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
-        #         hidden_states = torch.utils.checkpoint.checkpoint(
-        #             create_custom_forward(block),
-        #             hidden_states,
-        #             encoder_hidden_states,
-        #             temb,
-        #             **ckpt_kwargs,
-        #         )
-
-        #     else:
-        #         encoder_hidden_states, hidden_states = block(
-        #             hidden_states=hidden_states, encoder_hidden_states=encoder_hidden_states, temb=temb
-        #         )
+        if self.parallel_manager.sp_size > 1:
+            set_pad("temporal", F_num, self.parallel_manager.sp_group)
+            hidden_states = split_from_second_dim(hidden_states, batch_size, self.parallel_manager.sp_group)
+            cur_temb = temb.repeat(hidden_states.shape[0] // batch_size, 1)
+        else:
+            cur_temb = temb.repeat(F_num, 1)
 
         for block_idx, block in enumerate(self.transformer_blocks):
             encoder_hidden_states, hidden_states = block(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
-                temb=temb.repeat(F_num, 1),
+                temb=cur_temb,
                 freqs_cis=freqs_cis,
                 full_seqlen=full_seq,
                 Frame=F_num,
             )
+
+        if self.parallel_manager.sp_size > 1:
+            hidden_states = gather_from_second_dim(hidden_states, batch_size, self.parallel_manager.sp_group)
 
         hidden_states = self.norm_out(hidden_states, temb)
         hidden_states = self.proj_out(hidden_states)
