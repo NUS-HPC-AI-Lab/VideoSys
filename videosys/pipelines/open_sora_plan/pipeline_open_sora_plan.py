@@ -36,7 +36,6 @@ from ...models.transformers.open_sora_plan_transformer_3d import LatteT2V
 class OpenSoraPlanPABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 150,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 850],
         spatial_range: int = 2,
@@ -81,7 +80,6 @@ class OpenSoraPlanPABConfig(PABConfig):
         },
     ):
         super().__init__(
-            steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
             spatial_range=spatial_range,

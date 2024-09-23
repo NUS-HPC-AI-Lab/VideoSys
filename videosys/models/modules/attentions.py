@@ -13,6 +13,7 @@ from torch import nn
 from torch.amp import autocast
 
 from videosys.core.comm import all_to_all_with_pad, get_pad, set_pad
+from videosys.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
 from videosys.models.modules.normalization import LlamaRMSNorm, VchitectSpatialNorm
 from videosys.utils.logging import logger
 
@@ -289,8 +290,7 @@ class VchitectAttention(nn.Module):
         _from_deprecated_attn_block: bool = False,
         processor: Optional[AttnProcessor] = None,
         out_dim: int = None,
-        context_pre_only=None,
-        tp_size: int = 1,
+        context_pre_only: bool = None,
     ):
         super().__init__()
         self.inner_dim = out_dim if out_dim is not None else dim_head * heads
@@ -421,6 +421,14 @@ class VchitectAttention(nn.Module):
         # parallel
         self.parallel_manager = None
 
+        # pab
+        self.spatial_count = 0
+        self.last_spatial = None
+        self.temporal_count = 0
+        self.last_temporal = None
+        self.cross_count = 0
+        self.last_cross = None
+
     def set_processor(self, processor: "AttnProcessor") -> None:
         r"""
         Set the attention processor to use.
@@ -448,6 +456,7 @@ class VchitectAttention(nn.Module):
         freqs_cis: Optional[torch.Tensor] = None,
         full_seqlen: Optional[int] = None,
         Frame: Optional[int] = None,
+        timestep: Optional[torch.Tensor] = None,
         **cross_attention_kwargs,
     ) -> torch.Tensor:
         r"""
@@ -489,6 +498,7 @@ class VchitectAttention(nn.Module):
             freqs_cis=freqs_cis,
             full_seqlen=full_seqlen,
             Frame=Frame,
+            timestep=timestep,
             **cross_attention_kwargs,
         )
 
@@ -694,6 +704,7 @@ class VchitectAttnProcessor:
         freqs_cis: Optional[torch.Tensor] = None,
         full_seqlen: Optional[int] = None,
         Frame: Optional[int] = None,
+        timestep: Optional[torch.Tensor] = None,
         *args,
         **kwargs,
     ) -> torch.FloatTensor:
@@ -721,43 +732,64 @@ class VchitectAttnProcessor:
         cur_frame = batch_size // batchsize
 
         # temporal attention
-        hidden_states_temporal, encoder_hidden_states_temporal = self.temporal_attention(
-            attn,
-            hidden_states,
-            residual,
-            batch_size,
-            batchsize,
-            Frame,
-            head_dim,
-            freqs_cis,
-            encoder_hidden_states_query_proj,
-            encoder_hidden_states_key_proj,
-            encoder_hidden_states_value_proj,
-        )
+        if enable_pab():
+            broadcast_temporal, attn.temporal_count = if_broadcast_temporal(int(timestep[0]), attn.temporal_count)
+        if enable_pab() and broadcast_temporal:
+            hidden_states_temporal, encoder_hidden_states_temporal = attn.last_temporal
+        else:
+            hidden_states_temporal, encoder_hidden_states_temporal = self.temporal_attention(
+                attn,
+                hidden_states,
+                residual,
+                batch_size,
+                batchsize,
+                Frame,
+                head_dim,
+                freqs_cis,
+                encoder_hidden_states_query_proj,
+                encoder_hidden_states_key_proj,
+                encoder_hidden_states_value_proj,
+            )
+            if enable_pab():
+                attn.last_temporal = (hidden_states_temporal, encoder_hidden_states_temporal)
 
         # cross attn
-        cross_output = self.cross_attention(
-            attn,
-            hidden_states,
-            encoder_hidden_states_query_proj,
-            encoder_hidden_states_key_proj,
-            encoder_hidden_states_value_proj,
-            batch_size,
-            head_dim,
-            cur_frame,
-            batchsize,
-        )
+        if enable_pab():
+            broadcast_cross, attn.cross_count = if_broadcast_cross(int(timestep[0]), attn.cross_count)
+        if enable_pab() and broadcast_cross:
+            cross_output = attn.last_cross
+        else:
+            cross_output = self.cross_attention(
+                attn,
+                hidden_states,
+                encoder_hidden_states_query_proj,
+                encoder_hidden_states_key_proj,
+                encoder_hidden_states_value_proj,
+                batch_size,
+                head_dim,
+                cur_frame,
+                batchsize,
+            )
+            if enable_pab():
+                attn.last_cross = cross_output
 
         # spatial attn
-        hidden_states = self.spatial_attn(
-            attn,
-            hidden_states,
-            encoder_hidden_states_query_proj,
-            encoder_hidden_states_key_proj,
-            encoder_hidden_states_value_proj,
-            batch_size,
-            head_dim,
-        )
+        if enable_pab():
+            broadcast_spatial, attn.spatial_count = if_broadcast_spatial(int(timestep[0]), attn.spatial_count)
+        if enable_pab() and broadcast_spatial:
+            hidden_states = attn.last_spatial
+        else:
+            hidden_states = self.spatial_attn(
+                attn,
+                hidden_states,
+                encoder_hidden_states_query_proj,
+                encoder_hidden_states_key_proj,
+                encoder_hidden_states_value_proj,
+                batch_size,
+                head_dim,
+            )
+            if enable_pab():
+                attn.last_spatial = hidden_states
 
         # processs attention outputs.
         hidden_states = hidden_states * 1.1 + cross_output

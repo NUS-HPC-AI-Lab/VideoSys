@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL
 from transformers import AutoTokenizer, T5EncoderModel
 
-from videosys.core.pab_mgr import PABConfig, set_pab_manager
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3
@@ -32,7 +32,6 @@ BAD_PUNCT_REGEX = re.compile(
 class OpenSoraPABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [450, 930],
         spatial_range: int = 2,
@@ -55,7 +54,6 @@ class OpenSoraPABConfig(PABConfig):
         },
     ):
         super().__init__(
-            steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
             spatial_range=spatial_range,
@@ -153,6 +151,8 @@ class OpenSoraConfig:
         self.num_gpus = num_gpus
         # ======== scheduler ========
         self.num_sampling_steps = num_sampling_steps
+        update_steps(num_sampling_steps)
+
         self.cfg_scale = cfg_scale
         # ======== vae ========
         self.tiling_size = tiling_size

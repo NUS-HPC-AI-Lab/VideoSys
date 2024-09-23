@@ -119,6 +119,7 @@ class JointTransformerBlock(nn.Module):
         freqs_cis: torch.Tensor,
         full_seqlen: int,
         Frame: int,
+        timestep: int,
     ):
         norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=temb)
         if self.context_pre_only:
@@ -135,6 +136,7 @@ class JointTransformerBlock(nn.Module):
             freqs_cis=freqs_cis,
             full_seqlen=full_seqlen,
             Frame=Frame,
+            timestep=timestep,
         )
 
         # Process attention outputs for the `hidden_states`.
@@ -553,6 +555,7 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
                 freqs_cis=freqs_cis,
                 full_seqlen=full_seq,
                 Frame=F_num,
+                timestep=timestep,
             )
 
         if self.parallel_manager.sp_size > 1:

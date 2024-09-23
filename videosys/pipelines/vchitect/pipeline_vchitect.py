@@ -22,70 +22,37 @@ from torch.amp import autocast
 from tqdm import tqdm
 from transformers import CLIPTextModelWithProjection, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.transformers.vchitect_transformer_3d import VchitectXLTransformerModel
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video, set_seed
 
 
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
-def retrieve_timesteps(
-    scheduler,
-    num_inference_steps: Optional[int] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    timesteps: Optional[List[int]] = None,
-    sigmas: Optional[List[float]] = None,
-    **kwargs,
-):
-    """
-    Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
-    custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
-
-    Args:
-        scheduler (`SchedulerMixin`):
-            The scheduler to get timesteps from.
-        num_inference_steps (`int`):
-            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
-            must be `None`.
-        device (`str` or `torch.device`, *optional*):
-            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-        timesteps (`List[int]`, *optional*):
-            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
-            `num_inference_steps` and `sigmas` must be `None`.
-        sigmas (`List[float]`, *optional*):
-            Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
-            `num_inference_steps` and `timesteps` must be `None`.
-
-    Returns:
-        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
-        second element is the number of inference steps.
-    """
-    if timesteps is not None and sigmas is not None:
-        raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
-    if timesteps is not None:
-        accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accepts_timesteps:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" timestep schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    elif sigmas is not None:
-        accept_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accept_sigmas:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" sigmas schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    else:
-        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-    return timesteps, num_inference_steps
+class VchitectPABConfig(PABConfig):
+    def __init__(
+        self,
+        spatial_broadcast: bool = True,
+        spatial_threshold: list = [100, 800],
+        spatial_range: int = 2,
+        temporal_broadcast: bool = True,
+        temporal_threshold: list = [100, 800],
+        temporal_range: int = 4,
+        cross_broadcast: bool = True,
+        cross_threshold: list = [100, 800],
+        cross_range: int = 6,
+    ):
+        super().__init__(
+            spatial_broadcast=spatial_broadcast,
+            spatial_threshold=spatial_threshold,
+            spatial_range=spatial_range,
+            temporal_broadcast=temporal_broadcast,
+            temporal_threshold=temporal_threshold,
+            temporal_range=temporal_range,
+            cross_broadcast=cross_broadcast,
+            cross_threshold=cross_threshold,
+            cross_range=cross_range,
+        )
 
 
 class VchitectConfig:
@@ -113,16 +80,22 @@ class VchitectConfig:
         ```python
         from videosys import OpenSoraPlanConfig, VideoSysEngine
 
-        # num frames: 65 or 221
         # change num_gpus for multi-gpu inference
-        config = OpenSoraPlanConfig(num_frames=65, num_gpus=1)
+        config = VchitectConfig("Vchitect/Vchitect-2.0-2B", num_gpus=1)
         engine = VideoSysEngine(config)
 
         prompt = "Sunset over the sea."
+        # seed=-1 means random seed. >0 means fixed seed.
+        # WxH: 480x288  624x352 432x240 768x432
         video = engine.generate(
             prompt=prompt,
+            negative_prompt="",
+            num_inference_steps=100,
             guidance_scale=7.5,
-            num_inference_steps=150,
+            width=480,
+            height=288,
+            frames=40,
+            seed=0,
         ).video[0]
         engine.save_video(video, f"./outputs/{prompt}.mp4")
         ```
@@ -137,6 +110,7 @@ class VchitectConfig:
         cpu_offload: bool = False,
         # ======= pab ========
         enable_pab: bool = False,
+        pab_config: VchitectPABConfig = VchitectPABConfig(),
     ):
         self.model_path = model_path
         self.pipeline_cls = VchitectXLPipeline
@@ -146,7 +120,7 @@ class VchitectConfig:
         self.cpu_offload = cpu_offload
         # ======= pab ========
         self.enable_pab = enable_pab
-        # self.pab_config = pab_config
+        self.pab_config = pab_config
 
 
 class VchitectXLPipeline(VideoSysPipeline):
@@ -258,6 +232,10 @@ class VchitectXLPipeline(VideoSysPipeline):
             transformer=self.transformer,
             scheduler=self.scheduler,
         )
+
+        # pab
+        if config.enable_pab:
+            set_pab_manager(config.pab_config)
 
         # cpu offload
         if config.cpu_offload:
@@ -733,8 +711,8 @@ class VchitectXLPipeline(VideoSysPipeline):
         prompt: Union[str, List[str]] = None,
         prompt_2: Optional[Union[str, List[str]]] = None,
         prompt_3: Optional[Union[str, List[str]]] = None,
-        height: int = 432,
-        width: int = 768,
+        height: int = 288,
+        width: int = 480,
         frames: int = 40,
         num_inference_steps: int = 100,
         timesteps: List[int] = None,
@@ -852,6 +830,7 @@ class VchitectXLPipeline(VideoSysPipeline):
         width = width or self.default_sample_size * self.vae_scale_factor
         frames = frames or 24
         self._set_seed(seed)
+        update_steps(num_inference_steps)
 
         # 1. Check inputs. Raise error if not correct
         self.check_inputs(
@@ -1013,3 +992,63 @@ class VchitectXLPipeline(VideoSysPipeline):
 
     def save_video(self, video, output_path):
         save_video(video, output_path, fps=8)
+
+
+# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
+def retrieve_timesteps(
+    scheduler,
+    num_inference_steps: Optional[int] = None,
+    device: Optional[Union[str, torch.device]] = None,
+    timesteps: Optional[List[int]] = None,
+    sigmas: Optional[List[float]] = None,
+    **kwargs,
+):
+    """
+    Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
+    custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
+
+    Args:
+        scheduler (`SchedulerMixin`):
+            The scheduler to get timesteps from.
+        num_inference_steps (`int`):
+            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
+            must be `None`.
+        device (`str` or `torch.device`, *optional*):
+            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
+        timesteps (`List[int]`, *optional*):
+            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
+            `num_inference_steps` and `sigmas` must be `None`.
+        sigmas (`List[float]`, *optional*):
+            Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
+            `num_inference_steps` and `timesteps` must be `None`.
+
+    Returns:
+        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
+        second element is the number of inference steps.
+    """
+    if timesteps is not None and sigmas is not None:
+        raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
+    if timesteps is not None:
+        accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
+        if not accepts_timesteps:
+            raise ValueError(
+                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
+                f" timestep schedules. Please check whether you are using the correct scheduler."
+            )
+        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+        num_inference_steps = len(timesteps)
+    elif sigmas is not None:
+        accept_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
+        if not accept_sigmas:
+            raise ValueError(
+                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
+                f" sigmas schedules. Please check whether you are using the correct scheduler."
+            )
+        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+        num_inference_steps = len(timesteps)
+    else:
+        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+    return timesteps, num_inference_steps

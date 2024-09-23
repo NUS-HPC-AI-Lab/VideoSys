@@ -1933,9 +1933,7 @@ class BasicTransformerBlock(nn.Module):
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        broadcast_spatial, self.spatial_count = if_broadcast_spatial(
-            int(org_timestep[0]), self.spatial_count, self.block_idx
-        )
+        broadcast_spatial, self.spatial_count = if_broadcast_spatial(int(org_timestep[0]), self.spatial_count)
         if broadcast_spatial:
             attn_output = self.spatial_last
             assert self.use_ada_layer_norm_single
