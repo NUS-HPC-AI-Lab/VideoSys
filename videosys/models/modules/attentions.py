@@ -631,12 +631,10 @@ class VchitectAttnProcessor:
 
         if attn.parallel_manager.sp_size > 1:
             func = lambda x: self.dynamic_switch(attn, x, batchsize, to_spatial_shard=True)
-            xq_gather_temporal, xk_gather_temporal, xv_gather_temporal = map(func, [query_t, key_t, value_t])
+            query_t, key_t, value_t = map(func, [query_t, key_t, value_t])
 
         func = lambda x: rearrange(x, "(B T) S H C -> (B S) T H C", T=Frame, B=batchsize)
-        xq_gather_temporal, xk_gather_temporal, xv_gather_temporal = map(
-            func, [xq_gather_temporal, xk_gather_temporal, xv_gather_temporal]
-        )
+        xq_gather_temporal, xk_gather_temporal, xv_gather_temporal = map(func, [query_t, key_t, value_t])
 
         freqs_cis_temporal = freqs_cis[: xq_gather_temporal.shape[1], :]
         xq_gather_temporal, xk_gather_temporal = self.apply_rotary_emb(
