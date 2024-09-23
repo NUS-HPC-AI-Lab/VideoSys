@@ -88,7 +88,7 @@ def retrieve_timesteps(
     return timesteps, num_inference_steps
 
 
-class VchitectXLConfig:
+class VchitectConfig:
     """
     This config is to instantiate a `VchitectXLPipeline` class for video generation.
 
@@ -106,8 +106,8 @@ class VchitectXLConfig:
             Whether to enable cpu offload. Defaults to False.
         enable_pab (bool):
             Whether to enable Pyramid Attention Broadcast. Defaults to False.
-        pab_config (CogVideoXPABConfig):
-            The configuration for Pyramid Attention Broadcast. Defaults to `LattePABConfig()`.
+        pab_config (VchitectPABConfig):
+            The configuration for Pyramid Attention Broadcast. Defaults to `VchitectPABConfig()`.
 
     Examples:
         ```python
@@ -183,13 +183,20 @@ class VchitectXLPipeline(VideoSysPipeline):
             [T5Tokenizer](https://huggingface.co/docs/transformers/model_doc/t5#transformers.T5Tokenizer).
     """
 
-    model_cpu_offload_seq = "text_encoder->text_encoder_2->text_encoder_3->transformer->vae"
-    _optional_components = ["text_encoder", "text_encoder_2", "text_encoder_3"]
+    model_cpu_offload_seq = "text_encoder->text_encoder_2->text_encoder_3"
+    _optional_components = [
+        "text_encoder",
+        "text_encoder_2",
+        "text_encoder_3",
+        "tokenizer",
+        "tokenizer_2",
+        "tokenizer_3",
+    ]
     _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds", "negative_pooled_prompt_embeds"]
 
     def __init__(
         self,
-        config: VchitectXLConfig,
+        config: VchitectConfig,
         text_encoder: Optional[CLIPTextModelWithProjection] = None,
         text_encoder_2: Optional[CLIPTextModelWithProjection] = None,
         text_encoder_3: Optional[T5EncoderModel] = None,
@@ -204,6 +211,8 @@ class VchitectXLPipeline(VideoSysPipeline):
     ):
         super().__init__()
         self._config = config
+        self._device = device
+        self._dtype = dtype
 
         if text_encoder is None:
             self.text_encoder = CLIPTextModelWithProjection.from_pretrained(
@@ -236,21 +245,25 @@ class VchitectXLPipeline(VideoSysPipeline):
         if scheduler is None:
             self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(config.model_path, subfolder="scheduler")
 
-        self.set_eval_and_device(
-            device, self.text_encoder, self.text_encoder_2, self.text_encoder_3, self.transformer, self.vae
-        )
+        self.set_eval_and_device(device, self.transformer, self.vae)
+
         self.register_modules(
             tokenizer=self.tokenizer,
             tokenizer_2=self.tokenizer_2,
             tokenizer_3=self.tokenizer_3,
             text_encoder=self.text_encoder,
-            text_encoder_2=self.text_encoder_2,
             text_encoder_3=self.text_encoder_3,
+            text_encoder_2=self.text_encoder_2,
             vae=self.vae,
             transformer=self.transformer,
             scheduler=self.scheduler,
         )
-        self.execution_device = device
+
+        # cpu offload
+        if config.cpu_offload:
+            self.enable_model_cpu_offload()
+        else:
+            self.set_eval_and_device(device, self.text_encoder, self.text_encoder_2, self.text_encoder_3)
 
         self.vae_scale_factor = (
             2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8
@@ -378,6 +391,7 @@ class VchitectXLPipeline(VideoSysPipeline):
         else:
             set_seed(seed, self.transformer.parallel_manager.dp_rank)
 
+    @autocast("cuda", enabled=False)
     def encode_prompt(
         self,
         prompt: Union[str, List[str]],
@@ -539,7 +553,12 @@ class VchitectXLPipeline(VideoSysPipeline):
             negative_pooled_prompt_embeds = torch.cat(
                 [negative_pooled_prompt_embed, negative_pooled_prompt_2_embed], dim=-1
             )
-
+        prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = (
+            prompt_embeds.to(self._device),
+            negative_prompt_embeds.to(self._device),
+            pooled_prompt_embeds.to(self._device),
+            negative_pooled_prompt_embeds.to(self._device),
+        )
         return prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds
 
     def check_inputs(
@@ -695,17 +714,17 @@ class VchitectXLPipeline(VideoSysPipeline):
         prompt: Union[str, List[str]] = None,
         prompt_2: Optional[Union[str, List[str]]] = None,
         prompt_3: Optional[Union[str, List[str]]] = None,
-        height: Optional[int] = None,
-        width: Optional[int] = None,
-        frames: Optional[int] = None,
-        num_inference_steps: int = 28,
+        height: int = 432,
+        width: int = 768,
+        frames: int = 40,
+        num_inference_steps: int = 100,
         timesteps: List[int] = None,
-        guidance_scale: float = 7.0,
+        guidance_scale: float = 7.5,
+        seed: int = -1,
         negative_prompt: Optional[Union[str, List[str]]] = None,
         negative_prompt_2: Optional[Union[str, List[str]]] = None,
         negative_prompt_3: Optional[Union[str, List[str]]] = None,
         num_images_per_prompt: Optional[int] = 1,
-        seed: Optional[int] = None,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -845,8 +864,6 @@ class VchitectXLPipeline(VideoSysPipeline):
         else:
             batch_size = prompt_embeds.shape[0]
 
-        device = self.execution_device
-
         (
             prompt_embeds,
             negative_prompt_embeds,
@@ -864,7 +881,7 @@ class VchitectXLPipeline(VideoSysPipeline):
             negative_prompt_embeds=negative_prompt_embeds,
             pooled_prompt_embeds=pooled_prompt_embeds,
             negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
-            device=device,
+            device=self.text_encoder.device,
             clip_skip=self.clip_skip,
             num_images_per_prompt=num_images_per_prompt,
         )
@@ -874,7 +891,9 @@ class VchitectXLPipeline(VideoSysPipeline):
             pooled_prompt_embeds = torch.cat([negative_pooled_prompt_embeds, pooled_prompt_embeds], dim=0)
 
         # 4. Prepare timesteps
-        timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, device, timesteps)
+        timesteps, num_inference_steps = retrieve_timesteps(
+            self.scheduler, num_inference_steps, self._device, timesteps
+        )
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
         self._num_timesteps = len(timesteps)
 
@@ -887,7 +906,7 @@ class VchitectXLPipeline(VideoSysPipeline):
             width,
             frames,
             prompt_embeds.dtype,
-            device,
+            self._device,
             generator,
             latents,
         )

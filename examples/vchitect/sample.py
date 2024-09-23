@@ -1,9 +1,9 @@
-from videosys import VchitectXLConfig, VideoSysEngine
+from videosys import VchitectConfig, VideoSysEngine
 
 
 def run_base():
     # change num_gpus for multi-gpu inference
-    config = VchitectXLConfig("Vchitect/Vchitect-2.0-2B", num_gpus=1)
+    config = VchitectConfig("Vchitect/Vchitect-2.0-2B", num_gpus=1)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."
@@ -22,5 +22,15 @@ def run_base():
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
+def run_low_mem():
+    config = VchitectConfig("Vchitect/Vchitect-2.0-2B", cpu_offload=True)
+    engine = VideoSysEngine(config)
+
+    prompt = "Sunset over the sea."
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
+
+
 if __name__ == "__main__":
     run_base()
+    # run_low_mem()
