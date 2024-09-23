@@ -157,7 +157,7 @@ class VchitectXLPipeline(VideoSysPipeline):
             [T5Tokenizer](https://huggingface.co/docs/transformers/model_doc/t5#transformers.T5Tokenizer).
     """
 
-    model_cpu_offload_seq = "text_encoder->text_encoder_2->text_encoder_3"
+    model_cpu_offload_seq = "text_encoder->text_encoder_2->text_encoder_3->transformer->vae"
     _optional_components = [
         "text_encoder",
         "text_encoder_2",
@@ -165,6 +165,9 @@ class VchitectXLPipeline(VideoSysPipeline):
         "tokenizer",
         "tokenizer_2",
         "tokenizer_3",
+        "vae",
+        "transformer",
+        "scheduler",
     ]
     _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds", "negative_pooled_prompt_embeds"]
 
