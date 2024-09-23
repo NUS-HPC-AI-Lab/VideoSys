@@ -151,8 +151,6 @@ class OpenSoraConfig:
         self.num_gpus = num_gpus
         # ======== scheduler ========
         self.num_sampling_steps = num_sampling_steps
-        update_steps(num_sampling_steps)
-
         self.cfg_scale = cfg_scale
         # ======== vae ========
         self.tiling_size = tiling_size
@@ -530,6 +528,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         image_size = get_image_size(resolution, aspect_ratio)
         num_frames = get_num_frames(num_frames)
         self._set_seed(seed)
+        update_steps(self._config.num_sampling_steps)
 
         # == prepare batch prompts ==
         batch_prompts = [prompt]
