@@ -50,7 +50,7 @@ pip install -e .
 
 VideoSys supports many diffusion models with our various acceleration techniques, enabling these models to run faster and consume less memory.
 
-<b>You can find all available models and their supported acceleration techniques in the following table. Click `Doc` to see how to use them.</b>
+<b>You can find all available models and their supported acceleration techniques in the following table. Click `Code` to see how to use them.</b>
 
 <table>
     <tr>
@@ -65,20 +65,20 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc">PAB</a></th>
     </tr>
     <tr>
-        <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
-        <td align="center">🟡</td>
-        <td align="center">✅</td>
-        <td align="center">✅</td>
-        <td align="center">✅</td>
-        <td align="center"><a href="./examples/open_sora/sample.py">Code</a></td>
-    </tr>
-    <tr>
-        <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
+        <td>Vchitect [<a href="https://github.com/Vchitect/Vchitect-2.0">source</a>]</td>
         <td align="center">/</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/open_sora_plan/sample.py">Code</a></td>
+        <td align="center"><a href="./examples/cogvideox/sample.py">Code</a></td>
+    </tr>
+    <tr>
+        <td>CogVideoX [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
+        <td align="center">/</td>
+        <td align="center">✅</td>
+        <td align="center">/</td>
+        <td align="center">✅</td>
+        <td align="center"><a href="./examples/cogvideox/sample.py">Code</a></td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
@@ -89,12 +89,20 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <td align="center"><a href="./examples/latte/sample.py">Code</a></td>
     </tr>
     <tr>
-        <td>CogVideoX [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
+        <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
         <td align="center">/</td>
         <td align="center">✅</td>
-        <td align="center">/</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/cogvideox/sample.py">Code</a></td>
+        <td align="center">✅</td>
+        <td align="center"><a href="./examples/open_sora_plan/sample.py">Code</a></td>
+    </tr>
+    <tr>
+        <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
+        <td align="center">🟡</td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center">✅</td>
+        <td align="center"><a href="./examples/open_sora/sample.py">Code</a></td>
     </tr>
 </table>
 
