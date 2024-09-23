@@ -13,6 +13,7 @@ import math
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
+import torch.distributed as dist
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.models.autoencoders import AutoencoderKL
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
@@ -21,9 +22,10 @@ from torch.amp import autocast
 from tqdm import tqdm
 from transformers import CLIPTextModelWithProjection, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
-from videosys.core.pipeline import VideoSysPipeline
+from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.transformers.vchitect_transformer_3d import VchitectXLTransformerModel
 from videosys.utils.logging import logger
+from videosys.utils.utils import save_video, set_seed
 
 
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
@@ -86,9 +88,9 @@ def retrieve_timesteps(
     return timesteps, num_inference_steps
 
 
-class VchitectConfig:
+class VchitectXLConfig:
     """
-    This config is to instantiate a `OpenSoraPlanPipeline` class for video generation.
+    This config is to instantiate a `VchitectXLPipeline` class for video generation.
 
     To be specific, this config will be passed to engine by `VideoSysEngine(config)`.
     In the engine, it will be used to instantiate the corresponding pipeline class.
@@ -96,20 +98,12 @@ class VchitectConfig:
     If you want to explore the detail of generation, please refer to the pipeline class below.
 
     Args:
-        transformer (str):
-            The transformer model to use. Defaults to "LanguageBind/Open-Sora-Plan-v1.1.0".
-        ae (str):
-            The Autoencoder model to use. Defaults to "CausalVAEModel_4x8x8".
-        text_encoder (str):
-            The text encoder model to use. Defaults to "DeepFloyd/t5-v1_1-xxl".
-        num_frames (int):
-            The number of frames to generate. Must be one of [65, 221].
+        model_path (str):
+            The model path to use. Defaults to "Vchitect/Vchitect-2.0-2B".
         num_gpus (int):
             The number of GPUs to use. Defaults to 1.
-        enable_tiling (bool):
-            Whether to enable tiling. Defaults to True.
-        tile_overlap_factor (float):
-            The overlap factor for tiling. Defaults to 0.25.
+        cpu_offload (bool):
+            Whether to enable cpu offload. Defaults to False.
         enable_pab (bool):
             Whether to enable Pyramid Attention Broadcast. Defaults to False.
         pab_config (CogVideoXPABConfig):
@@ -136,31 +130,20 @@ class VchitectConfig:
 
     def __init__(
         self,
-        transformer: str = "LanguageBind/Open-Sora-Plan-v1.1.0",
-        ae: str = "CausalVAEModel_4x8x8",
-        text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
-        num_frames: int = 65,
+        model_path: str = "Vchitect/Vchitect-2.0-2B",
         # ======= distributed ========
         num_gpus: int = 1,
         # ======= memory =======
         cpu_offload: bool = False,
-        enable_tiling: bool = True,
-        tile_overlap_factor: float = 0.25,
         # ======= pab ========
         enable_pab: bool = False,
     ):
-        self.ae = ae
-        self.text_encoder = text_encoder
-        self.transformer = transformer
-        assert num_frames in [65, 221], "num_frames must be one of [65, 221]"
-        self.num_frames = num_frames
-        self.version = f"{num_frames}x512x512"
+        self.model_path = model_path
+        self.pipeline_cls = VchitectXLPipeline
         # ======= distributed ========
         self.num_gpus = num_gpus
         # ======= memory ========
         self.cpu_offload = cpu_offload
-        self.enable_tiling = enable_tiling
-        self.tile_overlap_factor = tile_overlap_factor
         # ======= pab ========
         self.enable_pab = enable_pab
         # self.pab_config = pab_config
@@ -201,38 +184,57 @@ class VchitectXLPipeline(VideoSysPipeline):
     """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->text_encoder_3->transformer->vae"
-    _optional_components = []
+    _optional_components = ["text_encoder", "text_encoder_2", "text_encoder_3"]
     _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds", "negative_pooled_prompt_embeds"]
 
     def __init__(
         self,
-        config: VchitectConfig,
-        model_path="Vchitect/Vchitect-2.0-2B",
-        device="cuda",
-        dtype=torch.bfloat16,
+        config: VchitectXLConfig,
+        text_encoder: Optional[CLIPTextModelWithProjection] = None,
+        text_encoder_2: Optional[CLIPTextModelWithProjection] = None,
+        text_encoder_3: Optional[T5EncoderModel] = None,
+        tokenizer: Optional[CLIPTokenizer] = None,
+        tokenizer_2: Optional[CLIPTokenizer] = None,
+        tokenizer_3: Optional[T5TokenizerFast] = None,
+        vae: Optional[AutoencoderKL] = None,
+        transformer: Optional[VchitectXLTransformerModel] = None,
+        scheduler: Optional[FlowMatchEulerDiscreteScheduler] = None,
+        device: torch.device = torch.device("cuda"),
+        dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
         self._config = config
 
-        self.text_encoder = CLIPTextModelWithProjection.from_pretrained(
-            model_path, subfolder="text_encoder", torch_dtype=dtype
-        )
-        self.text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(
-            model_path, subfolder="text_encoder_2", torch_dtype=dtype
-        )
-        self.text_encoder_3 = T5EncoderModel.from_pretrained(model_path, subfolder="text_encoder_3", torch_dtype=dtype)
+        if text_encoder is None:
+            self.text_encoder = CLIPTextModelWithProjection.from_pretrained(
+                config.model_path, subfolder="text_encoder", torch_dtype=dtype
+            )
+        if text_encoder_2 is None:
+            self.text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(
+                config.model_path, subfolder="text_encoder_2", torch_dtype=dtype
+            )
+        if text_encoder_3 is None:
+            self.text_encoder_3 = T5EncoderModel.from_pretrained(
+                config.model_path, subfolder="text_encoder_3", torch_dtype=dtype
+            )
 
-        self.tokenizer = CLIPTokenizer.from_pretrained(model_path, subfolder="tokenizer")
-        self.tokenizer_2 = CLIPTokenizer.from_pretrained(model_path, subfolder="tokenizer_2")
-        self.tokenizer_3 = T5TokenizerFast.from_pretrained(model_path, subfolder="tokenizer_3")
+        if tokenizer is None:
+            self.tokenizer = CLIPTokenizer.from_pretrained(config.model_path, subfolder="tokenizer")
+        if tokenizer_2 is None:
+            self.tokenizer_2 = CLIPTokenizer.from_pretrained(config.model_path, subfolder="tokenizer_2")
+        if tokenizer_3 is None:
+            self.tokenizer_3 = T5TokenizerFast.from_pretrained(config.model_path, subfolder="tokenizer_3")
 
-        self.vae = AutoencoderKL.from_pretrained(model_path, subfolder="vae", torch_dtype=dtype)
+        if vae is None:
+            self.vae = AutoencoderKL.from_pretrained(config.model_path, subfolder="vae", torch_dtype=dtype)
 
-        self.transformer = VchitectXLTransformerModel.from_pretrained(
-            model_path, subfolder="transformer", torch_dtype=dtype
-        )
+        if transformer is None:
+            self.transformer = VchitectXLTransformerModel.from_pretrained(
+                config.model_path, subfolder="transformer", torch_dtype=dtype
+            )
 
-        self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(model_path, subfolder="scheduler")
+        if scheduler is None:
+            self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(config.model_path, subfolder="scheduler")
 
         self.set_eval_and_device(
             device, self.text_encoder, self.text_encoder_2, self.text_encoder_3, self.transformer, self.vae
@@ -248,7 +250,7 @@ class VchitectXLPipeline(VideoSysPipeline):
             transformer=self.transformer,
             scheduler=self.scheduler,
         )
-        self.execution_device = "cuda"
+        self.execution_device = device
 
         self.vae_scale_factor = (
             2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8
@@ -369,6 +371,12 @@ class VchitectXLPipeline(VideoSysPipeline):
         pooled_prompt_embeds = pooled_prompt_embeds.view(batch_size * num_images_per_prompt, -1)
 
         return prompt_embeds, pooled_prompt_embeds
+
+    def _set_seed(self, seed):
+        if dist.get_world_size() == 1:
+            set_seed(seed)
+        else:
+            set_seed(seed, self.transformer.parallel_manager.dp_rank)
 
     def encode_prompt(
         self,
@@ -682,7 +690,7 @@ class VchitectXLPipeline(VideoSysPipeline):
 
     @torch.no_grad()
     @autocast("cuda", dtype=torch.bfloat16)
-    def __call__(
+    def generate(
         self,
         prompt: Union[str, List[str]] = None,
         prompt_2: Optional[Union[str, List[str]]] = None,
@@ -697,6 +705,7 @@ class VchitectXLPipeline(VideoSysPipeline):
         negative_prompt_2: Optional[Union[str, List[str]]] = None,
         negative_prompt_3: Optional[Union[str, List[str]]] = None,
         num_images_per_prompt: Optional[int] = 1,
+        seed: Optional[int] = None,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -804,6 +813,7 @@ class VchitectXLPipeline(VideoSysPipeline):
         height = height or self.default_sample_size * self.vae_scale_factor
         width = width or self.default_sample_size * self.vae_scale_factor
         frames = frames or 24
+        self._set_seed(seed)
 
         # 1. Check inputs. Raise error if not correct
         self.check_inputs(
@@ -953,5 +963,15 @@ class VchitectXLPipeline(VideoSysPipeline):
             image = self.vae.decode(latents[:, v_idx], return_dict=False)[0]
             image = self.image_processor.postprocess(image, output_type=output_type)
             videos.append(image[0])
+        videos = [videos]
 
-        return videos
+        # Offload all models
+        self.maybe_free_model_hooks()
+
+        if not return_dict:
+            return (videos,)
+
+        return VideoSysPipelineOutput(video=videos)
+
+    def save_video(self, video, output_path):
+        save_video(video, output_path, fps=8)

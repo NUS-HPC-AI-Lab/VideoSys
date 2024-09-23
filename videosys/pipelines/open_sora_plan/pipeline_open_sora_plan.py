@@ -32,22 +32,6 @@ from videosys.utils.utils import save_video, set_seed
 from ...models.autoencoders.autoencoder_kl_open_sora_plan import ae_stride_config, getae_wrapper
 from ...models.transformers.open_sora_plan_transformer_3d import LatteT2V
 
-EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import PixArtAlphaPipeline
-
-        >>> # You can replace the checkpoint id with "PixArt-alpha/PixArt-XL-2-512x512" too.
-        >>> pipe = PixArtAlphaPipeline.from_pretrained("PixArt-alpha/PixArt-XL-2-1024-MS", torch_dtype=torch.float16)
-        >>> # Enable memory optimizations.
-        >>> pipe.enable_model_cpu_offload()
-
-        >>> prompt = "A small cactus with a happy face in the Sahara desert."
-        >>> image = pipe(prompt).images[0]
-        ```
-"""
-
 
 class OpenSoraPlanPABConfig(PABConfig):
     def __init__(

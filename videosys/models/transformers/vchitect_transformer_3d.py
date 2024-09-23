@@ -486,15 +486,9 @@ class VchitectXLTransformerModel(ModelMixin, ConfigMixin, PeftAdapterMixin, From
             module.gradient_checkpointing = value
 
     def patchify_and_embed(self, x):
-        pH = pW = self.patch_size
         B, F, C, H, W = x.size()
         x = rearrange(x, "b f c h w -> (b f) c h w")
         x = self.pos_embed(x)  # [B L D]
-        # x = torch.cat([
-        #     x,
-        #     self.vid_token.view(1, 1, -1).expand(B*F, 1, -1),
-        # ], dim=1)
-
         return x, F, [(H, W)] * B
 
     def forward(
