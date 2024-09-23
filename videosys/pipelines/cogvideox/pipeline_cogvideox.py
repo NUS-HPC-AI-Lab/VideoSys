@@ -113,7 +113,7 @@ class CogVideoXConfig:
 
 
 class CogVideoXPipeline(VideoSysPipeline):
-    _optional_components = ["text_encoder", "tokenizer"]
+    _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
     _callback_tensor_inputs = [
         "latents",
