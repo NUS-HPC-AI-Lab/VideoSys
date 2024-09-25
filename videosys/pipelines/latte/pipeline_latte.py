@@ -236,9 +236,6 @@ class LattePipeline(VideoSysPipeline):
         if config.enable_pab:
             set_pab_manager(config.pab_config)
 
-        # set eval and device
-        self.set_eval_and_device(device, vae, transformer)
-
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
@@ -247,7 +244,7 @@ class LattePipeline(VideoSysPipeline):
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(device, text_encoder)
+            self.set_eval_and_device(device, text_encoder, vae, transformer)
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)

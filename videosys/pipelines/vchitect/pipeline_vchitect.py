@@ -222,8 +222,6 @@ class VchitectXLPipeline(VideoSysPipeline):
         if scheduler is None:
             self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(config.model_path, subfolder="scheduler")
 
-        self.set_eval_and_device(device, self.transformer, self.vae)
-
         self.register_modules(
             tokenizer=self.tokenizer,
             tokenizer_2=self.tokenizer_2,
@@ -244,7 +242,9 @@ class VchitectXLPipeline(VideoSysPipeline):
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(device, self.text_encoder, self.text_encoder_2, self.text_encoder_3)
+            self.set_eval_and_device(
+                device, self.text_encoder, self.text_encoder_2, self.text_encoder_3, self.transformer, self.vae
+            )
 
         self.vae_scale_factor = (
             2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8

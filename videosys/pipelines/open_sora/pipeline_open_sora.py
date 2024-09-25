@@ -188,7 +188,6 @@ class OpenSoraPipeline(VideoSysPipeline):
     bad_punct_regex = re.compile(
         r"[" + "#®•©™&@·º½¾¿¡§~" + "\)" + "\(" + "\]" + "\[" + "\}" + "\{" + "\|" + "\\" + "\/" + "\*" + r"]{1,}"
     )  # noqa
-
     _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
@@ -232,9 +231,6 @@ class OpenSoraPipeline(VideoSysPipeline):
         if config.enable_pab:
             set_pab_manager(config.pab_config)
 
-        # set eval and device
-        self.set_eval_and_device(device, vae, transformer)
-
         self.register_modules(
             text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler, tokenizer=tokenizer
         )
@@ -243,7 +239,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(self._device, text_encoder)
+            self.set_eval_and_device(self._device, vae, transformer, text_encoder)
 
         # parallel
         self._set_parallel()
@@ -639,7 +635,7 @@ class OpenSoraPipeline(VideoSysPipeline):
                 progress=verbose,
                 mask=masks,
             )
-            samples = self.vae.decode(samples.to(self._dtype), num_frames=num_frames)
+            samples = self.vae(samples.to(self._dtype), decode_only=True, num_frames=num_frames)
             video_clips.append(samples)
 
         for i in range(1, loop):
