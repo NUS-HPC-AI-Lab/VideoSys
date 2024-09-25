@@ -33,13 +33,11 @@ from videosys.utils.utils import save_video, set_seed
 class CogVideoXPABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 850],
         spatial_range: int = 2,
     ):
         super().__init__(
-            steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
             spatial_range=spatial_range,
@@ -115,7 +113,7 @@ class CogVideoXConfig:
 
 
 class CogVideoXPipeline(VideoSysPipeline):
-    _optional_components = ["text_encoder", "tokenizer"]
+    _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
     _callback_tensor_inputs = [
         "latents",
@@ -159,9 +157,6 @@ class CogVideoXPipeline(VideoSysPipeline):
                 subfolder="scheduler",
             )
 
-        # set eval and device
-        self.set_eval_and_device(self._device, vae, transformer)
-
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
@@ -170,7 +165,7 @@ class CogVideoXPipeline(VideoSysPipeline):
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(self._device, text_encoder)
+            self.set_eval_and_device(self._device, text_encoder, vae, transformer)
 
         # vae tiling
         if config.vae_tiling:

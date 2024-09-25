@@ -6,7 +6,6 @@ PAB_MANAGER = None
 class PABConfig:
     def __init__(
         self,
-        steps: int,
         cross_broadcast: bool = False,
         cross_threshold: list = None,
         cross_range: int = None,
@@ -20,7 +19,7 @@ class PABConfig:
         mlp_spatial_broadcast_config: dict = None,
         mlp_temporal_broadcast_config: dict = None,
     ):
-        self.steps = steps
+        self.steps = None
 
         self.cross_broadcast = cross_broadcast
         self.cross_threshold = cross_threshold
@@ -45,7 +44,7 @@ class PABManager:
     def __init__(self, config: PABConfig):
         self.config: PABConfig = config
 
-        init_prompt = f"Init Pyramid Attention Broadcast. steps: {config.steps}."
+        init_prompt = f"Init Pyramid Attention Broadcast."
         init_prompt += f" spatial broadcast: {config.spatial_broadcast}, spatial range: {config.spatial_range}, spatial threshold: {config.spatial_threshold}."
         init_prompt += f" temporal broadcast: {config.temporal_broadcast}, temporal range: {config.temporal_range}, temporal_threshold: {config.temporal_threshold}."
         init_prompt += f" cross broadcast: {config.cross_broadcast}, cross range: {config.cross_range}, cross threshold: {config.cross_threshold}."
@@ -78,7 +77,7 @@ class PABManager:
         count = (count + 1) % self.config.steps
         return flag, count
 
-    def if_broadcast_spatial(self, timestep: int, count: int, block_idx: int):
+    def if_broadcast_spatial(self, timestep: int, count: int):
         if (
             self.config.spatial_broadcast
             and (timestep is not None)
@@ -213,10 +212,10 @@ def if_broadcast_temporal(timestep: int, count: int):
     return PAB_MANAGER.if_broadcast_temporal(timestep, count)
 
 
-def if_broadcast_spatial(timestep: int, count: int, block_idx: int):
+def if_broadcast_spatial(timestep: int, count: int):
     if not enable_pab():
         return False, count
-    return PAB_MANAGER.if_broadcast_spatial(timestep, count, block_idx)
+    return PAB_MANAGER.if_broadcast_spatial(timestep, count)
 
 
 def if_broadcast_mlp(timestep: int, count: int, block_idx: int, all_timesteps, is_temporal=False):

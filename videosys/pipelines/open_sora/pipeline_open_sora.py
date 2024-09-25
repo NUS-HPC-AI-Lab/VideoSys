@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL
 from transformers import AutoTokenizer, T5EncoderModel
 
-from videosys.core.pab_mgr import PABConfig, set_pab_manager
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3
@@ -32,7 +32,6 @@ BAD_PUNCT_REGEX = re.compile(
 class OpenSoraPABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [450, 930],
         spatial_range: int = 2,
@@ -55,7 +54,6 @@ class OpenSoraPABConfig(PABConfig):
         },
     ):
         super().__init__(
-            steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
             spatial_range=spatial_range,
@@ -190,11 +188,7 @@ class OpenSoraPipeline(VideoSysPipeline):
     bad_punct_regex = re.compile(
         r"[" + "#®•©™&@·º½¾¿¡§~" + "\)" + "\(" + "\]" + "\[" + "\}" + "\{" + "\|" + "\\" + "\/" + "\*" + r"]{1,}"
     )  # noqa
-
-    _optional_components = [
-        "text_encoder",
-        "tokenizer",
-    ]
+    _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
     def __init__(
@@ -237,9 +231,6 @@ class OpenSoraPipeline(VideoSysPipeline):
         if config.enable_pab:
             set_pab_manager(config.pab_config)
 
-        # set eval and device
-        self.set_eval_and_device(device, vae, transformer)
-
         self.register_modules(
             text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler, tokenizer=tokenizer
         )
@@ -248,7 +239,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(self._device, text_encoder)
+            self.set_eval_and_device(self._device, vae, transformer, text_encoder)
 
         # parallel
         self._set_parallel()
@@ -530,6 +521,7 @@ class OpenSoraPipeline(VideoSysPipeline):
         image_size = get_image_size(resolution, aspect_ratio)
         num_frames = get_num_frames(num_frames)
         self._set_seed(seed)
+        update_steps(self._config.num_sampling_steps)
 
         # == prepare batch prompts ==
         batch_prompts = [prompt]
@@ -643,7 +635,7 @@ class OpenSoraPipeline(VideoSysPipeline):
                 progress=verbose,
                 mask=masks,
             )
-            samples = self.vae.decode(samples.to(self._dtype), num_frames=num_frames)
+            samples = self.vae(samples.to(self._dtype), decode_only=True, num_frames=num_frames)
             video_clips.append(samples)
 
         for i in range(1, loop):

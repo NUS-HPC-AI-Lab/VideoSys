@@ -297,7 +297,7 @@ class CogVideoXBlock(nn.Module):
 
         # attention
         if enable_pab():
-            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count, self.block_idx)
+            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count)
         if enable_pab() and broadcast_attn:
             attn_hidden_states, attn_encoder_hidden_states = self.last_attn
         else:

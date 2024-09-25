@@ -404,3 +404,17 @@ def all_to_all_with_pad(
         input_ = input_.narrow(gather_dim, 0, input_.size(gather_dim) - gather_pad)
 
     return input_
+
+
+def split_from_second_dim(x, batch_size, parallel_group):
+    x = x.view(batch_size, -1, *x.shape[1:])
+    x = split_sequence(x, parallel_group, dim=1, grad_scale="down", pad=get_pad("temporal"))
+    x = x.reshape(-1, *x.shape[2:])
+    return x
+
+
+def gather_from_second_dim(x, batch_size, parallel_group):
+    x = x.view(batch_size, -1, *x.shape[1:])
+    x = gather_sequence(x, parallel_group, dim=1, grad_scale="up", pad=get_pad("temporal"))
+    x = x.reshape(-1, *x.shape[2:])
+    return x

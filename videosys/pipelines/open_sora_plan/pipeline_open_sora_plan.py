@@ -32,27 +32,10 @@ from videosys.utils.utils import save_video, set_seed
 from ...models.autoencoders.autoencoder_kl_open_sora_plan import ae_stride_config, getae_wrapper
 from ...models.transformers.open_sora_plan_transformer_3d import LatteT2V
 
-EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import PixArtAlphaPipeline
-
-        >>> # You can replace the checkpoint id with "PixArt-alpha/PixArt-XL-2-512x512" too.
-        >>> pipe = PixArtAlphaPipeline.from_pretrained("PixArt-alpha/PixArt-XL-2-1024-MS", torch_dtype=torch.float16)
-        >>> # Enable memory optimizations.
-        >>> pipe.enable_model_cpu_offload()
-
-        >>> prompt = "A small cactus with a happy face in the Sahara desert."
-        >>> image = pipe(prompt).images[0]
-        ```
-"""
-
 
 class OpenSoraPlanPABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 150,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 850],
         spatial_range: int = 2,
@@ -97,7 +80,6 @@ class OpenSoraPlanPABConfig(PABConfig):
         },
     ):
         super().__init__(
-            steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
             spatial_range=spatial_range,
@@ -221,7 +203,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         r"[" + "#®•©™&@·º½¾¿¡§~" + "\)" + "\(" + "\]" + "\[" + "\}" + "\{" + "\|" + "\\" + "\/" + "\*" + r"]{1,}"
     )  # noqa
 
-    _optional_components = ["tokenizer", "text_encoder"]
+    _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
     def __init__(
@@ -257,9 +239,6 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         vae.vae_scale_factor = ae_stride_config[config.ae]
         transformer.force_images = False
 
-        # set eval and device
-        self.set_eval_and_device(device, vae, transformer)
-
         # pab
         if config.enable_pab:
             set_pab_manager(config.pab_config)
@@ -272,7 +251,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(device, text_encoder)
+            self.set_eval_and_device(device, text_encoder, vae, transformer)
 
         # self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
@@ -933,7 +912,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         return VideoSysPipelineOutput(video=video)
 
     def decode_latents(self, latents):
-        video = self.vae.decode(latents)  # b t c h w
+        video = self.vae(latents)  # b t c h w
         # b t c h w -> b t h w c
         video = ((video / 2.0 + 0.5).clamp(0, 1) * 255).to(dtype=torch.uint8).cpu().permute(0, 1, 3, 4, 2).contiguous()
         return video

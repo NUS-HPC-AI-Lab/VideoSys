@@ -375,9 +375,7 @@ class BasicTransformerBlock(nn.Module):
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
         if enable_pab():
-            broadcast_spatial, self.spatial_count = if_broadcast_spatial(
-                int(org_timestep[0]), self.spatial_count, self.block_idx
-            )
+            broadcast_spatial, self.spatial_count = if_broadcast_spatial(int(org_timestep[0]), self.spatial_count)
 
         if enable_pab() and broadcast_spatial:
             attn_output = self.spatial_last

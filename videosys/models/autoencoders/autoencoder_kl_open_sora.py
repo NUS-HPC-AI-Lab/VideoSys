@@ -694,7 +694,10 @@ class VideoAutoencoderPipeline(PreTrainedModel):
         else:
             return x
 
-    def forward(self, x):
+    def forward(self, x, decode_only=False, **kwargs):
+        if decode_only:
+            return self.decode(x, **kwargs)
+
         assert self.cal_loss, "This method is only available when cal_loss is True"
         z, posterior, x_z = self.encode(x)
         x_rec, x_z_rec = self.decode(z, num_frames=x_z.shape[2])

@@ -178,9 +178,7 @@ class STDiT3Block(nn.Module):
             if self.temporal:
                 broadcast_attn, self.attn_count = if_broadcast_temporal(int(timestep[0]), self.attn_count)
             else:
-                broadcast_attn, self.attn_count = if_broadcast_spatial(
-                    int(timestep[0]), self.attn_count, self.block_idx
-                )
+                broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count)
 
         if enable_pab() and broadcast_attn:
             x_m_s = self.last_attn

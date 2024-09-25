@@ -822,6 +822,9 @@ class CausalVAEModelWrapper(nn.Module):
     # def device(self):
     #     return self.vae.device
 
+    def forward(self, x):
+        return self.decode(x)
+
 
 videobase_ae_stride = {
     "CausalVAEModel_4x8x8": [4, 8, 8],

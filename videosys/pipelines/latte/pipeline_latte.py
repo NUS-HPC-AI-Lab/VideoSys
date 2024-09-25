@@ -35,7 +35,6 @@ from videosys.utils.utils import save_video, set_seed
 class LattePABConfig(PABConfig):
     def __init__(
         self,
-        steps: int = 50,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 800],
         spatial_range: int = 2,
@@ -62,7 +61,6 @@ class LattePABConfig(PABConfig):
         },
     ):
         super().__init__(
-            steps=steps,
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
             spatial_range=spatial_range,
@@ -188,7 +186,7 @@ class LattePipeline(VideoSysPipeline):
         r"[" + "#®•©™&@·º½¾¿¡§~" + "\)" + "\(" + "\]" + "\[" + "\}" + "\{" + "\|" + "\\" + "\/" + "\*" + r"]{1,}"
     )  # noqa
 
-    _optional_components = ["tokenizer", "text_encoder"]
+    _optional_components = ["tokenizer", "text_encoder", "vae", "transformer", "scheduler"]
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
     def __init__(
@@ -238,9 +236,6 @@ class LattePipeline(VideoSysPipeline):
         if config.enable_pab:
             set_pab_manager(config.pab_config)
 
-        # set eval and device
-        self.set_eval_and_device(device, vae, transformer)
-
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
         )
@@ -249,7 +244,7 @@ class LattePipeline(VideoSysPipeline):
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(device, text_encoder)
+            self.set_eval_and_device(device, text_encoder, vae, transformer)
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
