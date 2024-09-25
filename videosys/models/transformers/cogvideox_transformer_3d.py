@@ -46,12 +46,12 @@ class CogVideoXAttnProcessor2_0:
         # current layout is [text, 1/n seq, text, 1/n seq, ...]
         # we want to remove the all the text info [text, seq]
         sp_size = attn.parallel_manager.sp_size
-        split_seq = hidden_states.split(hidden_states.size(1) // sp_size, dim=1)
-        encoder_hidden_states = split_seq[0][:, :text_seq_length]
+        split_seq = hidden_states.split(hidden_states.size(2) // sp_size, dim=2)
+        encoder_hidden_states = split_seq[0][:, :, :text_seq_length]
         new_seq = [encoder_hidden_states]
         for i in range(sp_size):
-            new_seq.append(split_seq[i][:, text_seq_length:])
-        hidden_states = torch.cat(new_seq, dim=1)
+            new_seq.append(split_seq[i][:, :, text_seq_length:])
+        hidden_states = torch.cat(new_seq, dim=2)
         return hidden_states
 
     def _add_extra_encoder(self, hidden_states, text_seq_length, attn):
@@ -118,6 +118,13 @@ class CogVideoXAttnProcessor2_0:
         if attn.norm_k is not None:
             key = attn.norm_k(key)
 
+        if attn.parallel_manager.sp_size > 1:
+            # remove extra encoder for attention
+            query, key, value = map(
+                lambda x: self._remove_extra_encoder(x, text_seq_length, attn),
+                [query, key, value],
+            )
+
         # Apply RoPE if needed
         if image_rotary_emb is not None:
             emb_len = image_rotary_emb[0].shape[0]
@@ -129,10 +136,6 @@ class CogVideoXAttnProcessor2_0:
                     key[:, :, text_seq_length : emb_len + text_seq_length], image_rotary_emb
                 )
 
-        if attn.parallel_manager.sp_size > 1:
-            # remove extra encoder for attention
-            hidden_states = self._remove_extra_encoder(hidden_states, text_seq_length, attn)
-
         hidden_states = F.scaled_dot_product_attention(
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
@@ -142,13 +145,12 @@ class CogVideoXAttnProcessor2_0:
         if attn.parallel_manager.sp_size > 1:
             # add extra encoder for all_to_all
             hidden_states = self._add_extra_encoder(hidden_states, text_seq_length, attn)
-            set_pad("pad_extra", hidden_states.size(1), attn.parallel_manager.sp_group)
             hidden_states = all_to_all_with_pad(
                 hidden_states,
                 attn.parallel_manager.sp_group,
                 scatter_dim=1,
                 gather_dim=2,
-                scatter_pad=get_pad("pad_extra"),
+                scatter_pad=get_pad("pad"),
             )
 
         # linear proj
