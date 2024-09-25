@@ -22,7 +22,7 @@ from diffusers.utils import is_torch_version
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from torch import nn
 
-from videosys.core.comm import all_to_all_comm, gather_sequence, get_pad, set_pad, split_sequence
+from videosys.core.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
 from videosys.core.pab_mgr import enable_pab, if_broadcast_spatial
 from videosys.core.parallel_mgr import ParallelManager
 from videosys.models.modules.embeddings import apply_rotary_emb
@@ -41,6 +41,32 @@ class CogVideoXAttnProcessor2_0:
     def __init__(self):
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError("CogVideoXAttnProcessor requires PyTorch 2.0, to use it, please upgrade PyTorch to 2.0.")
+
+    def _remove_extra_encoder(self, hidden_states, text_seq_length, attn):
+        # current layout is [text, 1/n seq, text, 1/n seq, ...]
+        # we want to remove the all the text info [text, seq]
+        sp_size = attn.parallel_manager.sp_size
+        split_seq = hidden_states.split(hidden_states.size(1) // sp_size, dim=1)
+        encoder_hidden_states = split_seq[0][:, :text_seq_length]
+        new_seq = [encoder_hidden_states]
+        for i in range(sp_size):
+            new_seq.append(split_seq[i][:, text_seq_length:])
+        hidden_states = torch.cat(new_seq, dim=1)
+        return hidden_states
+
+    def _add_extra_encoder(self, hidden_states, text_seq_length, attn):
+        # current layout is [text, seq]
+        # we want to add the extra encoder info [text, 1/n seq, text, 1/n seq, ...]
+        sp_size = attn.parallel_manager.sp_size
+        encoder = hidden_states[:, :text_seq_length]
+        seq = hidden_states[:, text_seq_length:]
+        seq = seq.split(seq.size(1) // sp_size, dim=1)
+        new_seq = []
+        for i in range(sp_size):
+            new_seq.append(encoder)
+            new_seq.append(seq[i])
+        hidden_states = torch.cat(new_seq, dim=1)
+        return hidden_states
 
     def __call__(
         self,
@@ -72,7 +98,9 @@ class CogVideoXAttnProcessor2_0:
             ), f"Number of heads {attn.heads} must be divisible by sequence parallel size {attn.parallel_manager.sp_size}"
             attn_heads = attn.heads // attn.parallel_manager.sp_size
             query, key, value = map(
-                lambda x: all_to_all_comm(x, attn.parallel_manager.sp_group, scatter_dim=2, gather_dim=1),
+                lambda x: all_to_all_with_pad(
+                    x, attn.parallel_manager.sp_group, scatter_dim=2, gather_dim=1, gather_pad=get_pad("pad")
+                ),
                 [query, key, value],
             )
         else:
@@ -101,6 +129,10 @@ class CogVideoXAttnProcessor2_0:
                     key[:, :, text_seq_length : emb_len + text_seq_length], image_rotary_emb
                 )
 
+        if attn.parallel_manager.sp_size > 1:
+            # remove extra encoder for attention
+            hidden_states = self._remove_extra_encoder(hidden_states, text_seq_length, attn)
+
         hidden_states = F.scaled_dot_product_attention(
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
@@ -108,76 +140,16 @@ class CogVideoXAttnProcessor2_0:
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn_heads * head_dim)
 
         if attn.parallel_manager.sp_size > 1:
-            hidden_states = all_to_all_comm(hidden_states, attn.parallel_manager.sp_group, scatter_dim=1, gather_dim=2)
-
-        # linear proj
-        hidden_states = attn.to_out[0](hidden_states)
-        # dropout
-        hidden_states = attn.to_out[1](hidden_states)
-
-        encoder_hidden_states, hidden_states = hidden_states.split(
-            [text_seq_length, hidden_states.size(1) - text_seq_length], dim=1
-        )
-        return hidden_states, encoder_hidden_states
-
-
-class FusedCogVideoXAttnProcessor2_0:
-    r"""
-    Processor for implementing scaled dot-product attention for the CogVideoX model. It applies a rotary embedding on
-    query and key vectors, but does not include spatial normalization.
-    """
-
-    def __init__(self):
-        if not hasattr(F, "scaled_dot_product_attention"):
-            raise ImportError("CogVideoXAttnProcessor requires PyTorch 2.0, to use it, please upgrade PyTorch to 2.0.")
-
-    def __call__(
-        self,
-        attn: Attention,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        image_rotary_emb: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        text_seq_length = encoder_hidden_states.size(1)
-
-        hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
-
-        batch_size, sequence_length, _ = (
-            hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
-        )
-
-        if attention_mask is not None:
-            attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
-            attention_mask = attention_mask.view(batch_size, attn.heads, -1, attention_mask.shape[-1])
-
-        qkv = attn.to_qkv(hidden_states)
-        split_size = qkv.shape[-1] // 3
-        query, key, value = torch.split(qkv, split_size, dim=-1)
-
-        inner_dim = key.shape[-1]
-        head_dim = inner_dim // attn.heads
-
-        query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-        key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-        value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-
-        if attn.norm_q is not None:
-            query = attn.norm_q(query)
-        if attn.norm_k is not None:
-            key = attn.norm_k(key)
-
-        # Apply RoPE if needed
-        if image_rotary_emb is not None:
-            query[:, :, text_seq_length:] = apply_rotary_emb(query[:, :, text_seq_length:], image_rotary_emb)
-            if not attn.is_cross_attention:
-                key[:, :, text_seq_length:] = apply_rotary_emb(key[:, :, text_seq_length:], image_rotary_emb)
-
-        hidden_states = F.scaled_dot_product_attention(
-            query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
-        )
-
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
+            # add extra encoder for all_to_all
+            hidden_states = self._add_extra_encoder(hidden_states, text_seq_length, attn)
+            set_pad("pad_extra", hidden_states.size(1), attn.parallel_manager.sp_group)
+            hidden_states = all_to_all_with_pad(
+                hidden_states,
+                attn.parallel_manager.sp_group,
+                scatter_dim=1,
+                gather_dim=2,
+                scatter_pad=get_pad("pad_extra"),
+            )
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
