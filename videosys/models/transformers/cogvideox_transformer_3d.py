@@ -52,9 +52,26 @@ class CogVideoXAttnProcessor2_0:
         for i in range(sp_size):
             new_seq.append(split_seq[i][:, :, text_seq_length:])
         hidden_states = torch.cat(new_seq, dim=2)
+
+        # remove padding added when all2all
+        # if pad is removed earlier than this
+        # the split size will be wrong
+        pad = get_pad("pad")
+        if pad > 0:
+            hidden_states = hidden_states.narrow(2, 0, hidden_states.size(2) - pad)
         return hidden_states
 
     def _add_extra_encoder(self, hidden_states, text_seq_length, attn):
+        # add padding for split and later all2all
+        # if pad is removed later than this
+        # the split size will be wrong
+        pad = get_pad("pad")
+        if pad > 0:
+            pad_shape = list(hidden_states.shape)
+            pad_shape[1] = pad
+            pad_tensor = torch.zeros(pad_shape, device=hidden_states.device, dtype=hidden_states.dtype)
+            hidden_states = torch.cat([hidden_states, pad_tensor], dim=1)
+
         # current layout is [text, seq]
         # we want to add the extra encoder info [text, 1/n seq, text, 1/n seq, ...]
         sp_size = attn.parallel_manager.sp_size
@@ -97,10 +114,10 @@ class CogVideoXAttnProcessor2_0:
                 attn.heads % attn.parallel_manager.sp_size == 0
             ), f"Number of heads {attn.heads} must be divisible by sequence parallel size {attn.parallel_manager.sp_size}"
             attn_heads = attn.heads // attn.parallel_manager.sp_size
+            # normally we operate pad for every all2all. but for more convient implementation
+            # we move pad operation to encoder add and remove in cogvideo
             query, key, value = map(
-                lambda x: all_to_all_comm(
-                    x, attn.parallel_manager.sp_group, scatter_dim=2, gather_dim=1
-                ),
+                lambda x: all_to_all_comm(x, attn.parallel_manager.sp_group, scatter_dim=2, gather_dim=1),
                 [query, key, value],
             )
         else:
@@ -145,12 +162,7 @@ class CogVideoXAttnProcessor2_0:
         if attn.parallel_manager.sp_size > 1:
             # add extra encoder for all_to_all
             hidden_states = self._add_extra_encoder(hidden_states, text_seq_length, attn)
-            hidden_states = all_to_all_comm(
-                hidden_states,
-                attn.parallel_manager.sp_group,
-                scatter_dim=1,
-                gather_dim=2
-            )
+            hidden_states = all_to_all_comm(hidden_states, attn.parallel_manager.sp_group, scatter_dim=1, gather_dim=2)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
