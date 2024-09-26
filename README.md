@@ -4,7 +4,7 @@
 <h3 align="center">
 An easy and efficient system for video generation
 </h3>
-<p align="center">| <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#installation">Quick Start</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#usage">Supported Models</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#acceleration-techniques">Accelerations</a> | <a href="https://discord.gg/WhPmYm9FeG">Discord</a> | <a href="https://oahzxl.notion.site/VideoSys-News-42391db7e0a44f96a1f0c341450ae472?pvs=4">Media</a> | <a href="https://huggingface.co/VideoSys">HuggingFace Space</a>
+<p align="center">| <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#installation">Quick Start</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#usage">Supported Models</a> | <a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#acceleration-techniques">Accelerations</a> | <a href="https://discord.gg/WhPmYm9FeG">Discord</a> | <a href="https://oahzxl.notion.site/VideoSys-News-42391db7e0a44f96a1f0c341450ae472?pvs=4">Media</a> | <a href="https://huggingface.co/VideoSys">HuggingFace Space</a> |
 </p>
 
 ### Latest News 🔥
@@ -106,7 +106,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
     </tr>
 </table>
 
-You can also find easy demo with HuggingFace Space <a href="https://huggingface.co/VideoSys">link</a> and Gradio <a href="./gradio">link</a>.
+You can also find easy demo with HuggingFace Space <a href="https://huggingface.co/VideoSys">[link]</a> and Gradio <a href="./gradio">[link]</a>.
 
 ## Acceleration Techniques
 
