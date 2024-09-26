@@ -22,7 +22,7 @@ from diffusers.utils import is_torch_version
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from torch import nn
 
-from videosys.core.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
+from videosys.core.comm import all_to_all_comm, gather_sequence, get_pad, set_pad, split_sequence
 from videosys.core.pab_mgr import enable_pab, if_broadcast_spatial
 from videosys.core.parallel_mgr import ParallelManager
 from videosys.models.modules.embeddings import apply_rotary_emb
@@ -98,8 +98,8 @@ class CogVideoXAttnProcessor2_0:
             ), f"Number of heads {attn.heads} must be divisible by sequence parallel size {attn.parallel_manager.sp_size}"
             attn_heads = attn.heads // attn.parallel_manager.sp_size
             query, key, value = map(
-                lambda x: all_to_all_with_pad(
-                    x, attn.parallel_manager.sp_group, scatter_dim=2, gather_dim=1, gather_pad=get_pad("pad")
+                lambda x: all_to_all_comm(
+                    x, attn.parallel_manager.sp_group, scatter_dim=2, gather_dim=1
                 ),
                 [query, key, value],
             )
@@ -145,12 +145,11 @@ class CogVideoXAttnProcessor2_0:
         if attn.parallel_manager.sp_size > 1:
             # add extra encoder for all_to_all
             hidden_states = self._add_extra_encoder(hidden_states, text_seq_length, attn)
-            hidden_states = all_to_all_with_pad(
+            hidden_states = all_to_all_comm(
                 hidden_states,
                 attn.parallel_manager.sp_group,
                 scatter_dim=1,
-                gather_dim=2,
-                scatter_pad=get_pad("pad"),
+                gather_dim=2
             )
 
         # linear proj
