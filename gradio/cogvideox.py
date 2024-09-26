@@ -3,25 +3,17 @@ import os
 os.environ["GRADIO_TEMP_DIR"] = os.path.join(os.getcwd(), ".tmp_outputs")
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-import logging
 import uuid
 
-import GPUtil
-import psutil
-import torch
+import spaces
 
 import gradio as gr
 from videosys import CogVideoXConfig, CogVideoXPABConfig, VideoSysEngine
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-dtype = torch.float16
-
-
-def load_model(enable_video_sys=False, pab_threshold=[100, 850], pab_range=2):
+def load_model(model_name, enable_video_sys=False, pab_threshold=[100, 850], pab_range=2):
     pab_config = CogVideoXPABConfig(spatial_threshold=pab_threshold, spatial_range=pab_range)
-    config = CogVideoXConfig(num_gpus=1, enable_pab=enable_video_sys, pab_config=pab_config)
+    config = CogVideoXConfig(model_name, enable_pab=enable_video_sys, pab_config=pab_config)
     engine = VideoSysEngine(config)
     return engine
 
@@ -36,33 +28,9 @@ def generate(engine, prompt, num_inference_steps=50, guidance_scale=6.0):
     return output_path
 
 
-def get_server_status():
-    cpu_percent = psutil.cpu_percent()
-    memory = psutil.virtual_memory()
-    disk = psutil.disk_usage("/")
-    gpus = GPUtil.getGPUs()
-    gpu_info = []
-    for gpu in gpus:
-        gpu_info.append(
-            {
-                "id": gpu.id,
-                "name": gpu.name,
-                "load": f"{gpu.load*100:.1f}%",
-                "memory_used": f"{gpu.memoryUsed}MB",
-                "memory_total": f"{gpu.memoryTotal}MB",
-            }
-        )
-
-    return {"cpu": f"{cpu_percent}%", "memory": f"{memory.percent}%", "disk": f"{disk.percent}%", "gpu": gpu_info}
-
-
-def generate_vanilla(prompt, num_inference_steps, guidance_scale, progress=gr.Progress(track_tqdm=True)):
-    engine = load_model()
-    video_path = generate(engine, prompt, num_inference_steps, guidance_scale)
-    return video_path
-
-
+@spaces.GPU(duration=200)
 def generate_vs(
+    model_name,
     prompt,
     num_inference_steps,
     guidance_scale,
@@ -73,36 +41,9 @@ def generate_vs(
 ):
     threshold = [int(threshold_end), int(threshold_start)]
     gap = int(gap)
-    engine = load_model(enable_video_sys=True, pab_threshold=threshold, pab_range=gap)
+    engine = load_model(model_name, enable_video_sys=True, pab_threshold=threshold, pab_range=gap)
     video_path = generate(engine, prompt, num_inference_steps, guidance_scale)
     return video_path
-
-
-def get_server_status():
-    cpu_percent = psutil.cpu_percent()
-    memory = psutil.virtual_memory()
-    disk = psutil.disk_usage("/")
-    try:
-        gpus = GPUtil.getGPUs()
-        if gpus:
-            gpu = gpus[0]
-            gpu_memory = f"{gpu.memoryUsed}/{gpu.memoryTotal}MB ({gpu.memoryUtil*100:.1f}%)"
-        else:
-            gpu_memory = "No GPU found"
-    except:
-        gpu_memory = "GPU information unavailable"
-
-    return {
-        "cpu": f"{cpu_percent}%",
-        "memory": f"{memory.percent}%",
-        "disk": f"{disk.percent}%",
-        "gpu_memory": gpu_memory,
-    }
-
-
-def update_server_status():
-    status = get_server_status()
-    return (status["cpu"], status["memory"], status["disk"], status["gpu_memory"])
 
 
 css = """
@@ -206,60 +147,64 @@ with gr.Blocks(css=css) as demo:
 
     with gr.Row():
         with gr.Column():
-            prompt = gr.Textbox(label="Prompt (Less than 200 Words)", value="Sunset over the sea.", lines=4)
+            prompt = gr.Textbox(label="Prompt (Less than 200 Words)", value="Sunset over the sea.", lines=2)
 
             with gr.Column():
                 gr.Markdown("**Generation Parameters**<br>")
                 with gr.Row():
-                    num_inference_steps = gr.Number(label="Inference Steps", value=50)
-                    guidance_scale = gr.Number(label="Guidance Scale", value=6.0)
+                    model_name = gr.Radio(["THUDM/CogVideoX-2b"], label="Model Type", value="THUDM/CogVideoX-2b")
                 with gr.Row():
-                    pab_range = gr.Number(
-                        label="PAB Broadcast Range", value=2, precision=0, info="Broadcast timesteps range."
+                    num_inference_steps = gr.Slider(label="Inference Steps", maximum=50, value=50)
+                    guidance_scale = gr.Slider(label="Guidance Scale", value=6.0, maximum=15.0)
+                gr.Markdown("**Pyramid Attention Broadcast Parameters**<br>")
+                with gr.Row():
+                    pab_range = gr.Slider(
+                        label="Broadcast Range",
+                        value=2,
+                        step=1,
+                        minimum=1,
+                        maximum=4,
+                        info="Attention broadcast range.",
                     )
-                    pab_threshold_start = gr.Number(label="PAB Start Timestep", value=850, info="Start from step 1000.")
-                    pab_threshold_end = gr.Number(label="PAB End Timestep", value=100, info="End at step 0.")
+                    pab_threshold_start = gr.Slider(
+                        label="Start Timestep",
+                        minimum=500,
+                        maximum=1000,
+                        value=850,
+                        step=1,
+                        info="Broadcast start timestep (1000 is the fisrt).",
+                    )
+                    pab_threshold_end = gr.Slider(
+                        label="End Timestep",
+                        minimum=0,
+                        maximum=500,
+                        step=1,
+                        value=100,
+                        info="Broadcast end timestep (0 is the last).",
+                    )
                 with gr.Row():
-                    generate_button_vs = gr.Button("⚡️ Generate Video with VideoSys (Faster)")
-                    generate_button = gr.Button("🎬 Generate Video (Original)")
-                with gr.Column(elem_classes="server-status"):
-                    gr.Markdown("#### Server Status")
-
-                    with gr.Row():
-                        cpu_status = gr.Textbox(label="CPU", scale=1)
-                        memory_status = gr.Textbox(label="Memory", scale=1)
-
-                    with gr.Row():
-                        disk_status = gr.Textbox(label="Disk", scale=1)
-                        gpu_status = gr.Textbox(label="GPU Memory", scale=1)
-
-                    with gr.Row():
-                        refresh_button = gr.Button("Refresh")
+                    generate_button_vs = gr.Button("⚡️ Generate Video with VideoSys")
 
         with gr.Column():
             with gr.Row():
                 video_output_vs = gr.Video(label="CogVideoX with VideoSys", width=720, height=480)
-            with gr.Row():
-                video_output = gr.Video(label="CogVideoX", width=720, height=480)
-
-    generate_button.click(
-        generate_vanilla,
-        inputs=[prompt, num_inference_steps, guidance_scale],
-        outputs=[video_output],
-        concurrency_id="gen",
-        concurrency_limit=1,
-    )
 
     generate_button_vs.click(
         generate_vs,
-        inputs=[prompt, num_inference_steps, guidance_scale, pab_threshold_start, pab_threshold_end, pab_range],
+        inputs=[
+            model_name,
+            prompt,
+            num_inference_steps,
+            guidance_scale,
+            pab_threshold_start,
+            pab_threshold_end,
+            pab_range,
+        ],
         outputs=[video_output_vs],
         concurrency_id="gen",
         concurrency_limit=1,
     )
 
-    refresh_button.click(update_server_status, outputs=[cpu_status, memory_status, disk_status, gpu_status])
-    demo.load(update_server_status, outputs=[cpu_status, memory_status, disk_status, gpu_status], every=1)
 
 if __name__ == "__main__":
     demo.queue(max_size=10, default_concurrency_limit=1)
