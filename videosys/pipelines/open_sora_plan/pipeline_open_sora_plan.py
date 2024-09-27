@@ -242,6 +242,13 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         super().__init__()
         self._config = config
 
+        # not implemented
+        if config.version == "v120":
+            if config.num_gpus > 1:
+                raise NotImplementedError("v120 does not support multi-gpu inference")
+            if config.enable_pab:
+                raise NotImplementedError("v120 does not support PAB")
+
         # init
         if tokenizer is None:
             if config.version == "v110":
