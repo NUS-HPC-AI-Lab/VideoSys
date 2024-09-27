@@ -1002,7 +1002,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
         else:
             batch_size = prompt_embeds.shape[0]
 
-        device = "cuda"
+        device = getattr(self, "_execution_device", None) or getattr(self, "device", None) or torch.device("cuda")
 
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
