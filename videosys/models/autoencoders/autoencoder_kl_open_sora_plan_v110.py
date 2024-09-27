@@ -124,7 +124,7 @@ class VideoBaseAE_PL(ModelMixin, ConfigMixin):
             last_ckpt_file = ckpt_files[-1]
             config_file = os.path.join(pretrained_model_name_or_path, cls.config_name)
             model = cls.from_config(config_file)
-            print("init from {}".format(last_ckpt_file))
+            # print("init from {}".format(last_ckpt_file))
             model.init_from_ckpt(last_ckpt_file)
             return model
         else:
@@ -778,7 +778,7 @@ class CausalVAEModel(VideoBaseAE_PL):
 
     def init_from_ckpt(self, path, ignore_keys=list(), remove_loss=False):
         sd = torch.load(path, map_location="cpu")
-        print("init from " + path)
+        # print("init from " + path)
         if "state_dict" in sd:
             sd = sd["state_dict"]
         keys = list(sd.keys())
