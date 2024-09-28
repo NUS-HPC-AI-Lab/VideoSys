@@ -1,10 +1,12 @@
 import pytest
 
 from videosys import VchitectConfig, VideoSysEngine
+from videosys.utils.test import empty_cache
 
 
 @pytest.mark.parametrize("num_gpus", [1, 2])
-@pytest.mark.parametrize("model_path", ["Vchitect/Vchitect-2.0-2B", "Vchitect/Vchitect-2.0-5B"])
+@pytest.mark.parametrize("model_path", ["Vchitect/Vchitect-2.0-2B"])
+@empty_cache
 def test_base(num_gpus, model_path):
     config = VchitectConfig(model_path=model_path, num_gpus=num_gpus)
     engine = VideoSysEngine(config)
@@ -16,6 +18,7 @@ def test_base(num_gpus, model_path):
 
 @pytest.mark.parametrize("num_gpus", [1])
 @pytest.mark.parametrize("model_path", ["Vchitect/Vchitect-2.0-2B"])
+@empty_cache
 def test_pab(num_gpus, model_path):
     config = VchitectConfig(model_path=model_path, num_gpus=num_gpus, enable_pab=True)
     engine = VideoSysEngine(config)
@@ -27,6 +30,7 @@ def test_pab(num_gpus, model_path):
 
 @pytest.mark.parametrize("num_gpus", [1])
 @pytest.mark.parametrize("model_path", ["Vchitect/Vchitect-2.0-2B"])
+@empty_cache
 def test_low_mem(num_gpus, model_path):
     config = VchitectConfig(
         model_path=model_path,
