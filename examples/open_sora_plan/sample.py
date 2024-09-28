@@ -5,7 +5,7 @@ def run_base():
     # open-sora-plan v1.2.0
     # transformer_type (len, res): 93x480p 93x720p 29x480p 29x720p
     # change num_gpus for multi-gpu inference
-    config = OpenSoraPlanConfig(version="v120", transformer_type="93x480p", num_gpus=1)
+    config = OpenSoraPlanConfig(version="v120", transformer_type="29x480p", num_gpus=1)
     engine = VideoSysEngine(config)
 
     prompt = "Sunset over the sea."

@@ -1,9 +1,11 @@
 import pytest
 
 from videosys import LatteConfig, VideoSysEngine
+from videosys.utils.test import empty_cache
 
 
 @pytest.mark.parametrize("num_gpus", [1, 2])
+@empty_cache
 def test_base(num_gpus):
     config = LatteConfig(num_gpus=num_gpus)
     engine = VideoSysEngine(config)
@@ -14,6 +16,7 @@ def test_base(num_gpus):
 
 
 @pytest.mark.parametrize("num_gpus", [1])
+@empty_cache
 def test_pab(num_gpus):
     config = LatteConfig(num_gpus=num_gpus, enable_pab=True)
     engine = VideoSysEngine(config)
@@ -24,6 +27,7 @@ def test_pab(num_gpus):
 
 
 @pytest.mark.parametrize("num_gpus", [1])
+@empty_cache
 def test_low_mem(num_gpus):
     config = LatteConfig(num_gpus=num_gpus, cpu_offload=True)
     engine = VideoSysEngine(config)

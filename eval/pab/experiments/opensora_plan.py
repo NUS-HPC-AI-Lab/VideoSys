@@ -1,6 +1,6 @@
 from utils import generate_func, read_prompt_list
 
-from videosys import OpenSoraPlanConfig, OpenSoraPlanPABConfig, VideoSysEngine
+from videosys import OpenSoraPlanConfig, OpenSoraPlanV110PABConfig, VideoSysEngine
 
 
 def eval_base(prompt_list):
@@ -10,7 +10,7 @@ def eval_base(prompt_list):
 
 
 def eval_pab1(prompt_list):
-    pab_config = OpenSoraPlanPABConfig(
+    pab_config = OpenSoraPlanV110PABConfig(
         spatial_gap=2,
         temporal_gap=4,
         cross_gap=6,
@@ -21,7 +21,7 @@ def eval_pab1(prompt_list):
 
 
 def eval_pab2(prompt_list):
-    pab_config = OpenSoraPlanPABConfig(
+    pab_config = OpenSoraPlanV110PABConfig(
         spatial_gap=3,
         temporal_gap=5,
         cross_gap=7,
@@ -32,7 +32,7 @@ def eval_pab2(prompt_list):
 
 
 def eval_pab3(prompt_list):
-    pab_config = OpenSoraPlanPABConfig(
+    pab_config = OpenSoraPlanV110PABConfig(
         spatial_gap=5,
         temporal_gap=7,
         cross_gap=9,

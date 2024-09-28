@@ -38,7 +38,7 @@ from videosys.utils.logging import logger
 from videosys.utils.utils import save_video, set_seed
 
 
-class OpenSoraPlanPABConfig(PABConfig):
+class OpenSoraPlanV110PABConfig(PABConfig):
     def __init__(
         self,
         spatial_broadcast: bool = True,
@@ -100,6 +100,26 @@ class OpenSoraPlanPABConfig(PABConfig):
         )
 
 
+class OpenSoraPlanV120PABConfig(PABConfig):
+    def __init__(
+        self,
+        spatial_broadcast: bool = True,
+        spatial_threshold: list = [100, 850],
+        spatial_range: int = 2,
+        cross_broadcast: bool = True,
+        cross_threshold: list = [100, 850],
+        cross_range: int = 6,
+    ):
+        super().__init__(
+            spatial_broadcast=spatial_broadcast,
+            spatial_threshold=spatial_threshold,
+            spatial_range=spatial_range,
+            cross_broadcast=cross_broadcast,
+            cross_threshold=cross_threshold,
+            cross_range=cross_range,
+        )
+
+
 class OpenSoraPlanConfig:
     """
     This config is to instantiate a `OpenSoraPlanPipeline` class for video generation.
@@ -151,7 +171,7 @@ class OpenSoraPlanConfig:
     def __init__(
         self,
         version: str = "v120",
-        transformer_type: str = "93x480p",
+        transformer_type: str = "29x480p",
         transformer: str = None,
         text_encoder: str = None,
         # ======= distributed ========
@@ -162,7 +182,7 @@ class OpenSoraPlanConfig:
         tile_overlap_factor: float = 0.25,
         # ======= pab ========
         enable_pab: bool = False,
-        pab_config: PABConfig = OpenSoraPlanPABConfig(),
+        pab_config: PABConfig = None,
     ):
         self.pipeline_cls = OpenSoraPlanPipeline
 
@@ -196,7 +216,13 @@ class OpenSoraPlanConfig:
         self.tile_overlap_factor = tile_overlap_factor
         # ======= pab ========
         self.enable_pab = enable_pab
-        self.pab_config = pab_config
+        if self.enable_pab and pab_config is None:
+            if version == "v110":
+                self.pab_config = OpenSoraPlanV110PABConfig()
+            elif version == "v120":
+                self.pab_config = OpenSoraPlanV120PABConfig()
+        else:
+            self.pab_config = pab_config
 
 
 class OpenSoraPlanPipeline(VideoSysPipeline):
@@ -241,13 +267,6 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
     ):
         super().__init__()
         self._config = config
-
-        # not implemented
-        if config.version == "v120":
-            if config.num_gpus > 1:
-                raise NotImplementedError("v120 does not support multi-gpu inference")
-            if config.enable_pab:
-                raise NotImplementedError("v120 does not support PAB")
 
         # init
         if tokenizer is None:
