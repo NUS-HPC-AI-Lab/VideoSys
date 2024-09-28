@@ -171,7 +171,7 @@ class OpenSoraPlanConfig:
     def __init__(
         self,
         version: str = "v120",
-        transformer_type: str = "93x480p",
+        transformer_type: str = "29x480p",
         transformer: str = None,
         text_encoder: str = None,
         # ======= distributed ========

@@ -5,7 +5,7 @@ from videosys.utils.test import empty_cache
 
 
 @pytest.mark.parametrize("num_gpus", [1, 2])
-@pytest.mark.parametrize("model", [("v110", "65x512x512"), ("v120", "93x480p")])
+@pytest.mark.parametrize("model", [("v120", "29x480p")])
 @empty_cache
 def test_base(num_gpus, model):
     config = OpenSoraPlanConfig(version=model[0], transformer_type=model[1], num_gpus=num_gpus)
@@ -17,7 +17,7 @@ def test_base(num_gpus, model):
 
 
 @pytest.mark.parametrize("num_gpus", [1])
-@pytest.mark.parametrize("model", [("v120", "93x480p")])
+@pytest.mark.parametrize("model", [("v120", "29x480p")])
 @empty_cache
 def test_pab(num_gpus, model):
     config = OpenSoraPlanConfig(version=model[0], transformer_type=model[1], num_gpus=num_gpus, enable_pab=True)
@@ -29,7 +29,7 @@ def test_pab(num_gpus, model):
 
 
 @pytest.mark.parametrize("num_gpus", [1])
-@pytest.mark.parametrize("model", [("v120", "93x480p")])
+@pytest.mark.parametrize("model", [("v120", "29x480p")])
 @empty_cache
 def test_low_mem(num_gpus, model):
     config = OpenSoraPlanConfig(

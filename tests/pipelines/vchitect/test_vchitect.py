@@ -13,7 +13,7 @@ def test_base(num_gpus, model_path):
 
     prompt = "Sunset over the sea."
     video = engine.generate(prompt, seed=0).video[0]
-    engine.save_video(video, f"./test_outputs/{prompt}_vchitect_{model_path}_base_{num_gpus}.mp4")
+    engine.save_video(video, f"./test_outputs/{prompt}_vchitect_{model_path.replace('/', '_')}_base_{num_gpus}.mp4")
 
 
 @pytest.mark.parametrize("num_gpus", [1])
@@ -25,7 +25,7 @@ def test_pab(num_gpus, model_path):
 
     prompt = "Sunset over the sea."
     video = engine.generate(prompt, seed=0).video[0]
-    engine.save_video(video, f"./test_outputs/{prompt}_vchitect_{model_path}_pab_{num_gpus}.mp4")
+    engine.save_video(video, f"./test_outputs/{prompt}_vchitect_{model_path.replace('/', '_')}_pab_{num_gpus}.mp4")
 
 
 @pytest.mark.parametrize("num_gpus", [1])
@@ -41,4 +41,4 @@ def test_low_mem(num_gpus, model_path):
 
     prompt = "Sunset over the sea."
     video = engine.generate(prompt, seed=0).video[0]
-    engine.save_video(video, f"./test_outputs/{prompt}_vchitect_{model_path}_low_mem_{num_gpus}.mp4")
+    engine.save_video(video, f"./test_outputs/{prompt}_vchitect_{model_path.replace('/', '_')}_low_mem_{num_gpus}.mp4")
