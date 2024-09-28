@@ -1,3 +1,3 @@
-from .pipeline_vchitect import VchitectConfig, VchitectXLPipeline
+from .pipeline_vchitect import VchitectConfig, VchitectPABConfig, VchitectXLPipeline
 
-__all__ = ["VchitectXLPipeline", "VchitectConfig"]
+__all__ = ["VchitectXLPipeline", "VchitectConfig", "VchitectPABConfig"]

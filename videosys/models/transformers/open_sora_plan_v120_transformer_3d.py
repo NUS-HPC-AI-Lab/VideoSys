@@ -27,6 +27,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from videosys.core.comm import all_to_all_comm, gather_sequence, split_sequence
+from videosys.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial
 from videosys.core.parallel_mgr import ParallelManager
 from videosys.core.pipeline import VideoSysPipelineOutput
 
@@ -1307,6 +1308,12 @@ class BasicTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
+        # pab
+        self.spatial_last = None
+        self.spatial_count = 0
+        self.cross_last = None
+        self.cross_count = 0
+
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward
         self._chunk_size = chunk_size
@@ -1325,47 +1332,46 @@ class BasicTransformerBlock(nn.Module):
         height: int = None,
         width: int = None,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+        org_timestep: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
         batch_size = hidden_states.shape[0]
 
         # import ipdb;ipdb.set_trace()
-        if self.norm_type == "ada_norm":
-            norm_hidden_states = self.norm1(hidden_states, timestep)
-        elif self.norm_type == "ada_norm_zero":
-            norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
-                hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
-            )
-        elif self.norm_type in ["layer_norm", "layer_norm_i2vgen"]:
-            norm_hidden_states = self.norm1(hidden_states)
-        elif self.norm_type == "ada_norm_continuous":
-            norm_hidden_states = self.norm1(hidden_states, added_cond_kwargs["pooled_text_emb"])
-        elif self.norm_type == "ada_norm_single":
+        if self.norm_type == "ada_norm_single":
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
                 self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
             ).chunk(6, dim=1)
-            norm_hidden_states = self.norm1(hidden_states)
-            norm_hidden_states = norm_hidden_states * (1 + scale_msa) + shift_msa
         else:
             raise ValueError("Incorrect norm used")
-
-        if self.pos_embed is not None:
-            norm_hidden_states = self.pos_embed(norm_hidden_states)
 
         # 1. Prepare GLIGEN inputs
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
 
-        attn_output = self.attn1(
-            norm_hidden_states,
-            encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
-            attention_mask=attention_mask,
-            frame=frame,
-            height=height,
-            width=width,
-            **cross_attention_kwargs,
-        )
+        broadcast, self.spatial_count = if_broadcast_spatial(int(org_timestep[0]), self.spatial_count)
+        if broadcast:
+            attn_output = self.spatial_last
+        else:
+            norm_hidden_states = self.norm1(hidden_states)
+            norm_hidden_states = norm_hidden_states * (1 + scale_msa) + shift_msa
+            if self.pos_embed is not None:
+                norm_hidden_states = self.pos_embed(norm_hidden_states)
+
+            attn_output = self.attn1(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
+                attention_mask=attention_mask,
+                frame=frame,
+                height=height,
+                width=width,
+                **cross_attention_kwargs,
+            )
+
+            if enable_pab():
+                self.spatial_last = attn_output
+
         if self.norm_type == "ada_norm_zero":
             attn_output = gate_msa.unsqueeze(1) * attn_output
         elif self.norm_type == "ada_norm_single":
@@ -1381,28 +1387,36 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Cross-Attention
         if self.attn2 is not None:
-            if self.norm_type == "ada_norm":
-                norm_hidden_states = self.norm2(hidden_states, timestep)
-            elif self.norm_type in ["ada_norm_zero", "layer_norm", "layer_norm_i2vgen"]:
-                norm_hidden_states = self.norm2(hidden_states)
-            elif self.norm_type == "ada_norm_single":
-                # For PixArt norm2 isn't applied here:
-                # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
-                norm_hidden_states = hidden_states
-            elif self.norm_type == "ada_norm_continuous":
-                norm_hidden_states = self.norm2(hidden_states, added_cond_kwargs["pooled_text_emb"])
+            broadcast, self.cross_count = if_broadcast_cross(int(org_timestep[0]), self.cross_count)
+            if broadcast:
+                attn_output = self.cross_last
+
             else:
-                raise ValueError("Incorrect norm")
+                if self.norm_type == "ada_norm":
+                    norm_hidden_states = self.norm2(hidden_states, timestep)
+                elif self.norm_type in ["ada_norm_zero", "layer_norm", "layer_norm_i2vgen"]:
+                    norm_hidden_states = self.norm2(hidden_states)
+                elif self.norm_type == "ada_norm_single":
+                    # For PixArt norm2 isn't applied here:
+                    # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
+                    norm_hidden_states = hidden_states
+                elif self.norm_type == "ada_norm_continuous":
+                    norm_hidden_states = self.norm2(hidden_states, added_cond_kwargs["pooled_text_emb"])
+                else:
+                    raise ValueError("Incorrect norm")
 
-            if self.pos_embed is not None and self.norm_type != "ada_norm_single":
-                norm_hidden_states = self.pos_embed(norm_hidden_states)
+                if self.pos_embed is not None and self.norm_type != "ada_norm_single":
+                    norm_hidden_states = self.pos_embed(norm_hidden_states)
 
-            attn_output = self.attn2(
-                norm_hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                **cross_attention_kwargs,
-            )
+                attn_output = self.attn2(
+                    norm_hidden_states,
+                    encoder_hidden_states=encoder_hidden_states,
+                    attention_mask=encoder_attention_mask,
+                    **cross_attention_kwargs,
+                )
+
+                if enable_pab():
+                    self.cross_last = attn_output
             hidden_states = attn_output + hidden_states
 
         # 4. Feed-forward
@@ -1941,6 +1955,7 @@ class OpenSoraT2V(ModelMixin, ConfigMixin):
                         frame=frame,
                         height=height,
                         width=width,
+                        org_timestep=timestep,
                     )
                 if hidden_states_img is not None:
                     hidden_states_img = block(
@@ -1954,6 +1969,7 @@ class OpenSoraT2V(ModelMixin, ConfigMixin):
                         frame=1,
                         height=height,
                         width=width,
+                        org_timestep=timestep,
                     )
 
         if self.parallel_manager.sp_size > 1:
