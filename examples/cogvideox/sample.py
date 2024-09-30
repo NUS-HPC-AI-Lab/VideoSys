@@ -1,4 +1,4 @@
-from videosys import CogVideoXConfig, VideoSysEngine
+from videosys import CogVideoXConfig, VideoSysEngine, VideoSysRayEngine
 
 
 def run_base():
@@ -37,8 +37,17 @@ def run_low_mem():
     video = engine.generate(prompt).video[0]
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 
+def run_dist():
+    config = CogVideoXConfig("THUDM/CogVideoX-2b", num_gpus=4, ray_address="auto")
+    engine = VideoSysRayEngine(config)
+
+    prompt = "Sunset over the sea."
+    video = engine.generate(prompt).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 if __name__ == "__main__":
     run_base()
     # run_pab()
     # run_low_mem()
+    # run_dist()
+

@@ -1,4 +1,4 @@
-from videosys import OpenSoraPlanConfig, VideoSysEngine
+from videosys import OpenSoraPlanConfig, VideoSysEngine, VideoSysRayEngine
 
 
 def run_base():
@@ -36,6 +36,20 @@ def run_pab():
     video = engine.generate(prompt).video[0]
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 
+def run_dist():
+    config = OpenSoraPlanConfig(version="v120", transformer_type="29x480p", num_gpus=4, ray_address="auto")
+    engine = VideoSysRayEngine(config)
+
+    prompt = "Sunset over the sea."
+    video = engine.generate(
+        prompt=prompt,
+        guidance_scale=7.5,
+        num_inference_steps=100,
+        seed=-1,
+    ).video[0]
+    engine.save_video(video, f"./outputs/{prompt}.mp4")
+
+
 
 def run_v110():
     # open-sora-plan v1.1.0
@@ -59,4 +73,5 @@ if __name__ == "__main__":
     run_base()
     # run_low_mem()
     # run_pab()
+    # run_dist()
     # run_v110()

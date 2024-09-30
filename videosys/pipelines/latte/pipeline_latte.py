@@ -129,6 +129,7 @@ class LatteConfig:
         model_path: str = "maxin-cn/Latte-1",
         # ======= distributed =======
         num_gpus: int = 1,
+        ray_address: Optional[str] = None,
         # ======= vae ========
         enable_vae_temporal_decoder: bool = True,
         # ======= scheduler ========
@@ -146,6 +147,7 @@ class LatteConfig:
         self.pipeline_cls = LattePipeline
         # ======= distributed =======
         self.num_gpus = num_gpus
+        self.ray_address = ray_address
         # ======= vae ========
         self.enable_vae_temporal_decoder = enable_vae_temporal_decoder
         # ======= memory ========

@@ -176,6 +176,7 @@ class OpenSoraPlanConfig:
         text_encoder: str = None,
         # ======= distributed ========
         num_gpus: int = 1,
+        ray_address: str = None,
         # ======= memory =======
         cpu_offload: bool = False,
         enable_tiling: bool = True,
@@ -210,6 +211,7 @@ class OpenSoraPlanConfig:
 
         # ======= distributed ========
         self.num_gpus = num_gpus
+        self.ray_address = ray_address
         # ======= memory ========
         self.cpu_offload = cpu_offload
         self.enable_tiling = enable_tiling

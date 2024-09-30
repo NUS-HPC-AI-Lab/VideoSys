@@ -45,7 +45,7 @@ def initialize(
         except Exception:
             pass
         dist.init_process_group(backend="nccl", init_method=init_method, world_size=world_size, rank=rank)
-        torch.cuda.set_device(rank)
+        torch.cuda.set_device(rank % torch.cuda.device_count())
         init_dist_logger()
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True

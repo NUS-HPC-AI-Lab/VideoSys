@@ -1,4 +1,4 @@
-from .core.engine import VideoSysEngine
+from .core.engine import VideoSysEngine, VideoSysRayEngine
 from .core.parallel_mgr import initialize
 from .pipelines.cogvideox import CogVideoXConfig, CogVideoXPABConfig, CogVideoXPipeline
 from .pipelines.latte import LatteConfig, LattePABConfig, LattePipeline
@@ -14,6 +14,7 @@ from .pipelines.vchitect import VchitectConfig, VchitectPABConfig, VchitectXLPip
 __all__ = [
     "initialize",
     "VideoSysEngine",
+    "VideoSysRayEngine",
     "LattePipeline", "LatteConfig", "LattePABConfig",
     "OpenSoraPlanPipeline", "OpenSoraPlanConfig", "OpenSoraPlanV110PABConfig", "OpenSoraPlanV120PABConfig",
     "OpenSoraPipeline", "OpenSoraConfig", "OpenSoraPABConfig",

@@ -93,6 +93,7 @@ class CogVideoXConfig:
         model_path: str = "THUDM/CogVideoX-2b",
         # ======= distributed ========
         num_gpus: int = 1,
+        ray_address: Optional[str] = None,
         # ======= memory =======
         cpu_offload: bool = False,
         vae_tiling: bool = True,
@@ -104,6 +105,7 @@ class CogVideoXConfig:
         self.pipeline_cls = CogVideoXPipeline
         # ======= distributed ========
         self.num_gpus = num_gpus
+        self.ray_address = ray_address
         # ======= memory ========
         self.cpu_offload = cpu_offload
         self.vae_tiling = vae_tiling

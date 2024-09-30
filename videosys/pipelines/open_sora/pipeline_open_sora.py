@@ -130,6 +130,7 @@ class OpenSoraConfig:
         text_encoder: str = "DeepFloyd/t5-v1_1-xxl",
         # ======== distributed ========
         num_gpus: int = 1,
+        ray_address: Optional[str] = None,
         # ======== scheduler ========
         num_sampling_steps: int = 30,
         cfg_scale: float = 7.0,
@@ -149,6 +150,7 @@ class OpenSoraConfig:
         self.text_encoder = text_encoder
         # ======== distributed ========
         self.num_gpus = num_gpus
+        self.ray_address = ray_address
         # ======== scheduler ========
         self.num_sampling_steps = num_sampling_steps
         self.cfg_scale = cfg_scale
