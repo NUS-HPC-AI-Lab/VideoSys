@@ -8,8 +8,8 @@ An easy and efficient system for video generation
 </p>
 
 ### Latest News 🔥
-- [2024/09] Support [Vchitect-2.0](https://github.com/Vchitect/Vchitect-2.0) and [Open-Sora-Plan v1.2.0](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
-- [2024/08] 🔥 Evole from [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0) to <b>VideoSys: An easy and efficient system for video generation.</b>
+- [2024/09] Support [CogVideoX](https://github.com/THUDM/CogVideo), [Vchitect-2.0](https://github.com/Vchitect/Vchitect-2.0) and [Open-Sora-Plan v1.2.0](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
+- [2024/08] 🔥 Evole from [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0) to <b>VideoSys: An easy and efficient system for video generation</b>.
 - [2024/08] 🔥 Release PAB paper: <b>[Real-Time Video Generation with Pyramid Attention Broadcast](https://arxiv.org/abs/2408.12588)</b>.
 - [2024/06] 🔥 Propose Pyramid Attention Broadcast (PAB)[[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.
 - [2024/06] Support [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan) and [Latte](https://github.com/Vchitect/Latte).
