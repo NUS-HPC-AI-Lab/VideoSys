@@ -15,7 +15,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import xformers.ops
 from einops import rearrange
 from timm.models.vision_transformer import Mlp
 
