@@ -18,5 +18,8 @@ def generate_func(pipeline, prompt_list, output_dir, kwargs: dict = {}):
     kwargs["verbose"] = False
     kwargs["seed"] = 0
     for idx, prompt in tqdm.tqdm(list(prompt_list.items())):
+        if os.path.exists(os.path.join(output_dir, f"{idx}.mp4")):
+            print(f"Skip {idx} because it already exists")
+            continue
         video = pipeline.generate(prompt, **kwargs).video[0]
         pipeline.save_video(video, os.path.join(output_dir, f"{idx}.mp4"))
