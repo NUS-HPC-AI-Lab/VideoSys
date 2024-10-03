@@ -131,7 +131,7 @@ def main(args):
     print(f"Find {len(video_ids)} videos")
 
     prompt_interval = 1
-    batch_size = 16
+    batch_size = 8
     calculate_lpips_flag, calculate_psnr_flag, calculate_ssim_flag = True, True, True
 
     lpips_results = {}
