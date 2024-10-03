@@ -4,7 +4,7 @@ from videosys import OpenSoraPlanConfig, OpenSoraPlanV110PABConfig, VideoSysEngi
 
 
 def eval_base(prompt_list):
-    config = OpenSoraPlanConfig()
+    config = OpenSoraPlanConfig(version="v110", transformer_type="65x512x512")
     engine = VideoSysEngine(config)
     generate_func(engine, prompt_list, "./samples/opensoraplan_base", loop=5)
 
@@ -15,7 +15,7 @@ def eval_pab1(prompt_list):
         temporal_gap=4,
         cross_gap=6,
     )
-    config = OpenSoraPlanConfig(enable_pab=True, pab_config=pab_config)
+    config = OpenSoraPlanConfig(version="v110", transformer_type="65x512x512", enable_pab=True, pab_config=pab_config)
     engine = VideoSysEngine(config)
     generate_func(engine, prompt_list, "./samples/opensoraplan_pab1", loop=5)
 
@@ -26,7 +26,7 @@ def eval_pab2(prompt_list):
         temporal_gap=5,
         cross_gap=7,
     )
-    config = OpenSoraPlanConfig(enable_pab=True, pab_config=pab_config)
+    config = OpenSoraPlanConfig(version="v110", transformer_type="65x512x512", enable_pab=True, pab_config=pab_config)
     engine = VideoSysEngine(config)
     generate_func(engine, prompt_list, "./samples/opensoraplan_pab2", loop=5)
 
@@ -37,7 +37,7 @@ def eval_pab3(prompt_list):
         temporal_gap=7,
         cross_gap=9,
     )
-    config = OpenSoraPlanConfig(enable_pab=True, pab_config=pab_config)
+    config = OpenSoraPlanConfig(version="v110", transformer_type="65x512x512", enable_pab=True, pab_config=pab_config)
     engine = VideoSysEngine(config)
     generate_func(engine, prompt_list, "./samples/opensoraplan_pab3", loop=5)
 
