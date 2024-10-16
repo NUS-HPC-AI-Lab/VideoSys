@@ -111,7 +111,7 @@ You can also find easy demo with HuggingFace Space <a href="https://huggingface.
 
 ## Acceleration Techniques
 
-### Pyramid Attention Broadcast (PAB) [[paper](https://arxiv.org/abs/2408.12588)][[blog](https://arxiv.org/abs/2403.10266)][[doc](./docs/pab.md)]
+### Pyramid Attention Broadcast (PAB) [[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)]
 
 Real-Time Video Generation with Pyramid Attention Broadcast
 
