@@ -6,10 +6,8 @@ from typing import Optional, Tuple
 
 import torch
 import torch.distributed as dist
-from colossalai.booster.plugin import LowLevelZeroPlugin
 from colossalai.cluster.dist_coordinator import DistCoordinator
 from colossalai.zero.low_level.low_level_optim import LowLevelZeroOptimizer
-from opendit.core.parallel_mgr import set_parallel_manager
 
 from videosys.utils.logging import logger
 
@@ -289,21 +287,6 @@ class GroupTimer(Timer):
                 f"Max Alloc memory: {self.start_mem[2]:.2f} -> {self.end_mem[2]:.2f}, "
                 f"Max Rsrvd memory: {self.start_mem[3]:.2f} -> {self.end_mem[3]:.2f}"
             )
-
-
-def create_colossalai_plugin(plugin, dtype, grad_clip, sp_size, reduce_bucket_size_in_m: int = 20):
-    if plugin == "zero2":
-        plugin = LowLevelZeroPlugin(
-            stage=2,
-            precision=dtype,
-            initial_scale=2**16,
-            max_norm=grad_clip,
-            reduce_bucket_size_in_m=reduce_bucket_size_in_m,
-        )
-        set_parallel_manager(dist.get_world_size() // sp_size, sp_size)
-    else:
-        raise ValueError(f"Unknown plugin {plugin}")
-    return plugin
 
 
 def set_grad_accumulation_steps(engine, total_gas: int):

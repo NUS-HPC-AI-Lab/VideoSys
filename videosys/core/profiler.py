@@ -10,12 +10,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
-from opendit.core.parallel_mgr import (
-    get_data_parallel_group,
-    get_sequence_parallel_group,
-    get_sequence_parallel_size,
-    set_sequence_parallel_size,
-)
 
 from videosys.core.recompute import disable_profile, enable_profile, get_profile_context
 from videosys.training.datasets.open_sora.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
@@ -182,6 +176,7 @@ class Profiler:
         profile_path=None,
         verbose=True,
         profile_depth=2,
+        parallel_mgr=None,
     ):
         self.model_config = model_config
 
@@ -225,6 +220,8 @@ class Profiler:
         if self.need_profile():
             self.timers["iteration"] = GroupTimer("iteration")
         self.dummy_timer = nullcontext()
+
+        self.parallel_mgr = parallel_mgr
 
     ############################################################
     # init methods
@@ -274,7 +271,7 @@ class Profiler:
                 self.next_bucket_idx = 0
                 self.bucket_partition_boundary = len(self.bucket_config)
 
-            self.next_sp_size = 1 if self.dynamic_sp else get_sequence_parallel_size()
+            self.next_sp_size = 1 if self.dynamic_sp else self.parallel_mgr.sp_size
             self.next_bs = 1
             self.next_warmup_iter = True
 
@@ -433,7 +430,7 @@ class Profiler:
         enable_profile()
         self.profile_ctx = get_profile_context()
 
-        self.global_timer = GroupTimer("global", group=get_data_parallel_group())
+        self.global_timer = GroupTimer("global", group=self.parallel_mgr.dp_group)
         dist.barrier()
         self.global_timer.__enter__()
 
@@ -679,7 +676,7 @@ class Profiler:
     def optimize_dynamics(self, batch, model):
         # set sequence parallel size if args.dynamic_sp is True
         sp_size = batch["sp_size"]
-        set_sequence_parallel_size(sp_size)
+        self.parallel_mgr.set_sp_size(sp_size)
         self.update_timer_group()
 
         # set grad accumulation steps if args.auto_grad_accumulation is True
@@ -730,7 +727,7 @@ class Profiler:
 
     def update_timer_group(self):
         if self.need_profile():
-            cur_group = get_sequence_parallel_group()
+            cur_group = self.parallel_mgr.sp_group
             for t in self.timers:
                 self.timers[t].group = cur_group
 
@@ -759,6 +756,7 @@ def set_profiler(
     alloc_fraction,
     dump_dir,
     profile_path=None,
+    parallel_mgr=None,
 ) -> Profiler:
     global PROFILER
     PROFILER = Profiler(
@@ -779,6 +777,7 @@ def set_profiler(
         alloc_fraction,
         dump_dir,
         profile_path,
+        parallel_mgr=parallel_mgr,
     )
     return PROFILER
 

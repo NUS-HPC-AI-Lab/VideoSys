@@ -9,9 +9,9 @@ import torch
 import torch.distributed as dist
 import wandb
 from omegaconf import OmegaConf
-from opendit.core.parallel_mgr import get_data_parallel_group, set_distributed_state, set_parallel_manager
 from tqdm import tqdm
 
+from videosys.core.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
 from videosys.core.profiler import Profiler, set_profiler
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2, STDiT3Config
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
@@ -121,12 +121,10 @@ def main(args):
             wandb.init(project="Open-Sora", name=exp_name, config=vars(args), dir="./outputs/wandb")
 
     # == init parallel manager ==
-    set_parallel_manager(
-        dist.get_world_size(),
-        args.sp_size,
-        dynamic_sp=args.dynamic_sp,
-        enable_gas_queue=args.sampler_schedule_type == "local",
-    )
+    if args.dynamic_sp:
+        parallel_mgr = DynamicParallelManager(dist.get_world_size(), args.sampler_schedule_type == "local")
+    else:
+        parallel_mgr = ParallelManager(dist.get_world_size() // args.sp_size, 1, args.sp_size)
 
     torch.set_num_threads(1)
 
@@ -156,6 +154,7 @@ def main(args):
         args.alloc_memory_fraction,
         exp_dir,
         args.profile_path,
+        parallel_mgr,
     )
 
     # ======================================================
@@ -192,7 +191,7 @@ def main(args):
         drop_last=args.drop_last,
         keep_last=args.keep_last,
         pin_memory=True,
-        process_group=get_data_parallel_group(),
+        process_group=parallel_mgr.dp_group,
         prefetch_factor=args.prefetch_factor,
         optimized_schedule=args.sampler_schedule_type if args.dynamic_sp else None,
         auto_grad_accumulation=args.auto_grad_accumulation,
@@ -288,6 +287,7 @@ def main(args):
     # == additional preparation ==
     if args.grad_checkpoint:
         model.enable_grad_checkpointing()
+    model.enable_parallel(parallel_mgr=parallel_mgr)
 
     if args.mask_ratios is not None:
         mask_generator = MaskGenerator(args.mask_ratios)

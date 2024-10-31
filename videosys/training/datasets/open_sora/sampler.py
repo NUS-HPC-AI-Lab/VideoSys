@@ -9,13 +9,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
-from opendit.core.parallel_mgr import (
-    get_data_parallel_group,
-    get_sequence_parallel_group,
-    get_sequence_parallel_size,
-    set_sequence_parallel_size,
-)
-from torch.utils._python_dispatch import TorchDispatchMode
 from torch.utils.data import Dataset, DistributedSampler
 
 from videosys.core.profiler import get_profiler
@@ -28,36 +21,6 @@ from .bucket import Bucket
 from .datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
 
 GB = 1024**3
-
-
-class PrintingMode(TorchDispatchMode):
-    def __init__(self, optimizer):
-        super().__init__()
-
-        self.op_counter = defaultdict(int)
-        self.optimizer = optimizer
-
-    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
-        name = f"{func.__module__} - {func.__name__}"
-        self.op_counter[name] += 1
-
-        if "c10d" in func.__module__:
-            comm_str = (
-                f"grads_in_partition: {(self.optimizer.grads_in_partition.shape) if self.optimizer.grads_in_partition is not None else None}"
-                + f", grads_in_partition_offset: {self.optimizer.grads_in_partition_offset}"
-                + f", grads_in_ipg_bucket: {len(self.optimizer.grads_in_ipg_bucket)}"
-                + f", params_in_ipg_bucket: {len(self.optimizer.params_in_ipg_bucket)}"
-                + f", elements_in_ipg_bucket: {self.optimizer.elements_in_ipg_bucket}"
-                + f", extra_large_param_to_reduce: {self.optimizer.extra_large_param_to_reduce.shape if self.optimizer.extra_large_param_to_reduce is not None else None}"
-            )
-
-            print(
-                f"KERNEL {torch.distributed.get_rank()} ({torch.distributed.get_rank(get_sequence_parallel_group())}/{torch.distributed.get_world_size(get_sequence_parallel_group())}) "
-                f"{name}({self.op_counter[name]}), alloc: {torch.cuda.memory_allocated() / GB:.2f} GB, rsrvd: {torch.cuda.memory_reserved() / GB:.2f} GB, "
-                f"free: {torch.cuda.mem_get_info()[0]/GB:.2f} GB, {comm_str}",
-                flush=True,
-            )
-        return func(*args, **kwargs)
 
 
 # use pandarallel to accelerate bucket processing
@@ -90,12 +53,6 @@ def print_memory_stats(phase=None):
         f"max allocated memory: {max_alloc/GB:.2f} GB, max reserved memory: {max_resrv/GB:.2f} GB"
     )
     return free_gpu_memory, total_gpu_memory, alloc_mem, resrv_mem, max_alloc, max_resrv
-
-
-def change_timer_group(timers):
-    cur_group = get_sequence_parallel_group()
-    for t in timers:
-        timers[t].group = cur_group
 
 
 def reset_status(model, optimizer):
@@ -172,6 +129,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         optimized_schedule: str = None,
         auto_grad_accumulation: bool = False,
         max_grad_accumulation_steps: int = 2,
+        parallel_mgr=None,
     ) -> None:
         super().__init__(
             dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last
@@ -196,6 +154,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             self.generator.manual_seed(self.seed + self.epoch)
         self.cached_bucket_id_access_order = None
         self.effective_samples = 0
+        self.parallel_mgr = parallel_mgr
 
     def __iter__(self) -> Iterator[List[int]]:
         if self._get_num_batch_cached_bucket_sample_dict is not None:
@@ -212,6 +171,11 @@ class VariableVideoBatchSampler(DistributedSampler):
             yield from self._optimized_schedule_iter(bucket_sample_dict, self.optimized_schedule == "global")
         else:
             yield from self._bucketized_iter(bucket_sample_dict)
+
+    def change_timer_group(self, timers):
+        cur_group = self.parallel_mgr.sp_group
+        for t in timers:
+            timers[t].group = cur_group
 
     def _build_bucketized_bucket_id_access_order(self, bucket_sample_dict):
         g = torch.Generator()
@@ -355,7 +319,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             # encode t, h, w into the sample index
             real_t, real_h, real_w = self.bucket.get_thw(bucket_id)
             cur_micro_batch = [
-                (idx, real_t, real_h, real_w, bucket_id[0], get_sequence_parallel_size(), 1) for idx in cur_micro_batch
+                (idx, real_t, real_h, real_w, bucket_id[0], self.parallel_mgr.sp_size, 1) for idx in cur_micro_batch
             ]
             yield cur_micro_batch
 
@@ -974,7 +938,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         # warmup with the smallest input data and all gpu devices
         height, width = DEFAULT_AR_MAP["144p"]
         num_frame, bs = 51, 1
-        set_sequence_parallel_size(wsize)
+        self.parallel_mgr.set_sp_size(wsize)
 
         for _ in range(1):
             x = torch.rand(bs, 3, num_frame, height, width, device=device, dtype=dtype)
@@ -1096,7 +1060,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             return row
 
         dist.barrier()
-        profile_timer = GroupTimer("profile", group=get_data_parallel_group())
+        profile_timer = GroupTimer("profile", group=self.parallel_mgr.dp_group)
         profile_timer.__enter__()
 
         result_row = []
@@ -1112,8 +1076,8 @@ class VariableVideoBatchSampler(DistributedSampler):
                 while cur_size <= max_sp and not is_success:
                     try:
                         clean_cache()
-                        set_sequence_parallel_size(cur_size)
-                        change_timer_group(timers)
+                        self.parallel_mgr.set_sp_size(cur_size)
+                        self.change_timer_group(timers)
                         result_row = profile_iter()
                         is_success = True
                     except torch.cuda.OutOfMemoryError as e:
@@ -1329,7 +1293,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         height, width = DEFAULT_AR_MAP[ar_name]
         num_frame, bs = 51, 1
         cur_size = max_sp
-        set_sequence_parallel_size(cur_size)
+        self.parallel_mgr.set_sp_size(cur_size)
         profile_iter()
         print_memory_stats("Warmup")
 
@@ -1339,7 +1303,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         num_modules = len(submodule_fields)
 
         dist.barrier()
-        profile_timer = GroupTimer("profile", group=get_data_parallel_group())
+        profile_timer = GroupTimer("profile", group=self.parallel_mgr.dp_group)
         profile_timer.__enter__()
 
         result_row: list
@@ -1354,7 +1318,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
                 # baseline
                 if not dynamic_recompute and not self.dynamic_sp:
-                    fix_sp = get_sequence_parallel_size()
+                    fix_sp = self.parallel_mgr.get_sp_size()
                     bs, cur_size, is_success = 1, fix_sp, False
 
                     # find the max bs
@@ -1404,8 +1368,8 @@ class VariableVideoBatchSampler(DistributedSampler):
                     dp_results = []
                     cur_size = 1
                     while cur_size <= max_sp:  # search through sp dimension
-                        set_sequence_parallel_size(cur_size)
-                        change_timer_group(timers)
+                        self.parallel_mgr.set_sp_size(cur_size)
+                        self.change_timer_group(timers)
 
                         bs = 1
                         is_success = True

@@ -31,6 +31,7 @@ from videosys.core.pab_mgr import (
     save_mlp_output,
 )
 from videosys.core.parallel_mgr import ParallelManager
+from videosys.core.recompute import auto_recompute
 from videosys.models.modules.activations import approx_gelu
 from videosys.models.modules.attentions import OpenSoraAttention, OpenSoraMultiHeadCrossAttention
 from videosys.models.modules.embeddings import (
@@ -440,20 +441,26 @@ class STDiT3(PreTrainedModel):
         # parallel
         self.parallel_manager: ParallelManager = None
 
-    def enable_parallel(self, dp_size, sp_size, enable_cp):
-        # update cfg parallel
-        if enable_cp and sp_size % 2 == 0:
-            sp_size = sp_size // 2
-            cp_size = 2
+    def enable_parallel(self, dp_size=None, sp_size=None, enable_cp=None, parallel_mgr=None):
+        if parallel_mgr is not None:
+            self.parallel_manager = parallel_mgr
         else:
-            cp_size = 1
+            # update cfg parallel
+            if enable_cp and sp_size % 2 == 0:
+                sp_size = sp_size // 2
+                cp_size = 2
+            else:
+                cp_size = 1
 
-        self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
+            self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
 
         for name, module in self.named_modules():
             if "spatial_blocks" in name or "temporal_blocks" in name:
                 if hasattr(module, "parallel_manager"):
                     module.parallel_manager = self.parallel_manager
+
+    def enable_grad_checkpointing(self):
+        self.config.non_recompute_depth = 0
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -504,7 +511,7 @@ class STDiT3(PreTrainedModel):
         return y, y_lens
 
     def forward(
-        self, x, timestep, all_timesteps, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
+        self, x, timestep, y, all_timesteps=None, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
     ):
         # === Split batch ===
         if self.parallel_manager.cp_size > 1:
@@ -570,35 +577,21 @@ class STDiT3(PreTrainedModel):
 
         x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
 
-        # === blocks ===
-        for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            x = auto_grad_checkpoint(
-                spatial_block,
-                x,
-                y,
-                t_mlp,
-                y_lens,
-                x_mask,
-                t0_mlp,
-                T,
-                S,
-                timestep,
-                all_timesteps=all_timesteps,
-            )
+        def layer_forward(depth, _x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep):
+            """
+            this abstracts the forward pass of a single transformer block
+            """
+            spatial_block = self.spatial_blocks[depth]
+            temporal_block = self.temporal_blocks[depth]
+            x = spatial_block(_x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep)
+            x = temporal_block(_x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep)
 
-            x = auto_grad_checkpoint(
-                temporal_block,
-                x,
-                y,
-                t_mlp,
-                y_lens,
-                x_mask,
-                t0_mlp,
-                T,
-                S,
-                timestep,
-                all_timesteps=all_timesteps,
-            )
+            return x
+
+        # === blocks ===
+        valid_depth = kwargs.get("valid_depth", self.depth)
+        for depth in range(valid_depth):
+            x = auto_recompute(self.config, layer_forward, depth, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         if self.parallel_manager.sp_size > 1:
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)

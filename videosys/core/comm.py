@@ -352,7 +352,7 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
             grad_output = grad_output * dist.get_world_size(ctx.process_group)
         elif ctx.grad_scale == "down":
             grad_output = grad_output / dist.get_world_size(ctx.process_group)
-        return _gather_sequence_func(grad_output, ctx.process_group, ctx.pad), None, None, None, None
+        return _gather_sequence_func(grad_output, ctx.process_group, ctx.dim, ctx.pad), None, None, None, None
 
 
 def split_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):
