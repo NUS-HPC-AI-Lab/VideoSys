@@ -10,12 +10,12 @@ import torch.distributed as dist
 import wandb
 from omegaconf import OmegaConf
 from opendit.core.parallel_mgr import get_data_parallel_group, set_distributed_state, set_parallel_manager
-from opendit.core.profiler import Profiler, set_profiler
-from opendit.models.opensora import RFLOW, OpenSoraVAE_V1_2, STDiT3_XL_2, STDiT3Config, T5Encoder
-from opendit.models.opensora.datasets.dataloader import prepare_dataloader
-from opendit.models.opensora.datasets.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
-from opendit.models.opensora.scheduler import LinearWarmupLR
-from opendit.utils.ckpt_utils import (
+from tqdm import tqdm
+
+from videosys.core.profiler import Profiler, set_profiler
+from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2, STDiT3Config
+from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
+from videosys.training.ckpt_io.open_sora import (
     define_experiment_workspace,
     model_gathering,
     model_sharding,
@@ -23,7 +23,11 @@ from opendit.utils.ckpt_utils import (
     save,
     save_training_config,
 )
-from opendit.utils.train_utils import (
+from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
+from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
+from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
+from videosys.utils.logging import logger
+from videosys.utils.training import (
     MaskGenerator,
     all_reduce_mean,
     format_numel_str,
@@ -31,8 +35,7 @@ from opendit.utils.train_utils import (
     requires_grad,
     update_ema,
 )
-from opendit.utils.utils import create_logger, merge_args, set_seed, str_to_dtype
-from tqdm import tqdm
+from videosys.utils.utils import merge_args, set_seed, str_to_dtype
 
 
 def train_step(batch, model, mask_generator, scheduler, lr_scheduler, profiler: Profiler, device, dtype):
@@ -111,7 +114,6 @@ def main(args):
     dist.barrier()
 
     # == init logger, tensorboard & wandb ==
-    logger = create_logger(exp_dir)
     logger.info("Experiment directory created at %s", exp_dir)
     logger.info("Training configuration:\n %s", pformat(vars(args)))
     if dist.get_rank() == 0:
@@ -211,27 +213,26 @@ def main(args):
     if args.preprocessed_data:
         text_encoder_output_dim = 4096
         text_encoder_model_max_length = 300
-    else:
-        text_encoder = T5Encoder(
-            from_pretrained="DeepFloyd/t5-v1_1-xxl", model_max_length=300, shardformer=True, device=device, dtype=dtype
-        )
-        text_encoder_output_dim = text_encoder.output_dim
-        text_encoder_model_max_length = text_encoder.model_max_length
+    # else:
+    #     text_encoder = T5Encoder(
+    #         from_pretrained="DeepFloyd/t5-v1_1-xxl", model_max_length=300, shardformer=True, device=device, dtype=dtype
+    #     )
+    #     text_encoder_output_dim = text_encoder.output_dim
+    #     text_encoder_model_max_length = text_encoder.model_max_length
 
     # == build vae ==
     if args.preprocessed_data:
         latent_size = [None, None, None]
         vae_out_channels = 4
-        vae = None
-    else:
-        vae = OpenSoraVAE_V1_2(
-            micro_frame_size=17,
-            micro_batch_size=4,
-        )
-        vae = vae.to(device, dtype).eval()
-        input_size = (dataset.num_frames, *dataset.image_size)
-        latent_size = vae.get_latent_size(input_size)
-        vae_out_channels = vae.out_channels
+    # else:
+    #     vae = OpenSoraVAE_V1_2(
+    #         micro_frame_size=17,
+    #         micro_batch_size=4,
+    #     )
+    #     vae = vae.to(device, dtype).eval()
+    #     input_size = (dataset.num_frames, *dataset.image_size)
+    #     latent_size = vae.get_latent_size(input_size)
+    #     vae_out_channels = vae.out_channels
 
     # == build diffusion model ==
     model = (
