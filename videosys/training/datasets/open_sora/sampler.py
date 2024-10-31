@@ -181,7 +181,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         g = torch.Generator()
         g.manual_seed(self.seed + self.epoch)
         bucket_micro_batch_count = OrderedDict()
-        logger = logger
         self.effective_samples = 0
 
         # process the samples
@@ -458,7 +457,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         wsize = dist.get_world_size()
         bucket_id_access_order = []
         self.effective_samples = 0
-        logger = logger
 
         bucket_sp_map, sp_bucket_map = dict(), dict()
         for bucket_id, data_list in bucket_sample_dict.items():
@@ -908,7 +906,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                                         recompute_cfg.append(STDiT3BlockRecomputeConfig.BLOCK)
 
                     self.profile_results[ar_name][num_frame]["recompute_cfg2"] = recompute_cfg
-        logger = logger
         logger.info(f"Profile results: {pformat(self.profile_results)}")
 
     def _end2end_profile(
@@ -933,7 +930,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         torch.cuda.set_per_process_memory_fraction(alloc_memory_fraction)
         rank, wsize = dist.get_rank(), dist.get_world_size()
         max_sp = torch.cuda.device_count()
-        logger = logger
 
         # warmup with the smallest input data and all gpu devices
         height, width = DEFAULT_AR_MAP["144p"]
@@ -1180,7 +1176,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         torch.cuda.set_per_process_memory_fraction(alloc_memory_fraction)
         rank = dist.get_rank()
         max_sp = torch.cuda.device_count()
-        logger = logger
 
         total_depth = model.module.config.depth
         valid_depth = 2
