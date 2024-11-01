@@ -24,8 +24,8 @@ from diffusers.schedulers import EulerAncestralDiscreteScheduler, PNDMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import AutoTokenizer, MT5EncoderModel, T5EncoderModel, T5Tokenizer
 
-from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
-from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.core.pab.pab_mgr import PABConfig, set_pab_manager, update_steps
+from videosys.core.pipeline.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.autoencoders.autoencoder_kl_open_sora_plan_v110 import (
     CausalVAEModelWrapper as CausalVAEModelWrapperV110,
 )

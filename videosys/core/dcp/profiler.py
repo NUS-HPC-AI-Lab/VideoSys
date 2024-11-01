@@ -11,7 +11,7 @@ import pandas as pd
 import torch
 import torch.distributed as dist
 
-from videosys.core.recompute import disable_profile, enable_profile, get_profile_context
+from videosys.core.dcp.recompute import disable_profile, enable_profile, get_profile_context
 from videosys.training.datasets.open_sora.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
 from videosys.utils.logging import logger
 from videosys.utils.training import GroupTimer, set_grad_accumulation_steps

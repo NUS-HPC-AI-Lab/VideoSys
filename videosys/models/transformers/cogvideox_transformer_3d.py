@@ -22,9 +22,9 @@ from diffusers.utils import is_torch_version
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 from torch import nn
 
-from videosys.core.comm import all_to_all_comm, gather_sequence, get_pad, set_pad, split_sequence
-from videosys.core.pab_mgr import enable_pab, if_broadcast_spatial
-from videosys.core.parallel_mgr import ParallelManager
+from videosys.core.distributed.comm import all_to_all_comm, gather_sequence, get_pad, set_pad, split_sequence
+from videosys.core.distributed.parallel_mgr import ParallelManager
+from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_spatial
 from videosys.models.modules.embeddings import apply_rotary_emb
 from videosys.utils.utils import batch_func
 

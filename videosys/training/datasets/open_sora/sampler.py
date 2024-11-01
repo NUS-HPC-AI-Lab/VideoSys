@@ -11,8 +11,8 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import Dataset, DistributedSampler
 
-from videosys.core.profiler import get_profiler
-from videosys.core.recompute import STDiT3BlockRecomputeConfig, disable_profile, enable_profile, get_profile_context
+from videosys.core.dcp.profiler import get_profiler
+from videosys.core.dcp.recompute import STDiT3BlockRecomputeConfig, disable_profile, enable_profile, get_profile_context
 from videosys.utils.logging import logger
 from videosys.utils.training import GroupTimer
 

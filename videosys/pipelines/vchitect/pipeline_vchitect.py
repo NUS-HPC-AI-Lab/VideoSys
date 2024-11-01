@@ -22,8 +22,8 @@ from torch.amp import autocast
 from tqdm import tqdm
 from transformers import CLIPTextModelWithProjection, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
-from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
-from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.core.pab.pab_mgr import PABConfig, set_pab_manager, update_steps
+from videosys.core.pipeline.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.transformers.vchitect_transformer_3d import VchitectXLTransformerModel
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video, set_seed

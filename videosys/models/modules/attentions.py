@@ -12,8 +12,8 @@ from einops import rearrange
 from torch import nn
 from torch.amp import autocast
 
-from videosys.core.comm import all_to_all_with_pad, get_pad, set_pad
-from videosys.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
+from videosys.core.distributed.comm import all_to_all_with_pad, get_pad, set_pad
+from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
 from videosys.models.modules.normalization import LlamaRMSNorm, VchitectSpatialNorm
 from videosys.utils.logging import logger
 
@@ -56,7 +56,7 @@ class OpenSoraAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         # flash attn is not memory efficient for small sequences, this is empirical
-        enable_flash_attn = self.enable_flash_attn and (N > B)
+        use_flash_attn = N > B
         qkv = self.qkv(x)
         qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
 
@@ -74,7 +74,7 @@ class OpenSoraAttention(nn.Module):
                 q = self.rotary_emb(q)
                 k = self.rotary_emb(k)
 
-        if enable_flash_attn:
+        if self.enable_flash_attn and use_flash_attn:
             from flash_attn import flash_attn_func
 
             # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
@@ -88,11 +88,20 @@ class OpenSoraAttention(nn.Module):
                 dropout_p=self.attn_drop.p if self.training else 0.0,
                 softmax_scale=self.scale,
             )
+        elif not use_flash_attn:
+            dtype = q.dtype
+            q = q * self.scale
+            attn = q @ k.transpose(-2, -1)  # translate attn to float32
+            attn = attn.to(torch.float32)
+            attn = attn.softmax(dim=-1)
+            attn = attn.to(dtype)  # cast back attn to original dtype
+            attn = self.attn_drop(attn)
+            x = attn @ v
         else:
             x = F.scaled_dot_product_attention(q, k, v)
 
         x_output_shape = (B, N, C)
-        if not enable_flash_attn:
+        if not (self.enable_flash_attn and use_flash_attn):
             x = x.transpose(1, 2)
         x = x.reshape(x_output_shape)
         x = self.proj(x)

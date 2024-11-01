@@ -25,8 +25,8 @@ from diffusers.schedulers import DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 from transformers import T5EncoderModel, T5Tokenizer
 
-from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
-from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.core.pab.pab_mgr import PABConfig, set_pab_manager, update_steps
+from videosys.core.pipeline.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.transformers.latte_transformer_3d import LatteT2V
 from videosys.utils.logging import logger
 from videosys.utils.utils import save_video, set_seed

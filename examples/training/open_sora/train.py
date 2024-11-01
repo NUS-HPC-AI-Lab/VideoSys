@@ -11,8 +11,8 @@ import wandb
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from videosys.core.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
-from videosys.core.profiler import Profiler, set_profiler
+from videosys.core.dcp.profiler import Profiler, set_profiler
+from videosys.core.distributed.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2, STDiT3Config
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
 from videosys.training.ckpt_io.open_sora import (

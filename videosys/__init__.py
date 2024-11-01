@@ -1,5 +1,5 @@
-from .core.engine import VideoSysEngine
-from .core.parallel_mgr import initialize
+from .core.distributed.parallel_mgr import initialize
+from .core.engine.engine import VideoSysEngine
 from .pipelines.cogvideox import CogVideoXConfig, CogVideoXPABConfig, CogVideoXPipeline
 from .pipelines.latte import LatteConfig, LattePABConfig, LattePipeline
 from .pipelines.open_sora import OpenSoraConfig, OpenSoraPABConfig, OpenSoraPipeline
