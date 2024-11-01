@@ -1,0 +1,5 @@
+path,text,num_frames,height,width
+./assets/example_data/art-museum.mp4,art-museum,1,256,256
+./assets/example_data/lagos.mp4,lagos,51,256,256
+./assets/example_data/man-on-the-cloud.mp4,man on the cloud,102,256,256
+./assets/example_data/suv-in-the-dust.mp4,suv in the dust,1,512,512
