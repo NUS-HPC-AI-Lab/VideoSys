@@ -476,7 +476,7 @@ def main(args):
                 continue
 
             # == update EMA ==
-            update_ema(ema, model.module, optimizer=optimizer, decay=args.ema_decay)
+            update_ema(ema, model.module, decay=args.ema_decay)
 
             # == update log info ==
             all_reduce_mean(iter_loss)

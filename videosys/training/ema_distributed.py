@@ -5,9 +5,7 @@ import torch.distributed as dist
 
 
 @torch.no_grad()
-def update_ema(
-    ema_model: torch.nn.Module, model: torch.nn.Module, optimizer=None, decay: float = 0.9999, sharded: bool = True
-) -> None:
+def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999, sharded: bool = True) -> None:
     """
     Step the EMA model towards the current model.
     """
