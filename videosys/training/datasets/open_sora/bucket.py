@@ -1,9 +1,8 @@
+import logging
 from collections import OrderedDict
 from typing import Iterable
 
 import numpy as np
-
-from videosys.utils.logging import logger
 
 from .aspect import ASPECT_RATIOS, get_closest_ratio
 
@@ -78,7 +77,7 @@ class Bucket:
             for each in ar_hw:
                 self.hw2ar_name_map[each] = ar_name
 
-        logger.info("Number of buckets: %s", num_bucket)
+        logging.info("Number of buckets: %s", num_bucket)
 
     def get_bucket_id(self, T, H, W, frame_interval=1, seed=None):
         resolution = H * W

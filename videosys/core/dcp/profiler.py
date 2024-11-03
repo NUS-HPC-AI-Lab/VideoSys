@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
@@ -13,7 +14,6 @@ import torch.distributed as dist
 
 from videosys.core.dcp.recompute import disable_profile, enable_profile, get_profile_context
 from videosys.training.datasets.open_sora.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
-from videosys.utils.logging import logger
 from videosys.utils.training import GroupTimer, set_grad_accumulation_steps
 
 PROFILER = None
@@ -207,7 +207,7 @@ class Profiler:
         self.max_sp = torch.cuda.device_count()
         # in bytes
         self.memory_cap = alloc_fraction * torch.cuda.mem_get_info()[1]
-        self.logger = logger if verbose else None
+        self.logger = logging if verbose else None
         self.profile_depth = profile_depth
         if self.end2end_profile:
             self.profile_depth = None

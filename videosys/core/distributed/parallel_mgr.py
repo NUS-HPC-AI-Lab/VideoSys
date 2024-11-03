@@ -1,3 +1,4 @@
+import logging
 import os
 from collections import deque
 from datetime import timedelta
@@ -7,7 +8,7 @@ import torch.distributed as dist
 from colossalai.cluster.process_group_mesh import ProcessGroupMesh
 from torch.distributed import ProcessGroup
 
-from videosys.utils.logging import init_dist_logger, logger
+from videosys.utils.logging import init_logger
 
 
 class ParallelManager(ProcessGroupMesh):
@@ -35,7 +36,7 @@ class ParallelManager(ProcessGroupMesh):
             self.sp_group = None
             self.sp_rank = None
 
-        logger.info(f"Init parallel manager with dp_size: {dp_size}, cp_size: {cp_size}, sp_size: {sp_size}")
+        logging.info(f"Init parallel manager with dp_size: {dp_size}, cp_size: {cp_size}, sp_size: {sp_size}")
 
 
 class DynamicParallelManager:
@@ -113,7 +114,7 @@ def initialize(
             pass
         dist.init_process_group(backend="nccl", init_method=init_method, world_size=world_size, rank=rank)
         torch.cuda.set_device(rank)
-        init_dist_logger()
+        init_logger()
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 

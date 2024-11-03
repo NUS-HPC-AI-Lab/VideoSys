@@ -1,4 +1,5 @@
 import inspect
+import logging
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 
@@ -15,7 +16,6 @@ from torch.amp import autocast
 from videosys.core.distributed.comm import all_to_all_with_pad, get_pad, set_pad
 from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
 from videosys.models.modules.normalization import LlamaRMSNorm, VchitectSpatialNorm
-from videosys.utils.logging import logger
 
 
 class OpenSoraAttention(nn.Module):
@@ -453,7 +453,7 @@ class VchitectAttention(nn.Module):
             and isinstance(self.processor, torch.nn.Module)
             and not isinstance(processor, torch.nn.Module)
         ):
-            logger.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
+            logging.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
             self._modules.pop("processor")
         self.processor = processor
 
@@ -494,7 +494,7 @@ class VchitectAttention(nn.Module):
             k for k, _ in cross_attention_kwargs.items() if k not in attn_parameters and k not in quiet_attn_parameters
         ]
         if len(unused_kwargs) > 0:
-            logger.warning(
+            logging.warning(
                 f"cross_attention_kwargs {unused_kwargs} are not expected by {self.processor.__class__.__name__} and will be ignored."
             )
         cross_attention_kwargs = {k: w for k, w in cross_attention_kwargs.items() if k in attn_parameters}

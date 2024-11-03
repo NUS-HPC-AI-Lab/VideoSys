@@ -9,6 +9,7 @@
 
 import html
 import inspect
+import logging
 import math
 import re
 import urllib.parse as ul
@@ -34,7 +35,6 @@ from videosys.models.autoencoders.autoencoder_kl_open_sora_plan_v120 import (
 )
 from videosys.models.transformers.open_sora_plan_v110_transformer_3d import LatteT2V
 from videosys.models.transformers.open_sora_plan_v120_transformer_3d import OpenSoraT2V
-from videosys.utils.logging import logger
 from videosys.utils.utils import save_video, set_seed
 
 
@@ -444,7 +444,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                 text_input_ids, untruncated_ids
             ):
                 removed_text = self.tokenizer.batch_decode(untruncated_ids[:, max_length - 1 : -1])
-                logger.warning(
+                logging.warning(
                     "The following part of your input was truncated because the model can only handle sequences up to"
                     f" {max_length} tokens: {removed_text}"
                 )
@@ -606,7 +606,7 @@ class OpenSoraPlanPipeline(VideoSysPipeline):
                 text_input_ids, untruncated_ids
             ):
                 removed_text = self.tokenizer.batch_decode(untruncated_ids[:, max_length - 1 : -1])
-                logger.warning(
+                logging.warning(
                     "The following part of your input was truncated because CLIP can only handle sequences up to"
                     f" {max_length} tokens: {removed_text}"
                 )

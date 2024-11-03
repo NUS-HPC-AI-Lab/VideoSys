@@ -8,6 +8,7 @@
 # diffusers: https://github.com/huggingface/diffusers
 # --------------------------------------------------------
 
+import logging
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -21,8 +22,6 @@ from diffusers.models.autoencoders.vae import DecoderOutput, DiagonalGaussianDis
 from diffusers.models.modeling_outputs import AutoencoderKLOutput
 from diffusers.models.modeling_utils import ModelMixin
 from diffusers.utils.accelerate_utils import apply_forward_hook
-
-from videosys.utils.logging import logger
 
 from ..modules.downsampling import CogVideoXDownsample3D
 from ..modules.upsampling import CogVideoXUpsample3D
@@ -1008,7 +1007,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
     def _clear_fake_context_parallel_cache(self):
         for name, module in self.named_modules():
             if isinstance(module, CogVideoXCausalConv3d):
-                logger.debug(f"Clearing fake Context Parallel cache for layer: {name}")
+                logging.debug(f"Clearing fake Context Parallel cache for layer: {name}")
                 module._clear_fake_context_parallel_cache()
 
     def enable_tiling(

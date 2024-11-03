@@ -1,3 +1,4 @@
+import logging
 import os
 from glob import glob
 
@@ -6,8 +7,6 @@ import pandas as pd
 import torch
 from PIL import ImageFile
 from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
-
-from videosys.utils.logging import logger
 
 from .aspect import ASPECT_RATIOS, COMMON_AR
 from .read_video import read_video
@@ -402,7 +401,7 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
             data["id"] = np.arange(len(data))
             self.data = data
             log_str += f"\ndefault data_size: {self.data_size}, full data size: {data.shape[0]}"
-            logger.info(log_str)
+            logging.info(log_str)
             self.data_size = data.shape[0]
 
     def __getitem__(self, index):

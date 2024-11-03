@@ -9,6 +9,7 @@
 #  --------------------------------------------------------
 
 import inspect
+import logging
 import math
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -26,7 +27,6 @@ from videosys.models.modules.embeddings import get_3d_rotary_pos_embed
 from videosys.models.transformers.cogvideox_transformer_3d import CogVideoXTransformer3DModel
 from videosys.schedulers.scheduling_ddim_cogvideox import CogVideoXDDIMScheduler
 from videosys.schedulers.scheduling_dpm_cogvideox import CogVideoXDPMScheduler
-from videosys.utils.logging import logger
 from videosys.utils.utils import save_video, set_seed
 
 
@@ -235,7 +235,7 @@ class CogVideoXPipeline(VideoSysPipeline):
 
         if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(text_input_ids, untruncated_ids):
             removed_text = self.tokenizer.batch_decode(untruncated_ids[:, max_sequence_length - 1 : -1])
-            logger.warning(
+            logging.warning(
                 "The following part of your input was truncated because `max_sequence_length` is set to "
                 f" {max_sequence_length} tokens: {removed_text}"
             )
@@ -441,7 +441,7 @@ class CogVideoXPipeline(VideoSysPipeline):
     def unfuse_qkv_projections(self) -> None:
         r"""Disable QKV projection fusion if enabled."""
         if not self.fusing_transformer:
-            logger.warning("The Transformer was not initially fused for QKV projections. Doing nothing.")
+            logging.warning("The Transformer was not initially fused for QKV projections. Doing nothing.")
         else:
             self.transformer.unfuse_qkv_projections()
             self.fusing_transformer = False

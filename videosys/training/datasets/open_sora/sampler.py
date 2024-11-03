@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from collections import OrderedDict, defaultdict
 from functools import partial
@@ -13,7 +14,6 @@ from torch.utils.data import Dataset, DistributedSampler
 
 from videosys.core.dcp.profiler import get_profiler
 from videosys.core.dcp.recompute import STDiT3BlockRecomputeConfig, disable_profile, enable_profile, get_profile_context
-from videosys.utils.logging import logger
 from videosys.utils.training import GroupTimer
 
 from .aspect import DEFAULT_AR_MAP
@@ -187,7 +187,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         for bucket_id, data_list in bucket_sample_dict.items():
             ar_name, num_frame = bucket_id[:2]
             if not self.profiler.is_valid_bucket(ar_name, num_frame):
-                logger.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
                 continue
             # handle droplast
             bs_per_gpu = self.get_batch_size(bucket_id)
@@ -258,8 +258,8 @@ class VariableVideoBatchSampler(DistributedSampler):
                 self.effective_samples -= total_samples - left_samples
 
         for i in range(len(bucket_id_access_order)):
-            logger.info(f"iter {i}, bucket_id: {bucket_id_access_order[i]}")
-        logger.info(f"dropped: {pformat(bucket_num_batch_to_deduct, sort_dicts=False)}")
+            logging.info(f"iter {i}, bucket_id: {bucket_id_access_order[i]}")
+        logging.info(f"dropped: {pformat(bucket_num_batch_to_deduct, sort_dicts=False)}")
         return bucket_id_access_order
 
     def _bucketized_iter(self, bucket_sample_dict):
@@ -344,7 +344,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         from pandarallel import pandarallel
 
         pandarallel.initialize(nb_workers=self.num_bucket_build_workers, progress_bar=False)
-        logger.info(f"Building buckets...")
+        logging.info(f"Building buckets...")
         bucket_ids = self.dataset.data.parallel_apply(
             apply,
             axis=1,
@@ -394,7 +394,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                     else:
                         data_list += data_list[:pad]
                 bucket_sample_dict[bucket_id] = data_list
-                logger.info(f"bucket {bucket_id} has been padded from {cur_len} to {len(data_list)}")
+                logging.info(f"bucket {bucket_id} has been padded from {cur_len} to {len(data_list)}")
                 cur_len = len(data_list)
             num_micro_batches = (cur_len + max_bs - 1) // max_bs
 
@@ -462,7 +462,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         for bucket_id, data_list in bucket_sample_dict.items():
             ar_name, num_frame = bucket_id[:2]
             if not self.profiler.is_valid_bucket(ar_name, num_frame):
-                logger.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
                 continue
 
             # collect bucket_sp_map, sp_bucket_map
@@ -480,7 +480,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         data_list = data_list[: pad + cur_len]
                     else:
                         data_list += data_list[:pad]
-            logger.info(f"bucket {bucket_id} original len: {cur_len} padded len: {len(data_list)} for bs {max_bs}")
+            logging.info(f"bucket {bucket_id} original len: {cur_len} padded len: {len(data_list)} for bs {max_bs}")
 
             bucket_sp_map[bucket_id] = sp_size
             if sp_size not in sp_bucket_map:
@@ -637,7 +637,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                                 sp_bucket_map.pop(sp)
 
                     cur_batch_bucket_id_list.append(this_bucket_acc_list)
-                logger.info(
+                logging.info(
                     f"iter {len(bucket_id_access_order)}, gas: {num_gas} actual: {[len(each) for each in cur_batch_bucket_id_list]}"
                     f", buckets: {batch_log}"
                 )
@@ -760,9 +760,9 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         # log
         if dist.get_rank() == 0 and self.verbose:
-            logger.info(f"Bucket Info at epoch {self.epoch} with optimized schedule:")
-            logger.info("Bucket [#sample] by HxWxT:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
-            logger.info(
+            logging.info(f"Bucket Info at epoch {self.epoch} with optimized schedule:")
+            logging.info("Bucket [#sample] by HxWxT:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
+            logging.info(
                 "#training batch: %s, #training sample: %s, #non empty bucket: %s",
                 self.approximate_num_batch,
                 total_samples,
@@ -801,9 +801,9 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         # log
         if dist.get_rank() == 0 and self.verbose:
-            logger.info(f"Bucket Info at epoch {self.epoch} with bucketized schedule:")
-            logger.info("Bucket [#sample] by HxWxT:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
-            logger.info(
+            logging.info(f"Bucket Info at epoch {self.epoch} with bucketized schedule:")
+            logging.info("Bucket [#sample] by HxWxT:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
+            logging.info(
                 "#training batch: %s, #training sample: %s, #non empty bucket: %s",
                 total_batch,
                 total_samples,
@@ -906,7 +906,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                                         recompute_cfg.append(STDiT3BlockRecomputeConfig.BLOCK)
 
                     self.profile_results[ar_name][num_frame]["recompute_cfg2"] = recompute_cfg
-        logger.info(f"Profile results: {pformat(self.profile_results)}")
+        logging.info(f"Profile results: {pformat(self.profile_results)}")
 
     def _end2end_profile(
         self,
@@ -1079,14 +1079,14 @@ class VariableVideoBatchSampler(DistributedSampler):
                     except torch.cuda.OutOfMemoryError as e:
                         reset_status(model, optimizer)
 
-                        logger.info(
+                        logging.info(
                             f">>> [Profiling] skip sp {cur_size} for bucket: {ar_name} {num_frame} {bs} due to OOM"
                         )
                         cur_size *= 2
                         continue
 
                 if not is_success:
-                    logger.info(f">>> [Profiling] bucket {ar_name} {num_frame} cannot fit into the cluster")
+                    logging.info(f">>> [Profiling] bucket {ar_name} {num_frame} cannot fit into the cluster")
                     continue
 
                 detail_results.append(result_row)
@@ -1103,7 +1103,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                     # },
                 }
 
-                logger.info(f">>> [Profiling {rank}] bucket: {ar_name} {num_frame} finish T1 at sp {cur_size}")
+                logging.info(f">>> [Profiling {rank}] bucket: {ar_name} {num_frame} finish T1 at sp {cur_size}")
 
                 # T2: find the maximum bs with the minimum sp_size
                 prev_bs = bs
@@ -1115,11 +1115,11 @@ class VariableVideoBatchSampler(DistributedSampler):
                         detail_results.append(result_row)
                         prev_bs = bs
                         bs *= 2
-                        logger.info(f">>> [Profiling {rank}] Bucket {ar_name} {num_frame} pass bs {prev_bs}")
+                        logging.info(f">>> [Profiling {rank}] Bucket {ar_name} {num_frame} pass bs {prev_bs}")
                     except torch.cuda.OutOfMemoryError as e:
                         reset_status(model, optimizer)
 
-                        logger.info(f">>> [Profiling {rank}] Bucket {ar_name} {num_frame} finish T2 at bs {prev_bs}")
+                        logging.info(f">>> [Profiling {rank}] Bucket {ar_name} {num_frame} finish T2 at bs {prev_bs}")
                         break
 
                 profile_results[ar_name][num_frame]["max"] = {
@@ -1129,7 +1129,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 }
 
         profile_timer.__exit__(0, 0, 0)
-        logger.info(
+        logging.info(
             f">>> [Profiling] Profile results: {pformat(profile_results, sort_dicts=False)}\n"
             f">>> [Profiling] Profile cost: {profile_timer.elapsed_time:.2f} s"
         )
@@ -1144,7 +1144,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
             with open(f"{dump_dir}/profile.json", "w") as f:
                 json.dump(profile_results, f)
-            logger.info(df)
+            logging.info(df)
 
         send_list = [profile_results]
         dist.broadcast_object_list(send_list, src=0)
@@ -1333,17 +1333,17 @@ class VariableVideoBatchSampler(DistributedSampler):
                         is_success = False
                         if pass_depth_loop:
                             pred_full_time, pred_full_mem = estimate_overhead(raw_result_row)
-                            logger.info(
+                            logging.info(
                                 f">>> [Profiling] {ar_name} {num_frame} {bs} at sp {cur_size}: {pred_full_mem/GB:.2f}/{memory_cap/GB:.2f} GB, {pred_full_time:.2f} s"
                             )
                             if pred_full_mem <= memory_cap:
                                 is_success = True
                                 # raw_results.append(raw_result_row)
                                 latest_raw_row = raw_result_row
-                                logger.info(f">>> [Profiling] DONE bucket {ar_name} {num_frame} {bs} at sp {cur_size}")
+                                logging.info(f">>> [Profiling] DONE bucket {ar_name} {num_frame} {bs} at sp {cur_size}")
 
                         if not is_success:
-                            logger.info(
+                            logging.info(
                                 f">>> [Profiling] BEST bs for bucket {ar_name} {num_frame} is {prev_bs} at sp {cur_size}"
                             )
                             break
@@ -1376,7 +1376,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                             except torch.cuda.OutOfMemoryError as e:
                                 reset_status(model, optimizer)
                                 is_success = False
-                                logger.info(
+                                logging.info(
                                     f">>> [Profiling] Bucket {ar_name} {num_frame} at {bs} sp {cur_size} doesn't pass profile, OOM!"
                                 )
 
@@ -1439,17 +1439,17 @@ class VariableVideoBatchSampler(DistributedSampler):
                                     dp_results.append(result_row)
                                     detail_results.append(result_row)
 
-                                    logger.info(
+                                    logging.info(
                                         f">>> [Profiling] DONE BS search for bucket {ar_name} {num_frame} at {bs} sp {cur_size}"
                                     )
                                 else:
                                     is_success = False
-                                    logger.info(
+                                    logging.info(
                                         f">>> [Profiling] Bucket {ar_name} {num_frame} at {bs} sp {cur_size} pass profile but exceed memory limit: {pred_full_mem/GB:.2f}/{memory_cap/GB:.2f} GB"
                                     )
 
                             if not is_success:
-                                logger.info(
+                                logging.info(
                                     f">>> [Profiling] STOP BS search for bucket {ar_name} {num_frame} at {bs} sp {cur_size}"
                                 )
                             bs *= 2
@@ -1457,7 +1457,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         cur_size *= 2
 
                     if not dp_results:
-                        logger.info(
+                        logging.info(
                             f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into the cluster"
                         )
                         continue
@@ -1480,7 +1480,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         if not dynamic_recompute and not grad_acc:
             # balance the execution time of each bucket by adjusting batch size
-            logger.info(
+            logging.info(
                 f">>> [Profiling] Profile results before adjustment: {pformat(profile_results, sort_dicts=False)}\n"
                 f">>> [Profiling] Profile cost before adjustment: {profile_timer.elapsed_time:.2f} s"
             )
@@ -1523,7 +1523,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                                 info["max"]["execution_time"] = cur_time * new_bs / cur_bs
                                 info["max"]["bs"] = new_bs
 
-        logger.info(
+        logging.info(
             f">>> [Profiling] Profile results: {pformat(profile_results, sort_dicts=False)}\n"
             f">>> [Profiling] Profile cost: {profile_timer.elapsed_time:.2f} s"
         )
@@ -1544,7 +1544,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 + ([f"{k}_cnt" for k in submodule_fields] if dynamic_recompute else []),
             )
             detail_df.to_csv(f"{dump_dir}/detail_profile.csv", index=False)
-            logger.info(detail_df)
+            logging.info(detail_df)
 
             with open(f"{dump_dir}/profile.json", "w") as f:
                 json.dump(profile_results, f)

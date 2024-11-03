@@ -1,5 +1,8 @@
 import argparse
+import logging
+import math
 import os
+import random
 from copy import deepcopy
 from datetime import timedelta
 from pprint import pformat
@@ -15,71 +18,120 @@ from videosys.core.dcp.profiler import Profiler, set_profiler
 from videosys.core.distributed.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2, STDiT3Config
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
-from videosys.training.ckpt_io.open_sora import (
-    define_experiment_workspace,
-    model_gathering,
-    model_sharding,
-    record_model_param_shape,
-    save,
-    save_training_config,
-)
+from videosys.training.ckpt_io import load, save, save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
 from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
+from videosys.training.ema_distributed import ema_gathering, ema_sharding, update_ema
 from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
-from videosys.utils.logging import logger
+from videosys.utils.logging import init_logger
 from videosys.utils.training import (
-    MaskGenerator,
     all_reduce_mean,
+    define_experiment_workspace,
     format_numel_str,
     get_model_numel,
     requires_grad,
-    update_ema,
 )
 from videosys.utils.utils import merge_args, set_seed, str_to_dtype
 
 
-def train_step(batch, model, mask_generator, scheduler, lr_scheduler, profiler: Profiler, device, dtype):
-    profiler.optimize_dynamics(batch, model)
+class MaskGenerator:
+    def __init__(self, mask_ratios):
+        valid_mask_names = [
+            "identity",
+            "quarter_random",
+            "quarter_head",
+            "quarter_tail",
+            "quarter_head_tail",
+            "image_random",
+            "image_head",
+            "image_tail",
+            "image_head_tail",
+            "random",
+            "intepolate",
+        ]
+        assert all(
+            mask_name in valid_mask_names for mask_name in mask_ratios.keys()
+        ), f"mask_name should be one of {valid_mask_names}, got {mask_ratios.keys()}"
+        assert all(
+            mask_ratio >= 0 for mask_ratio in mask_ratios.values()
+        ), f"mask_ratio should be greater than or equal to 0, got {mask_ratios.values()}"
+        assert all(
+            mask_ratio <= 1 for mask_ratio in mask_ratios.values()
+        ), f"mask_ratio should be less than or equal to 1, got {mask_ratios.values()}"
+        # sum of mask_ratios should be 1
+        if "identity" not in mask_ratios:
+            mask_ratios["identity"] = 1.0 - sum(mask_ratios.values())
+        assert math.isclose(
+            sum(mask_ratios.values()), 1.0, abs_tol=1e-6
+        ), f"sum of mask_ratios should be 1, got {sum(mask_ratios.values())}"
+        logging.info("mask ratios: %s", mask_ratios)
+        self.mask_ratios = mask_ratios
 
-    total_gas = batch["gas"]
-    iter_loss = 0.0
-    for gas in range(total_gas):
-        with profiler.profile(batch, model, gas) as valid_depth:
-            batch_data = batch["data"][gas]
+    def get_mask(self, x):
+        mask_type = random.random()
+        mask_name = None
+        prob_acc = 0.0
+        for mask, mask_ratio in self.mask_ratios.items():
+            prob_acc += mask_ratio
+            if mask_type < prob_acc:
+                mask_name = mask
+                break
 
-            # move data
-            x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
-            y = batch_data.pop("text").to(device, dtype)
-            mask = batch_data.pop("mask").to(device)
-            model_args = dict(y=y, mask=mask)
+        num_frames = x.shape[2]
+        # Hardcoded condition_frames
+        condition_frames_max = num_frames // 4
 
-            for k, v in batch_data.items():
-                if isinstance(v, torch.Tensor):
-                    model_args[k] = v.to(device, dtype)
-            model_args["valid_depth"] = valid_depth
+        mask = torch.ones(num_frames, dtype=torch.bool, device=x.device)
+        if num_frames <= 1:
+            return mask
 
-            # mask
-            mask = None
-            if mask_generator is not None:
-                mask = mask_generator.get_masks(x)
-                model_args["x_mask"] = mask
+        if mask_name == "quarter_random":
+            random_size = random.randint(1, condition_frames_max)
+            random_pos = random.randint(0, x.shape[2] - random_size)
+            mask[random_pos : random_pos + random_size] = 0
+        elif mask_name == "image_random":
+            random_size = 1
+            random_pos = random.randint(0, x.shape[2] - random_size)
+            mask[random_pos : random_pos + random_size] = 0
+        elif mask_name == "quarter_head":
+            random_size = random.randint(1, condition_frames_max)
+            mask[:random_size] = 0
+        elif mask_name == "image_head":
+            random_size = 1
+            mask[:random_size] = 0
+        elif mask_name == "quarter_tail":
+            random_size = random.randint(1, condition_frames_max)
+            mask[-random_size:] = 0
+        elif mask_name == "image_tail":
+            random_size = 1
+            mask[-random_size:] = 0
+        elif mask_name == "quarter_head_tail":
+            random_size = random.randint(1, condition_frames_max)
+            mask[:random_size] = 0
+            mask[-random_size:] = 0
+        elif mask_name == "image_head_tail":
+            random_size = 1
+            mask[:random_size] = 0
+            mask[-random_size:] = 0
+        elif mask_name == "intepolate":
+            random_start = random.randint(0, 1)
+            mask[random_start::2] = 0
+        elif mask_name == "random":
+            mask_ratio = random.uniform(0.1, 0.9)
+            mask = torch.rand(num_frames, device=x.device) > mask_ratio
+            # if mask is all False, set the last frame to True
+            if not mask.any():
+                mask[-1] = 1
 
-            # diffusion
-            loss_dict = scheduler.training_losses(model, x, model_args, mask=mask)
+        return mask
 
-            # backward
-            profiler.set_gradient_accumulation_boundary(model, batch, gas)
-
-            loss = loss_dict["loss"].mean()
-            model.backward(loss)
-
-            model.step()
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-
-            iter_loss += loss.detach()
-
-    return iter_loss
+    def get_masks(self, x):
+        masks = []
+        for _ in range(len(x)):
+            mask = self.get_mask(x)
+            masks.append(mask)
+        masks = torch.stack(masks, dim=0)
+        return masks
 
 
 def main(args):
@@ -93,6 +145,7 @@ def main(args):
 
     # == init distributed training ==
     # NOTE: A very large timeout is set to avoid some processes exit early
+    init_logger()
     rank, world_size, node_rank, node_size = set_distributed_state(args.distributed_profile)
     dist.init_process_group(
         rank=rank,
@@ -114,8 +167,8 @@ def main(args):
     dist.barrier()
 
     # == init logger, tensorboard & wandb ==
-    logger.info("Experiment directory created at %s", exp_dir)
-    logger.info("Training configuration:\n %s", pformat(vars(args)))
+    logging.info("Experiment directory created at %s", exp_dir)
+    logging.info("Training configuration:\n %s", pformat(vars(args)))
     if dist.get_rank() == 0:
         if args.wandb:
             wandb.init(project="Open-Sora", name=exp_name, config=vars(args), dir="./outputs/wandb")
@@ -136,6 +189,7 @@ def main(args):
     text_hidden_size = 4096
     model_config = STDiT3Config.from_pretrained(args.ckpt_path)
 
+    # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
         model_config,
         args.bucket_config,
@@ -160,7 +214,7 @@ def main(args):
     # ======================================================
     # 2. build dataset and dataloader
     # ======================================================
-    logger.info("Building dataset...")
+    logging.info("Building dataset...")
     # == build dataset ==
     if args.dummy_dataset:
         dataset = DummyVariableVideoTextDataset(
@@ -179,7 +233,7 @@ def main(args):
         )
     else:
         dataset = VariableVideoTextDataset(transform_name="resize_crop", data_path=args.data_path)
-    logger.info("Dataset contains %s samples.", len(dataset))
+    logging.info("Dataset contains %s samples.", len(dataset))
 
     # == build dataloader ==
     dataloader_args = dict(
@@ -207,7 +261,7 @@ def main(args):
     # ======================================================
     # 3. build model
     # ======================================================
-    logger.info("Building models...")
+    logging.info("Building models...")
     # == build text-encoder ==
     if args.preprocessed_data:
         text_encoder_output_dim = 4096
@@ -249,18 +303,16 @@ def main(args):
         .train()
     )
     model_numel, model_numel_trainable = get_model_numel(model)
-    logger.info(
+    logging.info(
         "[Diffusion] Trainable model params: %s, Total model params: %s",
         format_numel_str(model_numel_trainable),
         format_numel_str(model_numel),
     )
 
     # == build ema for diffusion model ==
-    ema = deepcopy(model).to(torch.float32).to(device)
+    ema = deepcopy(model)
     requires_grad(ema, False)
-    ema_shape_dict = record_model_param_shape(ema)
     ema.eval()
-    update_ema(ema, model, decay=0, sharded=False)
 
     # == setup loss function, build scheduler ==
     scheduler = RFLOW(
@@ -295,7 +347,7 @@ def main(args):
     # =======================================================
     # 4. distributed training preparation with colossalai
     # =======================================================
-    logger.info("Preparing for distributed training...")
+    logging.info("Preparing for distributed training...")
     # == boosting ==
     # NOTE: we set dtype first to make initialization of model consistent with the dtype; then reset it to the fp32 as we make diffusion scheduler in fp32
     torch.set_default_dtype(dtype)
@@ -322,32 +374,31 @@ def main(args):
     )
 
     torch.set_default_dtype(torch.float)
-    logger.info("Boosting model for distributed training")
+    logging.info("Boosting model for distributed training")
 
     start_epoch = start_step = log_step = acc_step = 0
     # TODO: resume functionality should consider the profiler status
     # == resume ==
-    # if args.load is not None:
-    #     logger.info("Loading checkpoint")
-    #     ret = load(
-    #         booster,
-    #         args.load,
-    #         model=model,
-    #         ema=ema,
-    #         optimizer=optimizer,
-    #         lr_scheduler=lr_scheduler,
-    #         sampler=None if args.start_from_scratch else sampler,
-    #     )
-    #     if not args.start_from_scratch:
-    #         start_epoch, start_step = ret
-    #     logger.info("Loaded checkpoint %s at epoch %s step %s", args.load, start_epoch, start_step)
+    if args.load is not None:
+        logging.info("Loading checkpoint")
+        ret = load(
+            args.load,
+            model=model,
+            ema=ema,
+            sampler=None if args.start_from_scratch else sampler,
+        )
+        if not args.start_from_scratch:
+            start_epoch, start_step = ret
+        logging.info("Loaded checkpoint %s at epoch %s step %s", args.load, start_epoch, start_step)
 
-    model_sharding(ema)
+    # == ema model sharding ==
+    ema_sharding(model.module, ema)
+    ema = ema.to(device, torch.float32)
 
     # == global variables ==
     cfg_epochs = args.epochs + (1 if profiler.need_profile() else 0)
     running_loss = 0.0
-    logger.info("Training for %s epochs with profiling %s", args.epochs, profiler.need_profile())
+    logging.info("Training for %s epochs with profiling %s", args.epochs, profiler.need_profile())
 
     # =======================================================
     # 5. training loop
@@ -368,7 +419,7 @@ def main(args):
             num_steps_per_epoch = len(dataloader)
             dataloader_iter = iter(dataloader)
             epoch_desc = f"Epoch {epoch}"
-        logger.info("Beginning %s...", epoch_desc)
+        logging.info("Beginning %s...", epoch_desc)
 
         # == training loop in an epoch ==
         pbar = tqdm(
@@ -379,13 +430,53 @@ def main(args):
             total=num_steps_per_epoch,
         )
         for step, batch in pbar:
-            iter_loss = train_step(batch, model, mask_generator, scheduler, lr_scheduler, profiler, device, dtype)
+            # TODO: more elegant here
+            profiler.optimize_dynamics(batch, model)
+
+            total_gas = batch["gas"]
+            iter_loss = 0.0
+            for gas in range(total_gas):
+                with profiler.profile(batch, model, gas) as valid_depth:
+                    batch_data = batch["data"][gas]
+
+                    # move data
+                    x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
+                    y = batch_data.pop("text").to(device, dtype)
+                    mask = batch_data.pop("mask").to(device)
+                    model_args = dict(y=y, mask=mask)
+
+                    for k, v in batch_data.items():
+                        if isinstance(v, torch.Tensor):
+                            model_args[k] = v.to(device, dtype)
+                    # TODO: polish
+                    model_args["valid_depth"] = valid_depth
+
+                    # mask
+                    mask = None
+                    if mask_generator is not None:
+                        mask = mask_generator.get_masks(x)
+                        model_args["x_mask"] = mask
+
+                    # diffusion
+                    loss_dict = scheduler.training_losses(model, x, model_args, mask=mask)
+
+                    # backward
+                    profiler.set_gradient_accumulation_boundary(model, batch, gas)
+
+                    loss = loss_dict["loss"].mean()
+                    model.backward(loss)
+
+                    model.step()
+                    if lr_scheduler is not None:
+                        lr_scheduler.step()
+
+                    iter_loss += loss.detach()
 
             if profiler.need_profile():
                 continue
 
             # == update EMA ==
-            # update_ema(ema, model.module, optimizer=optimizer, decay=args.ema_decay)
+            update_ema(ema, model.module, optimizer=optimizer, decay=args.ema_decay)
 
             # == update log info ==
             all_reduce_mean(iter_loss)
@@ -406,16 +497,9 @@ def main(args):
                             "iter": global_step,
                             "acc_step": acc_step,
                             "epoch": epoch,
-                            "loss": loss.item(),
+                            "loss": iter_loss.item(),
                             "avg_loss": avg_loss,
                             "lr": optimizer.param_groups[0]["lr"],
-                            "debug/move_data_time": move_data_t.elapsed_time,
-                            "debug/encode_time": encode_t.elapsed_time,
-                            "debug/mask_time": mask_t.elapsed_time,
-                            "debug/diffusion_time": loss_t.elapsed_time,
-                            "debug/backward_time": backward_t.elapsed_time,
-                            "debug/update_ema_time": ema_t.elapsed_time,
-                            "debug/reduce_loss_time": reduce_loss_t.elapsed_time,
                         },
                         step=global_step,
                     )
@@ -424,38 +508,31 @@ def main(args):
                 log_step = 0
 
             # == checkpoint saving ==
-            ckpt_every = args.ckpt_every
+            ckpt_every = 2
             if ckpt_every > 0 and (global_step + 1) % ckpt_every == 0:
-                model_gathering(ema, ema_shape_dict)
+                ema_gathering(model.module, ema)
                 save_dir = save(
-                    booster,
                     exp_dir,
                     model=model,
                     ema=ema,
-                    optimizer=optimizer,
-                    lr_scheduler=lr_scheduler,
                     sampler=sampler,
                     epoch=epoch,
                     step=step + 1,
                     global_step=global_step + 1,
                     batch_size=args.batch_size,
                 )
-                if dist.get_rank() == 0:
-                    model_sharding(ema)
-                logger.info(
+                ema_sharding(model.module, ema)
+                logging.info(
                     "Saved checkpoint at epoch %s, step %s, global_step %s to %s",
                     epoch,
                     step + 1,
                     global_step + 1,
                     save_dir,
                 )
-            if len(profiler.registered_timer_keys) > 0:
-                log_str = f"Rank {dist.get_rank()} | Epoch {epoch} | Step {step} | "
-                log_str += profiler.registered_timer_log()
-                print(log_str)
+                exit()
 
         if rank == 0 and not profiler.need_profile():
-            logger.info(
+            logging.info(
                 f"Epoch {epoch}: steps: {num_steps_per_epoch} effective samples: {sampler.effective_samples}, "
                 f"throughput: {sampler.effective_samples / pbar.format_dict['elapsed']} samples/s"
             )
