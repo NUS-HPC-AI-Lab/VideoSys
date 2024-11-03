@@ -145,7 +145,6 @@ def main(args):
 
     # == init distributed training ==
     # NOTE: A very large timeout is set to avoid some processes exit early
-    init_logger()
     rank, world_size, node_rank, node_size = set_distributed_state(args.distributed_profile)
     dist.init_process_group(
         rank=rank,
@@ -167,6 +166,7 @@ def main(args):
     dist.barrier()
 
     # == init logger, tensorboard & wandb ==
+    init_logger(exp_dir)
     logging.info("Experiment directory created at %s", exp_dir)
     logging.info("Training configuration:\n %s", pformat(vars(args)))
     if dist.get_rank() == 0:
@@ -356,7 +356,6 @@ def main(args):
     ds_config = {
         "train_micro_batch_size_per_gpu": 1,
         "steps_per_print": 1e8,  # dont print
-        # "gradient_accumulation_steps": gradient_accumulation_steps,
         "gradient_clipping": 1.0,
         "zero_optimization": {
             "stage": 1,

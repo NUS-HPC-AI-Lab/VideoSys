@@ -418,3 +418,46 @@ def gather_from_second_dim(x, batch_size, parallel_group):
     x = gather_sequence(x, parallel_group, dim=1, grad_scale="up", pad=get_pad("temporal"))
     x = x.reshape(-1, *x.shape[2:])
     return x
+
+
+def _switch_sp_cp_fwd(parallel_manager):
+    assert parallel_manager.cp_size == 1
+    parallel_manager.cp_size = parallel_manager.sp_size
+    parallel_manager.cp_group = parallel_manager.sp_group
+    parallel_manager.sp_size = 1
+    parallel_manager.switch_sp_cp = True
+
+
+def _switch_sp_cp_bwd(parallel_manager):
+    parallel_manager.sp_size = parallel_manager.cp_size
+    parallel_manager.sp_group = parallel_manager.cp_group
+    parallel_manager.cp_size = 1
+    parallel_manager.cp_group = None
+    parallel_manager.switch_sp_cp = False
+
+
+class _SwitchSpCp(torch.autograd.Function):
+    """
+    Switch sp and cp.
+    """
+
+    @staticmethod
+    def symbolic(graph, input_):
+        return input_
+
+    @staticmethod
+    def forward(ctx, input_, parallel_manager):
+        _switch_sp_cp_fwd(parallel_manager)
+        ctx.parallel_manager = parallel_manager
+        return input_
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        _switch_sp_cp_bwd(ctx.parallel_manager)
+        return grad_output, None
+
+
+def switch_sp_cp(input_, parallel_manager):
+    if not input_.requires_grad:
+        input_.requires_grad = True
+    return _SwitchSpCp.apply(input_, parallel_manager)

@@ -21,7 +21,14 @@ from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 from transformers import PretrainedConfig, PreTrainedModel
 
 from videosys.core.dcp.recompute import auto_recompute
-from videosys.core.distributed.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
+from videosys.core.distributed.comm import (
+    all_to_all_with_pad,
+    gather_sequence,
+    get_pad,
+    set_pad,
+    split_sequence,
+    switch_sp_cp,
+)
 from videosys.core.distributed.parallel_mgr import ParallelManager
 from videosys.core.pab.pab_mgr import (
     enable_pab,
@@ -517,18 +524,20 @@ class STDiT3(PreTrainedModel):
         T, H, W = self.get_dynamic_size(x)
 
         # === use cp instead of sp ===
-        switch_sp_cp = False
-        if self.parallel_manager.sp_size > 1 and T == 1:
-            assert self.parallel_manager.cp_size == 1
-            self.parallel_manager.cp_size = self.parallel_manager.sp_size
-            self.parallel_manager.cp_group = self.parallel_manager.sp_group
-            self.parallel_manager.sp_size = 1
-            switch_sp_cp = True
+        # only for parallel when frame = 1 (sp cannot handle)
+        # this usually happens only in bucket parallel
+        if self.training and self.parallel_manager.sp_size > 1 and T == 1:
+            if x.shape[0] < self.parallel_manager.cp_size:
+                raise RuntimeError(
+                    f"Batch size {x.shape[0]} can not be less than cp size {self.parallel_manager.cp_size}"
+                )
+            x = switch_sp_cp(x, self.parallel_manager)
 
         # === Split batch ===
         if self.parallel_manager.cp_size > 1:
+            set_pad("batch", x.shape[0], self.parallel_manager.cp_group)
             x, timestep, y, x_mask, mask, fps = batch_func(
-                partial(split_sequence, process_group=self.parallel_manager.cp_group, dim=0),
+                partial(split_sequence, process_group=self.parallel_manager.cp_group, dim=0, pad=get_pad("batch")),
                 x,
                 timestep,
                 y,
@@ -615,19 +624,12 @@ class STDiT3(PreTrainedModel):
         x = self.final_layer(x, t, x_mask, t0, T, S)
         x = self.unpatchify(x, T, H, W, Tx, Hx, Wx)
 
-        # cast to float32 for better accuracy
-        x = x.to(torch.float32)
-
         # === Gather Output ===
         if self.parallel_manager.cp_size > 1:
-            x = gather_sequence(x, self.parallel_manager.cp_group, dim=0)
+            x = gather_sequence(x, self.parallel_manager.cp_group, dim=0, pad=get_pad("batch"))
 
-        # === reset sp ===
-        if switch_sp_cp:
-            self.parallel_manager.sp_size = self.parallel_manager.cp_size
-            self.parallel_manager.sp_group = self.parallel_manager.cp_group
-            self.parallel_manager.cp_group = None
-            self.parallel_manager.cp_size = 1
+        # cast to float32 for better accuracy
+        x = x.to(torch.float32)
 
         return x
 
