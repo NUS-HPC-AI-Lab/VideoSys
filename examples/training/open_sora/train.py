@@ -200,6 +200,7 @@ def main(args):
         args.dynamic_sp,
         args.dynamic_recompute,
         args.auto_grad_accumulation,
+        args.sp_balance_scope,
         args.profile,
         args.end2end_profile,
         args.distributed_profile,
@@ -248,6 +249,7 @@ def main(args):
         process_group=parallel_mgr.dp_group,
         prefetch_factor=args.prefetch_factor,
         optimized_schedule=args.sampler_schedule_type if args.dynamic_sp else None,
+        sp_balance_scope=args.sp_balance_scope,
         auto_grad_accumulation=args.auto_grad_accumulation,
         max_grad_accumulation_steps=args.max_grad_accumulation_steps,
     )
@@ -601,6 +603,7 @@ if __name__ == "__main__":
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")
     parser.add_argument("--max-grad-accumulation-steps", default=2, type=int)
+    parser.add_argument("--sp-balance-scope", default="epoch", type=str, choices=["iter", "epoch"])
     parser.add_argument(
         "--alloc-memory-fraction",
         default=0.75,

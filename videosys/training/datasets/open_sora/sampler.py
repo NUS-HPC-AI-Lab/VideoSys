@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from collections import OrderedDict, defaultdict
+from dataclasses import dataclass
 from functools import partial
 from pprint import pformat
 from typing import Iterator, List, Optional, Union
@@ -35,50 +36,12 @@ def apply(data, method=None, frame_interval=None, seed=None, num_bucket=None):
     )
 
 
-def print_memory_stats(phase=None):
-    free_gpu_memory, total_gpu_memory = torch.cuda.mem_get_info()
-    alloc_mem, resrv_mem, max_alloc, max_resrv = (
-        torch.cuda.memory_allocated(),
-        torch.cuda.memory_reserved(),
-        torch.cuda.max_memory_allocated(),
-        torch.cuda.max_memory_reserved(),
-    )
-    if phase is not None:
-        phase = f"after {phase}"
-    else:
-        phase = ""
-    print(
-        f">>> [Profiling {dist.get_rank()} {phase}] free GPU memory: {free_gpu_memory/GB:.2f}/{total_gpu_memory/GB:.2f}, "
-        f"allocated memory: {alloc_mem/GB:.2f} GB, reserved memory: {resrv_mem/GB:.2f} GB, "
-        f"max allocated memory: {max_alloc/GB:.2f} GB, max reserved memory: {max_resrv/GB:.2f} GB"
-    )
-    return free_gpu_memory, total_gpu_memory, alloc_mem, resrv_mem, max_alloc, max_resrv
-
-
-def reset_status(model, optimizer):
-    # reset model status
-    model.zero_grad()
-
-    # reset optimizer status
-    if optimizer.contiguous_gradients:
-        optimizer.ipg_buffer = None
-        optimizer.grads_in_partition = None
-        optimizer.grads_in_partition_offset = 0
-    for i in range(len(optimizer.params_already_reduced)):
-        optimizer.params_already_reduced[i] = False
-    optimizer.grads_in_ipg_bucket = []
-    optimizer.params_in_ipg_bucket = []
-    optimizer.ipg_bucket_has_moe_params = False
-    optimizer.elements_in_ipg_bucket = 0
-    optimizer.extra_large_param_to_reduce = None
-    optimizer.zero_grad()
-    clean_cache()
-
-
-def clean_cache():
-    torch.cuda.ipc_collect()
-    torch.cuda.empty_cache()
-    torch.cuda.reset_peak_memory_stats()
+@dataclass
+class BucketPlan:
+    bucket_id: tuple
+    batch_size: int
+    sp_size: int
+    exec_time: float
 
 
 class StatefulDistributedSampler(DistributedSampler):
@@ -127,6 +90,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         verbose: bool = False,
         num_bucket_build_workers: int = 1,
         optimized_schedule: str = None,
+        sp_balance_scope: str = "epoch",
         auto_grad_accumulation: bool = False,
         max_grad_accumulation_steps: int = 2,
         parallel_mgr=None,
@@ -145,6 +109,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.num_bucket_build_workers = num_bucket_build_workers
 
         self.optimized_schedule = optimized_schedule
+        self.sp_balance_scope = sp_balance_scope
         self.auto_grad_accumulation = auto_grad_accumulation
         self.max_grad_accumulation_steps = max_grad_accumulation_steps
         self.profiler = get_profiler()
@@ -645,91 +610,267 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         return bucket_id_access_order
 
+    def _build_local_bucket_id_access_order_sp_balance(self, bucket_sample_dict):
+        assert self.keep_last
+
+        wsize = dist.get_world_size()
+        bucket_id_access_order = []
+        self.effective_samples = 0
+
+        bucket_sample_counts = {}
+        sp_bucket_map = dict()
+        for bucket_id, data_list in bucket_sample_dict.items():
+            ar_name, num_frame = bucket_id[:2]
+            if not self.profiler.is_valid_bucket(ar_name, num_frame):
+                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+                continue
+
+            # shuffle
+            if self.generator is not None:
+                data_indices = torch.randperm(len(data_list), generator=self.generator).tolist()
+                data_list = [data_list[i] for i in data_indices]
+
+            # record
+            bucket_sample_dict[bucket_id] = data_list
+            bucket_sample_counts[bucket_id] = len(data_list)
+            sp_size = self.profiler.get_sp_size(ar_name, num_frame)
+            if sp_size not in sp_bucket_map:
+                sp_bucket_map[sp_size] = []
+            sp_bucket_map[sp_size].append(bucket_id)
+
+        def score_func(new_time, median_time):
+            if new_time > median_time:
+                return (new_time - median_time) * 1.5
+            else:
+                return (median_time - new_time) * 1
+
+        sp_size_list = sorted(sp_bucket_map.keys())
+        while sp_size_list:
+            cur_batch_bucket_id_list = []
+            remain_gpus = wsize
+            has_one_more_batch = True
+            while remain_gpus > 0:
+                max_sp_idx = 0
+                while max_sp_idx < len(sp_size_list) and remain_gpus >= sp_size_list[max_sp_idx]:
+                    max_sp_idx += 1
+
+                if max_sp_idx == 0:
+                    # if false, cur_batch_bucket_id_list will be discarded
+                    has_one_more_batch = False
+                    break
+
+                # select sp
+                if self.generator is not None:
+                    cur_sp_size_list = sp_size_list[:max_sp_idx]
+                    probs = torch.tensor([len(sp_bucket_map[k]) for k in cur_sp_size_list], dtype=torch.float)
+                    idx = torch.multinomial(probs, 1, generator=self.generator).item()
+                else:
+                    idx = max_sp_idx - 1
+                sp = sp_size_list[idx]
+                remain_gpus -= sp
+
+                # select bucket
+                if self.generator is not None:
+                    bucket_index = torch.randint(0, len(sp_bucket_map[sp]), (1,), generator=self.generator).item()
+                else:
+                    bucket_index = 0
+                bucket_id = sp_bucket_map[sp][bucket_index]
+                ar_name, num_frame = bucket_id[:2]
+                bs = self.profiler.get_batch_size(ar_name, num_frame)
+
+                num_samples = min(bs, bucket_sample_counts[bucket_id])
+                cur_batch_bucket_id_list.append(
+                    BucketPlan(
+                        bucket_id=bucket_id,
+                        batch_size=num_samples,
+                        sp_size=sp,
+                        exec_time=self.profiler.get_execution_time(ar_name, num_frame),
+                    )
+                )
+
+                bucket_sample_counts[bucket_id] -= num_samples
+                if bucket_sample_counts[bucket_id] == 0:
+                    sp_bucket_map[sp].remove(bucket_id)
+                    if not sp_bucket_map[sp]:
+                        sp_size_list.remove(sp)
+                        sp_bucket_map.pop(sp)
+
+            if not has_one_more_batch:
+                continue
+
+            median_time = np.median([each.exec_time for each in cur_batch_bucket_id_list])
+            for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                ar_name, num_frame = bucket_plan.bucket_id[:2]
+                sp = self.profiler.get_sp_size(ar_name, num_frame)
+                # bs of the last batch might be smaller than the original bs
+                bs = self.profiler.get_batch_size(ar_name, num_frame)
+                exec_time = self.profiler.get_execution_time(ar_name, num_frame)
+
+                diff = score_func(exec_time, median_time)
+                if exec_time > median_time:
+                    if bs == 1:
+                        new_sp = sp
+                        new_time = exec_time
+                        while new_time > median_time and sp < self.profiler.max_sp:
+                            new_sp *= 2
+                            new_time /= 2
+                        new_diff = score_func(new_time, median_time)
+                        if new_diff < diff:
+                            sp = new_sp
+                            exec_time = new_time
+                    else:
+                        new_bs = max(1, int(bs * median_time / exec_time))
+                        new_time = exec_time * new_bs / bs
+                        new_diff = score_func(new_time, median_time)
+                        if new_diff < diff:
+                            bs = new_bs
+                            exec_time = new_time
+
+                    if bs < cur_batch_bucket_id_list[i].batch_size:
+                        bucket_id = cur_batch_bucket_id_list[i].bucket_id
+                        org_sp = self.profiler.get_sp_size(bucket_id[0], bucket_id[1])
+                        left_bs = cur_batch_bucket_id_list[i].batch_size - bs
+
+                        bucket_sample_counts[bucket_id] += left_bs
+                        if org_sp not in sp_bucket_map:
+                            sp_bucket_map[org_sp] = []
+                            sp_bucket_map[org_sp].append(bucket_id)
+                            sp_size_list.append(org_sp)
+                        else:
+                            if sp_bucket_map[org_sp].count(bucket_id) == 0:
+                                sp_bucket_map[org_sp].append(bucket_id)
+
+                        cur_batch_bucket_id_list[i].batch_size = bs
+
+                    cur_batch_bucket_id_list[i].sp_size = sp
+                    cur_batch_bucket_id_list[i].exec_time = exec_time
+
+            # pop and recover buckets out of limit
+            cur_batch_bucket_id_list = sorted(cur_batch_bucket_id_list, key=lambda x: x.sp_size, reverse=True)
+            total_gpus = sum([each.sp_size for each in cur_batch_bucket_id_list])
+            while total_gpus > wsize:
+                bucket_plan = cur_batch_bucket_id_list.pop()
+                bucket_id = bucket_plan.bucket_id
+                ar_name, num_frame = bucket_id[:2]
+                org_sp = self.profiler.get_sp_size(ar_name, num_frame)
+                sp = bucket_plan.sp_size
+                bs = bucket_plan.batch_size
+
+                bucket_sample_counts[bucket_id] += bs
+                if org_sp not in sp_bucket_map:
+                    sp_bucket_map[org_sp] = []
+                    sp_bucket_map[org_sp].append(bucket_id)
+                    sp_size_list.append(org_sp)
+                elif sp_bucket_map[org_sp].count(bucket_id) == 0:
+                    sp_bucket_map[org_sp].append(bucket_id)
+
+                total_gpus -= sp
+            assert total_gpus == wsize
+
+            this_bucket_acc_list = []
+            for bucket_plan in cur_batch_bucket_id_list:
+                self.effective_samples += bucket_plan.batch_size
+                this_bucket_acc_list.append([(bucket_plan.bucket_id, bucket_plan.batch_size, bucket_plan.sp_size)])
+            bucket_id_access_order.append(this_bucket_acc_list)
+            logging.info(
+                f"iter {len(bucket_id_access_order)}: buckets: {[(each.bucket_id, each.batch_size, each.sp_size) for each in cur_batch_bucket_id_list]}"
+            )
+
+        return bucket_id_access_order
+
     def _optimized_schedule_iter(self, bucket_sample_dict, is_global):
         rank, wsize = dist.get_rank(), dist.get_world_size()
+        is_sp_balance_iter = (
+            self.profiler.dynamic_sp
+            and self.sp_balance_scope == "iter"
+            and not self.profiler.dynamic_recompute
+            and not self.auto_grad_accumulation
+        )
 
-        if is_global:
-            sp_bucket_id_access_order = self._group_bucket_by_sp_size(bucket_sample_dict)
-            # bucket_id_access_order: [bucket_id] * <num sp groups of this iter>
-            bucket_id_access_order, _, _ = self._build_global_bucket_id_access_order(sp_bucket_id_access_order)
+        # bucket_id_access_order: [[(bucket_id, bs)] * <num acc of this bucket>] * <num sp groups of this iter>
+        if self.cached_bucket_id_access_order is not None:
+            bucket_id_access_order = self.cached_bucket_id_access_order
+            self.cached_bucket_id_access_order = None
+        elif is_sp_balance_iter:
+            bucket_id_access_order = self._build_local_bucket_id_access_order_sp_balance(bucket_sample_dict)
         else:
-            if self.cached_bucket_id_access_order is not None:
-                bucket_id_access_order = self.cached_bucket_id_access_order
-                self.cached_bucket_id_access_order = None
-            else:
-                # support grad acc
-                # bucket_id_access_order: [[(bucket_id, bs)] * <num acc of this bucket>] * <num sp groups of this iter>
-                bucket_id_access_order = self._build_local_bucket_id_access_order_acc(bucket_sample_dict)
-
-        # special care for the remainder, instead of using the minimum sp size, try to use
-        # if bucket_list_for_remainder:
-        #     pass
-
-        # skip shuffle for bucket id access order. Do we need it?
+            # support grad acc
+            bucket_id_access_order = self._build_local_bucket_id_access_order_acc(bucket_sample_dict)
 
         num_iter = len(bucket_id_access_order)
         # skip resume code
         start_iter_idx = self.last_micro_batch_access_index
 
         # generate execution plan
-        bucket_last_consumed = defaultdict(int)
+        bucket_last_consumed = OrderedDict()
         for i in range(start_iter_idx, num_iter):
             bucket_id_access_list = bucket_id_access_order[i]
-            sp_size_map_list, bucket_id_map_list = [], []
-            for item in bucket_id_access_list:
-                if is_global:
-                    bucket_id = item
-                else:
-                    bucket_id = item[0][0]
 
-                sp_size = self.profiler.get_sp_size(bucket_id[0], bucket_id[1])
+            sp_size_map_list, bucket_id_map_list = [], []
+            bucket_access_boundaries = []
+            for bucket_list in bucket_id_access_list:
+                boundary_gas_list = []
+                for item in bucket_list:
+                    bucket_id, bs = item[:2]
+
+                    last_consumed_index = bucket_last_consumed.get(bucket_id, 0)
+                    boundary_gas_list.append([last_consumed_index, last_consumed_index + bs])
+
+                    if bucket_id in bucket_last_consumed:
+                        bucket_last_consumed[bucket_id] += bs
+                    else:
+                        bucket_last_consumed[bucket_id] = bs
+                    assert bucket_last_consumed[bucket_id] <= len(
+                        bucket_sample_dict[bucket_id]
+                    ), f"rank {rank} iter: {i}, bucket_id_access_list: {bucket_id_access_list}, bucket_last_consumed[{bucket_id}] = {bucket_last_consumed[bucket_id]} > {len(bucket_sample_dict[bucket_id])}"
+
+                bucket_id = bucket_list[0][0]
+                if is_sp_balance_iter:
+                    sp_size = bucket_list[0][2]
+                else:
+                    sp_size = self.profiler.get_sp_size(bucket_id[0], bucket_id[1])
 
                 sp_size_map_list.extend([sp_size] * sp_size)
-                bucket_id_map_list.extend([item] * sp_size)
+                bucket_id_map_list.extend([bucket_list] * sp_size)
+                bucket_access_boundaries.extend([boundary_gas_list] * sp_size)
 
-            # essentially, we want to set the sp size for the current iteration before running training,
-            # however, when using multiple workers and prefetch in dataloader,
-            # simply set_sp_size(sp_size) can cause inconsistency in the sp size
             assert len(sp_size_map_list) == wsize
-            # append_sp_size(sp_size_map_list[rank])
             sp_size = sp_size_map_list[rank]
+            bucket_list = bucket_id_map_list[rank]
+            boundaries = bucket_access_boundaries[rank]
 
-            if is_global:
-                gas = 1
-                bucket_id = bucket_id_map_list[rank]
-                max_bs = self.profiler.get_batch_size(bucket_id[0], bucket_id[1])
-                cur_idx = bucket_last_consumed[bucket_id]
-                cur_offset = min(max_bs, len(bucket_sample_dict[bucket_id]) - cur_idx)
-                cur_micro_batches = bucket_sample_dict[bucket_id][cur_idx : cur_idx + cur_offset]
-                bucket_last_consumed[bucket_id] += cur_offset
+            gas = len(bucket_list)
+            cur_micro_batches = []
+            for bucket, boundary in zip(bucket_list, boundaries):
+                bucket_id, bs = bucket[:2]
+                gas_micro_batches = bucket_sample_dict[bucket_id][boundary[0] : boundary[1]]
+                assert (
+                    len(gas_micro_batches) == bs
+                ), f"iter {i}, rank {rank}, target bs: {bs}, actual bs: {len(gas_micro_batches)}"
 
                 real_t, real_h, real_w = self.bucket.get_thw(bucket_id)
-                cur_micro_batches = [
-                    (idx, real_t, real_h, real_w, bucket_id[0], sp_size, gas) for idx in cur_micro_batches
-                ]
-                yield cur_micro_batches
-            else:
-                # append_num_grad_acc(len(bucket_id_map_list[rank]))
-                bucket_list = bucket_id_map_list[rank]
-                gas = len(bucket_list)
-                cur_micro_batches = []
-                for each in bucket_list:
-                    bucket_id, bs = each
-                    cur_idx = bucket_last_consumed[bucket_id]
-                    cur_offset = min(bs, len(bucket_sample_dict[bucket_id]) - cur_idx)
-                    gas_micro_batches = bucket_sample_dict[bucket_id][cur_idx : cur_idx + cur_offset]
-                    bucket_last_consumed[bucket_id] += cur_offset
+                cur_micro_batches.extend(
+                    [(idx, real_t, real_h, real_w, bucket_id[0], sp_size, gas) for idx in gas_micro_batches]
+                )
 
-                    real_t, real_h, real_w = self.bucket.get_thw(bucket_id)
-                    cur_micro_batches.extend(
-                        [(idx, real_t, real_h, real_w, bucket_id[0], sp_size, gas) for idx in gas_micro_batches]
-                    )
-                yield cur_micro_batches
+            assert (
+                len(cur_micro_batches) > 0
+            ), f"rank: {rank} iter: {i}, bucket_id_map_list: {bucket_id_map_list}, bucket_access_boundaries: {bucket_access_boundaries}"
+            yield cur_micro_batches
 
         self.reset()
 
     def get_num_batch_with_optimized_schedule(self, bucket_sample_dict, is_global) -> int:
-        if is_global:
+        if (
+            self.profiler.dynamic_sp
+            and self.sp_balance_scope == "iter"
+            and self.keep_last
+            and not self.profiler.dynamic_recompute
+            and not self.auto_grad_accumulation
+        ):
+            bucket_id_access_order = self._build_local_bucket_id_access_order_sp_balance(bucket_sample_dict)
+            self.cached_bucket_id_access_order = bucket_id_access_order
+        elif is_global:
             sp_bucket_id_access_order = self._group_bucket_by_sp_size(bucket_sample_dict)
             bucket_id_access_order, _, _ = self._build_global_bucket_id_access_order(sp_bucket_id_access_order)
         else:
@@ -761,7 +902,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         # log
         if dist.get_rank() == 0 and self.verbose:
             logging.info(f"Bucket Info at epoch {self.epoch} with optimized schedule:")
-            logging.info("Bucket [#sample] by HxWxT:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
+            logging.info("Bucket [#sample, #batch]:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
             logging.info(
                 "#training batch: %s, #training sample: %s, #non empty bucket: %s",
                 self.approximate_num_batch,
@@ -802,7 +943,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         # log
         if dist.get_rank() == 0 and self.verbose:
             logging.info(f"Bucket Info at epoch {self.epoch} with bucketized schedule:")
-            logging.info("Bucket [#sample] by HxWxT:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
+            logging.info("Bucket [#sample, #batch]:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
             logging.info(
                 "#training batch: %s, #training sample: %s, #non empty bucket: %s",
                 total_batch,
@@ -823,752 +964,6 @@ class VariableVideoBatchSampler(DistributedSampler):
 
     def load_state_dict(self, state_dict: dict) -> None:
         self.__dict__.update(state_dict)
-
-    def profile(
-        self,
-        vae,
-        mask_generator,
-        model,
-        scheduler,
-        optimizer,
-        lr_scheduler,
-        text_encoder_model_max_length,
-        text_encoder_output_dim,
-        device,
-        dtype,
-        dump_dir,
-        alloc_memory_fraction,
-        profile_path=None,
-        end2end_profile=False,
-        dynamic_recompute=False,
-        grad_acc=False,
-    ):
-        if profile_path is not None and os.path.exists(profile_path):
-            with open(profile_path) as f:
-                self.profile_results = json.load(f)
-            # num_frame will be read as str, and we need to convert it back to int
-            for ar_name in self.profile_results:
-                self.profile_results[ar_name] = {int(k): v for k, v in self.profile_results[ar_name].items()}
-
-        else:
-            if end2end_profile:
-                profile_func = self._end2end_profile
-            else:
-                profile_func = partial(self._fast_profile, dynamic_recompute=dynamic_recompute, grad_acc=grad_acc)
-
-            # with PrintingMode():
-            profile_func(
-                vae,
-                mask_generator,
-                model,
-                scheduler,
-                optimizer,
-                lr_scheduler,
-                text_encoder_model_max_length,
-                text_encoder_output_dim,
-                device,
-                dtype,
-                dump_dir,
-                alloc_memory_fraction,
-            )
-
-        if dynamic_recompute:
-            for ar_name in self.profile_results:
-                for num_frame in self.profile_results[ar_name]:
-                    assert (
-                        "recompute_cfg" in self.profile_results[ar_name][num_frame]
-                    ), f"recompute_cfg not found for {ar_name} {num_frame}"
-                    recompute_dict = self.profile_results[ar_name][num_frame]["recompute_cfg"]
-                    recompute_cfg = []
-                    for d in range(model.module.config.depth):
-                        for prefix in ["spatial_", "temporal_"]:
-                            if d < recompute_dict[prefix + "self_attn"]:  # not recompute spatial self attn
-                                if d < recompute_dict[prefix + "cross_attn"]:  # not recompute spatial cross attn
-                                    if d < recompute_dict[prefix + "mlp"]:  # not recompute spatial mlp
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.NONE)
-                                    else:  # recompute spatial mlp
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.MLP)
-                                else:  # recompute spatial cross attn
-                                    if d < recompute_dict[prefix + "mlp"]:  # not recompute spatial mlp
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.CROSS_ATTN)
-                                    else:  # recompute spatial mlp
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.CROSS_ATTN_AND_MLP)
-                            else:  # recompute spatial self attn
-                                if d < recompute_dict[prefix + "cross_attn"]:  # not recompute spatial cross attn
-                                    if d < recompute_dict[prefix + "mlp"]:  # not recompute spatial mlp
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.SELF_ATTN)
-                                    else:  # recompute spatial mlp
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.SELF_ATTN_AND_MLP)
-                                else:  # recompute spatial cross attn
-                                    if d < recompute_dict[prefix + "mlp"]:
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.SELF_AND_CROSS_ATTN)
-                                    else:  # recompute spatial mlp
-                                        recompute_cfg.append(STDiT3BlockRecomputeConfig.BLOCK)
-
-                    self.profile_results[ar_name][num_frame]["recompute_cfg2"] = recompute_cfg
-        logging.info(f"Profile results: {pformat(self.profile_results)}")
-
-    def _end2end_profile(
-        self,
-        vae,
-        mask_generator,
-        model,
-        scheduler,
-        optimizer,
-        lr_scheduler,
-        text_encoder_model_max_length,
-        text_encoder_output_dim,
-        device,
-        dtype,
-        dump_dir,
-        alloc_memory_fraction,
-    ):
-        """
-        `available_memory_fraction`: an empirical value (0, 1) to avoid comm deadlock for dynamic sp.
-            If you meet deadlock during running this profiling, try to reduce this value.
-        """
-        torch.cuda.set_per_process_memory_fraction(alloc_memory_fraction)
-        rank, wsize = dist.get_rank(), dist.get_world_size()
-        max_sp = torch.cuda.device_count()
-
-        # warmup with the smallest input data and all gpu devices
-        height, width = DEFAULT_AR_MAP["144p"]
-        num_frame, bs = 51, 1
-        self.parallel_mgr.set_sp_size(wsize)
-
-        for _ in range(1):
-            x = torch.rand(bs, 3, num_frame, height, width, device=device, dtype=dtype)
-            with torch.no_grad():
-                x = vae.encode(x)
-            model_args = {
-                "y": torch.rand(
-                    (bs, 1, text_encoder_model_max_length, text_encoder_output_dim), device=device, dtype=dtype
-                ),
-                "mask": torch.ones((bs, text_encoder_model_max_length), device=device, dtype=torch.long),
-            }
-            model_args["height"] = torch.tensor([height] * bs, device=device, dtype=dtype)
-            model_args["width"] = torch.tensor([width] * bs, device=device, dtype=dtype)
-            model_args["num_frames"] = torch.tensor([num_frame] * bs, device=device, dtype=dtype)
-            model_args["fps"] = torch.tensor([30 if num_frame > 1 else 120] * bs, device=device, dtype=dtype)
-            model_args["ar"] = torch.tensor([height / width] * bs, device=device, dtype=dtype)
-
-            mask = None
-            if mask_generator is not None:
-                mask = mask_generator.get_masks(x)
-                model_args["x_mask"] = mask
-            loss_dict = scheduler.training_losses(model, x, model_args, mask=mask)
-            loss = loss_dict["loss"].mean()
-            model.backward(loss)
-            model.step()
-            # optimizer.zero_grad()
-            # update learning rate
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-
-        print_memory_stats("Warmup")
-
-        profile_results = {}
-        detail_results = []
-        timers = {}
-        timer_keys = [
-            # "move_data",
-            # "encode",
-            # "mask",
-            "diffusion",
-            "backward",
-            # "update",
-            "iteration",
-        ]
-        for key in timer_keys:
-            timers[key] = GroupTimer(key)  # , log=True)
-
-        def profile_iter():
-            timers["iteration"].__enter__()
-
-            row = [ar_name, num_frame, bs, cur_size]
-            _, _, initial_memory, initial_cache, _, _ = print_memory_stats(
-                f"reset sp to {cur_size} for bucket {ar_name} {num_frame} {bs}"
-            )
-
-            # with timers["move_data"] as move_data_t:
-            nf = 1
-            if num_frame > 1:
-                nf = num_frame * 5 // 17
-            x = torch.rand(bs, 4, nf, height // 8, width // 8, device=device, dtype=dtype)
-            # run with the longest caption
-            model_args = {
-                "y": torch.rand(
-                    (bs, 1, text_encoder_model_max_length, text_encoder_output_dim),
-                    device=device,
-                    dtype=dtype,
-                ),
-                "mask": torch.ones((bs, text_encoder_model_max_length), device=device, dtype=torch.long),
-            }
-
-            model_args["height"] = torch.tensor([height] * bs, device=device, dtype=dtype)
-            model_args["width"] = torch.tensor([width] * bs, device=device, dtype=dtype)
-            model_args["num_frames"] = torch.tensor([num_frame] * bs, device=device, dtype=dtype)
-            model_args["fps"] = torch.tensor([30 if num_frame > 1 else 120] * bs, device=device, dtype=dtype)
-            model_args["ar"] = torch.tensor([height / width] * bs, device=device, dtype=dtype)
-            # row.append(move_data_t.elapsed_time)
-
-            # with timers["encode"] as encode_t:
-            #     with torch.no_grad():
-            #         x = vae.encode(x)
-            # row.append(encode_t.elapsed_time)
-
-            # with timers["mask"] as mask_t:
-            mask = None
-            if mask_generator is not None:
-                mask = mask_generator.get_masks(x)
-                model_args["x_mask"] = mask
-            # row.append(mask_t.elapsed_time)
-
-            with timers["diffusion"] as diffusion_t:
-                loss_dict = scheduler.training_losses(model, x, model_args, mask=mask)
-            row.append(diffusion_t.elapsed_time)
-
-            with timers["backward"] as reduce_loss_t:
-                loss = loss_dict["loss"].mean()
-                model.backward(loss)
-                # booster.backward(loss=loss, optimizer=optimizer)
-            row.append(reduce_loss_t.elapsed_time)
-
-            # with timers["update"] as update_t:
-            # optimizer.step()
-            # optimizer.zero_grad()
-            model.step()
-            # update learning rate
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-            # row.append(update_t.elapsed_time)
-
-            timers["iteration"].__exit__(0, 0, 0)
-            row.append(timers["iteration"].elapsed_time)
-            row.extend(
-                [
-                    initial_memory / GB,
-                    torch.cuda.max_memory_allocated() / GB,
-                    initial_cache / GB,
-                    torch.cuda.max_memory_reserved() / GB,
-                ]
-            )
-            return row
-
-        dist.barrier()
-        profile_timer = GroupTimer("profile", group=self.parallel_mgr.dp_group)
-        profile_timer.__enter__()
-
-        result_row = []
-        for ar_name, nframe2bsize in self.bucket.bucket_bs.items():
-            # use the default ar to approximate the sequence length
-            height, width = DEFAULT_AR_MAP[ar_name]
-            for num_frame, max_bs in nframe2bsize.items():
-                if max_bs is None:
-                    continue
-                # Given ar_name, num_frame
-                # T1: find the minimum sp_size to run with bs=1
-                bs, cur_size, is_success = 1, 1, False
-                while cur_size <= max_sp and not is_success:
-                    try:
-                        clean_cache()
-                        self.parallel_mgr.set_sp_size(cur_size)
-                        self.change_timer_group(timers)
-                        result_row = profile_iter()
-                        is_success = True
-                    except torch.cuda.OutOfMemoryError as e:
-                        reset_status(model, optimizer)
-
-                        logging.info(
-                            f">>> [Profiling] skip sp {cur_size} for bucket: {ar_name} {num_frame} {bs} due to OOM"
-                        )
-                        cur_size *= 2
-                        continue
-
-                if not is_success:
-                    logging.info(f">>> [Profiling] bucket {ar_name} {num_frame} cannot fit into the cluster")
-                    continue
-
-                detail_results.append(result_row)
-
-                if ar_name not in profile_results:
-                    profile_results[ar_name] = {}
-
-                profile_results[ar_name][num_frame] = {
-                    "sp_size": cur_size,
-                    # "min": {
-                    #     "bs": bs,
-                    #     "execution_time": result_row[-5],
-                    #     "memory_consumed": result_row[-3],
-                    # },
-                }
-
-                logging.info(f">>> [Profiling {rank}] bucket: {ar_name} {num_frame} finish T1 at sp {cur_size}")
-
-                # T2: find the maximum bs with the minimum sp_size
-                prev_bs = bs
-                bs *= 2
-                while True:
-                    try:
-                        clean_cache()
-                        result_row = profile_iter()
-                        detail_results.append(result_row)
-                        prev_bs = bs
-                        bs *= 2
-                        logging.info(f">>> [Profiling {rank}] Bucket {ar_name} {num_frame} pass bs {prev_bs}")
-                    except torch.cuda.OutOfMemoryError as e:
-                        reset_status(model, optimizer)
-
-                        logging.info(f">>> [Profiling {rank}] Bucket {ar_name} {num_frame} finish T2 at bs {prev_bs}")
-                        break
-
-                profile_results[ar_name][num_frame]["max"] = {
-                    "bs": prev_bs,
-                    "execution_time": result_row[-5],
-                    "memory_consumed": result_row[-3],
-                }
-
-        profile_timer.__exit__(0, 0, 0)
-        logging.info(
-            f">>> [Profiling] Profile results: {pformat(profile_results, sort_dicts=False)}\n"
-            f">>> [Profiling] Profile cost: {profile_timer.elapsed_time:.2f} s"
-        )
-        if rank == 0:
-            df = pd.DataFrame(
-                detail_results,
-                columns=["ar", "num_frame", "bs", "sp_size"]
-                + timer_keys
-                + ["alloc", "max_alloc", "reserved", "max_reserved"],
-            )
-            df.to_csv(f"{dump_dir}/detail_profile.csv", index=False)
-
-            with open(f"{dump_dir}/profile.json", "w") as f:
-                json.dump(profile_results, f)
-            logging.info(df)
-
-        send_list = [profile_results]
-        dist.broadcast_object_list(send_list, src=0)
-        self.profile_results = send_list[0]
-
-        torch.cuda.set_per_process_memory_fraction(1.0)
-        clean_cache()
-
-    def _fast_profile(
-        self,
-        vae,
-        mask_generator,
-        model,
-        scheduler,
-        optimizer,
-        lr_scheduler,
-        text_encoder_model_max_length,
-        text_encoder_output_dim,
-        device,
-        dtype,
-        dump_dir,
-        alloc_memory_fraction,
-        dynamic_recompute,
-        grad_acc,
-    ):
-        _, total, _, _, _, _ = print_memory_stats("entering profiling")
-        # in case of memory fragmentation
-        memory_cap = total * alloc_memory_fraction
-        torch.cuda.set_per_process_memory_fraction(alloc_memory_fraction)
-        rank = dist.get_rank()
-        max_sp = torch.cuda.device_count()
-
-        total_depth = model.module.config.depth
-        valid_depth = 2
-        profile_results, detail_results, raw_results = {}, [], []
-        profile_ctx = None
-
-        org_recompute_cfg = []
-        for d in range(valid_depth):
-            org_recompute_cfg.append(
-                (model.module.spatial_blocks[d].recompute_cfg, model.module.temporal_blocks[d].recompute_cfg)
-            )
-            model.module.spatial_blocks[d].recompute_cfg = STDiT3BlockRecomputeConfig.BLOCK
-            model.module.temporal_blocks[d].recompute_cfg = STDiT3BlockRecomputeConfig.BLOCK
-
-        if grad_acc:
-            model.set_train_batch_size(model.train_micro_batch_size_per_gpu() * model.dp_world_size * 100000)
-            model.optimizer.gradient_accumulation_steps = 100000
-
-        timers = {}
-        timer_keys = [
-            "diffusion",
-            "backward",
-            "iteration",
-        ]
-        for key in timer_keys:
-            timers[key] = GroupTimer(key)
-
-        def profile_iter():
-            _, _, initial_memory, initial_cache, _, _ = print_memory_stats(
-                f"START bucket {ar_name} {num_frame} {bs} with sp {cur_size}"
-            )
-            row = [ar_name, num_frame, bs, cur_size]
-
-            # move_data
-            nf = 1
-            if num_frame > 1:
-                nf = num_frame * 5 // 17
-            x = torch.rand(bs, 4, nf, height // 8, width // 8, device=device, dtype=dtype)
-            # run with the longest caption
-            model_args = {
-                "y": torch.rand(
-                    (bs, 1, text_encoder_model_max_length, text_encoder_output_dim),
-                    device=device,
-                    dtype=dtype,
-                ),
-                "mask": torch.ones((bs, text_encoder_model_max_length), device=device, dtype=torch.long),
-            }
-
-            model_args["height"] = torch.tensor([height] * bs, device=device, dtype=dtype)
-            model_args["width"] = torch.tensor([width] * bs, device=device, dtype=dtype)
-            model_args["num_frames"] = torch.tensor([num_frame] * bs, device=device, dtype=dtype)
-            model_args["fps"] = torch.tensor([30 if num_frame > 1 else 120] * bs, device=device, dtype=dtype)
-            model_args["ar"] = torch.tensor([height / width] * bs, device=device, dtype=dtype)
-            # execute two layer, one for warmup, one for profiling
-            model_args["valid_depth"] = valid_depth
-
-            timers["iteration"].__enter__()
-
-            # mask
-            mask = None
-            if mask_generator is not None:
-                mask = mask_generator.get_masks(x)
-                model_args["x_mask"] = mask
-
-            # diffusion
-            with timers["diffusion"] as diffusion_t:
-                loss_dict = scheduler.training_losses(model, x, model_args, mask=mask)
-            row.append(diffusion_t.elapsed_time)
-
-            # backward
-            with timers["backward"] as reduce_loss_t:
-                loss = loss_dict["loss"].mean()
-                model.backward(loss)
-            row.append(reduce_loss_t.elapsed_time)
-
-            # update
-            model.step()
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-
-            timers["iteration"].__exit__(0, 0, 0)
-            row.append(timers["iteration"].elapsed_time)
-            row.extend(
-                [initial_memory, torch.cuda.max_memory_allocated(), initial_cache, torch.cuda.max_memory_reserved()]
-            )
-
-            if profile_ctx is not None:
-                row.extend(profile_ctx.get_profile_results())
-
-            return row
-
-        def estimate_overhead(data_row):
-            # spatial & temporal [self_attn, cross_attn, mlp]
-            fwd_time = sum(data_row[11:17])
-            bwd_time = sum(data_row[17:23])
-            layer_time = fwd_time * 2 + bwd_time
-            # spatial & temporal input memory
-            layer_memory = sum(data_row[23:25])
-            missing_gradient_per_layer = 0
-            if grad_acc:
-                # STDiT block * (spatial + temporal) * 2 bytes
-                missing_gradient_per_layer = 21255696 * 2 * 2
-            # model with one-layer time/memory + one-layer time/memory * (total_depth - 1)
-            pred_full_time = data_row[6] + layer_time * (total_depth - valid_depth)
-            pred_full_mem = data_row[8] + (layer_memory + missing_gradient_per_layer) * (total_depth - valid_depth)
-            return pred_full_time, pred_full_mem
-
-        # WARMUP with the smallest input data and all gpu devices
-        ar_name = "144p"
-        height, width = DEFAULT_AR_MAP[ar_name]
-        num_frame, bs = 51, 1
-        cur_size = max_sp
-        self.parallel_mgr.set_sp_size(cur_size)
-        profile_iter()
-        print_memory_stats("Warmup")
-
-        enable_profile()
-        profile_ctx = get_profile_context()
-        submodule_fields = profile_ctx.get_submodule_fields()
-        num_modules = len(submodule_fields)
-
-        dist.barrier()
-        profile_timer = GroupTimer("profile", group=self.parallel_mgr.dp_group)
-        profile_timer.__enter__()
-
-        result_row: list
-        latest_raw_row = None
-        # PROFILE
-        for ar_name, nframe2bsize in self.bucket.bucket_bs.items():
-            # use the default ar to approximate the sequence length
-            height, width = DEFAULT_AR_MAP[ar_name]
-            for num_frame, max_bs in nframe2bsize.items():
-                if max_bs is None:
-                    continue
-
-                # baseline
-                if not dynamic_recompute and not self.dynamic_sp:
-                    fix_sp = self.parallel_mgr.get_sp_size()
-                    bs, cur_size, is_success = 1, fix_sp, False
-
-                    # find the max bs
-                    while True:
-                        prev_bs = bs
-                        bs *= 2
-                        pass_depth_loop = True
-
-                        try:
-                            clean_cache()
-                            profile_iter()
-                            raw_result_row = profile_iter()
-                        except torch.cuda.OutOfMemoryError as e:
-                            reset_status(model, optimizer)
-                            pass_depth_loop = False
-
-                        is_success = False
-                        if pass_depth_loop:
-                            pred_full_time, pred_full_mem = estimate_overhead(raw_result_row)
-                            logging.info(
-                                f">>> [Profiling] {ar_name} {num_frame} {bs} at sp {cur_size}: {pred_full_mem/GB:.2f}/{memory_cap/GB:.2f} GB, {pred_full_time:.2f} s"
-                            )
-                            if pred_full_mem <= memory_cap:
-                                is_success = True
-                                # raw_results.append(raw_result_row)
-                                latest_raw_row = raw_result_row
-                                logging.info(f">>> [Profiling] DONE bucket {ar_name} {num_frame} {bs} at sp {cur_size}")
-
-                        if not is_success:
-                            logging.info(
-                                f">>> [Profiling] BEST bs for bucket {ar_name} {num_frame} is {prev_bs} at sp {cur_size}"
-                            )
-                            break
-                    bs = prev_bs  # the best (micro) bs for this bucket
-                    raw_results.append(latest_raw_row)
-
-                    # This is for validating if the estimation works.
-                    # I verify with 4*A100 40G that time diff < 10%, memory diff < 1% compared to end2end profile
-                    pred_full_time, pred_full_mem = estimate_overhead(latest_raw_row)
-                    if ar_name not in profile_results:
-                        profile_results[ar_name] = {}
-                    profile_results[ar_name][num_frame] = dict(
-                        sp_size=cur_size,
-                        max=dict(bs=bs, execution_time=pred_full_time, memory_consumed=pred_full_mem / GB),
-                    )
-                else:
-                    dp_results = []
-                    cur_size = 1
-                    while cur_size <= max_sp:  # search through sp dimension
-                        self.parallel_mgr.set_sp_size(cur_size)
-                        self.change_timer_group(timers)
-
-                        bs = 1
-                        is_success = True
-                        while is_success:  # search through bs dimension
-                            try:
-                                clean_cache()
-                                profile_iter()
-                                raw_result_row = profile_iter()
-                            except torch.cuda.OutOfMemoryError as e:
-                                reset_status(model, optimizer)
-                                is_success = False
-                                logging.info(
-                                    f">>> [Profiling] Bucket {ar_name} {num_frame} at {bs} sp {cur_size} doesn't pass profile, OOM!"
-                                )
-
-                            if is_success:
-                                pred_full_time, pred_full_mem = estimate_overhead(raw_result_row)
-                                if pred_full_mem <= memory_cap:
-                                    raw_results.append(raw_result_row)
-
-                                    avail_mem = int(np.floor((memory_cap - pred_full_mem) / GB))
-                                    if dynamic_recompute:
-                                        # planning
-                                        fwd_time_offset = 11
-                                        memory_offset = 25
-
-                                        dp = torch.zeros(avail_mem + 1, dtype=torch.float)
-                                        trace = torch.zeros((avail_mem + 1, num_modules), dtype=torch.int)
-
-                                        for i in range(num_modules):
-                                            module_time_cost = raw_result_row[fwd_time_offset + i]
-                                            module_mem_cost_in_bytes = raw_result_row[memory_offset + i]
-
-                                            temp_dp = dp.clone()
-                                            temp_trace = trace.clone()
-
-                                            for cnt in range(1, total_depth + 1):
-                                                time_cost = module_time_cost * cnt
-                                                mem_cost = int(np.ceil(module_mem_cost_in_bytes * cnt / GB))
-
-                                                for cur_mem in range(mem_cost, avail_mem + 1):
-                                                    if temp_dp[cur_mem] < dp[cur_mem - mem_cost] + time_cost:
-                                                        temp_dp[cur_mem] = dp[cur_mem - mem_cost] + time_cost
-                                                        temp_trace[cur_mem] = trace[cur_mem - mem_cost].clone()
-                                                        temp_trace[cur_mem, i] = cnt
-
-                                            dp = temp_dp
-                                            trace = temp_trace
-
-                                        reduced_time = dp[avail_mem].item()
-                                        best_full_time = pred_full_time - reduced_time
-                                        best_trace = trace[avail_mem].tolist()
-                                        for i in range(num_modules):
-                                            avail_mem -= int(
-                                                np.ceil((raw_result_row[memory_offset + i] * best_trace[i]) / GB)
-                                            )
-
-                                        assert avail_mem >= 0, f"rest memory: {avail_mem}, trace: {best_trace}"
-                                        result_row = (
-                                            raw_result_row[:4]
-                                            + [best_full_time, memory_cap / GB - avail_mem, reduced_time, avail_mem]
-                                            + best_trace
-                                        )
-                                    else:  # dynamic sp only
-                                        result_row = raw_result_row[:4] + [
-                                            pred_full_time,
-                                            pred_full_mem / GB,
-                                            0,
-                                            avail_mem,
-                                        ]
-
-                                    dp_results.append(result_row)
-                                    detail_results.append(result_row)
-
-                                    logging.info(
-                                        f">>> [Profiling] DONE BS search for bucket {ar_name} {num_frame} at {bs} sp {cur_size}"
-                                    )
-                                else:
-                                    is_success = False
-                                    logging.info(
-                                        f">>> [Profiling] Bucket {ar_name} {num_frame} at {bs} sp {cur_size} pass profile but exceed memory limit: {pred_full_mem/GB:.2f}/{memory_cap/GB:.2f} GB"
-                                    )
-
-                            if not is_success:
-                                logging.info(
-                                    f">>> [Profiling] STOP BS search for bucket {ar_name} {num_frame} at {bs} sp {cur_size}"
-                                )
-                            bs *= 2
-
-                        cur_size *= 2
-
-                    if not dp_results:
-                        logging.info(
-                            f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into the cluster"
-                        )
-                        continue
-
-                    # criterion: max throughput = (bs / sp_size / iter_time)
-                    best = sorted(dp_results, key=lambda x: x[2] / x[3] / x[4], reverse=True)[0]
-
-                    if ar_name not in profile_results:
-                        profile_results[ar_name] = {}
-                    profile_results[ar_name][num_frame] = dict(
-                        sp_size=best[3],
-                        max=dict(bs=best[2], execution_time=best[4], memory_consumed=best[5]),
-                    )
-                    if dynamic_recompute:
-                        profile_results[ar_name][num_frame]["recompute_cfg"] = {
-                            k: v for k, v in zip(submodule_fields, best[8:])
-                        }
-
-        profile_timer.__exit__(0, 0, 0)
-
-        if not dynamic_recompute and not grad_acc:
-            # balance the execution time of each bucket by adjusting batch size
-            logging.info(
-                f">>> [Profiling] Profile results before adjustment: {pformat(profile_results, sort_dicts=False)}\n"
-                f">>> [Profiling] Profile cost before adjustment: {profile_timer.elapsed_time:.2f} s"
-            )
-
-            def score_func(new_time, median_time):
-                if not self.dynamic_sp:
-                    return torch.abs(new_time - median_time)
-                if new_time > median_time:
-                    return (new_time - median_time) * 1.5
-                else:
-                    return (median_time - new_time) * 1
-
-            time_list = []
-            for ar_name, num_frame_dict in profile_results.items():
-                for num_frame, info in num_frame_dict.items():
-                    time_list.append(info["max"]["execution_time"])
-            median_time = np.median(time_list)
-
-            for ar_name, num_frame_dict in profile_results.items():
-                for num_frame, info in num_frame_dict.items():
-                    cur_time = info["max"]["execution_time"]
-                    cur_bs = info["max"]["bs"]
-                    cur_diff = score_func(cur_time, median_time)
-                    if cur_time > median_time:
-                        if self.dynamic_sp and cur_bs == 1:
-                            while cur_time > median_time:
-                                tmp_sp_size = info["sp_size"] * 2
-                                cur_time = cur_time / 2
-                                if tmp_sp_size > max_sp:
-                                    break
-                            new_diff = score_func(cur_time, median_time)
-                            if new_diff < cur_diff:
-                                info["sp_size"] = tmp_sp_size
-                                info["max"]["execution_time"] = cur_time
-                        else:
-                            new_bs = max(1, int(cur_bs * median_time / cur_time))
-                            new_time = cur_time * new_bs / cur_bs
-                            new_diff = score_func(new_time, median_time)
-                            if new_diff < cur_diff or not self.dynamic_sp:
-                                info["max"]["execution_time"] = cur_time * new_bs / cur_bs
-                                info["max"]["bs"] = new_bs
-
-        logging.info(
-            f">>> [Profiling] Profile results: {pformat(profile_results, sort_dicts=False)}\n"
-            f">>> [Profiling] Profile cost: {profile_timer.elapsed_time:.2f} s"
-        )
-        if rank == 0:
-            df = pd.DataFrame(
-                raw_results,
-                columns=["ar", "num_frame", "bs", "sp_size"]
-                + timer_keys
-                + ["alloc", "max_alloc", "reserved", "max_reserved"]
-                + profile_ctx.get_profile_fields(),
-            )
-            df.to_csv(f"{dump_dir}/raw_results.csv", index=False)
-
-            detail_df = pd.DataFrame(
-                detail_results,
-                columns=["ar", "num_frame", "bs", "sp_size"]
-                + ["pred_time", "pred_memory", "saved_time", "cost_memory"]
-                + ([f"{k}_cnt" for k in submodule_fields] if dynamic_recompute else []),
-            )
-            detail_df.to_csv(f"{dump_dir}/detail_profile.csv", index=False)
-            logging.info(detail_df)
-
-            with open(f"{dump_dir}/profile.json", "w") as f:
-                json.dump(profile_results, f)
-
-        send_list = [profile_results]
-        dist.broadcast_object_list(send_list, src=0)
-        self.profile_results = send_list[0]
-
-        if grad_acc:
-            model.set_train_batch_size(model.train_micro_batch_size_per_gpu() * model.dp_world_size * 1)
-            model.optimizer.gradient_accumulation_steps = 1
-            model.zero_grad()
-
-        for d in range(valid_depth):
-            org_recompute_cfg.append(
-                (model.module.spatial_blocks[d].recompute_cfg, model.module.temporal_blocks[d].recompute_cfg)
-            )
-            model.module.spatial_blocks[d].recompute_cfg = org_recompute_cfg[d][0]
-            model.module.temporal_blocks[d].recompute_cfg = org_recompute_cfg[d][1]
-
-        torch.cuda.set_per_process_memory_fraction(1.0)
-        clean_cache()
-
-        disable_profile()
 
 
 class BatchDistributedSampler(DistributedSampler):

@@ -167,6 +167,7 @@ class Profiler:
         dynamic_sp,
         dynamic_recompute,
         auto_grad_acc,
+        sp_balance_scope,
         do_profile,
         end2end_profile,
         distributed_profile,
@@ -196,6 +197,7 @@ class Profiler:
         self.dynamic_sp = dynamic_sp
         self.dynamic_recompute = dynamic_recompute
         self.auto_grad_acc = auto_grad_acc
+        self.sp_balance_scope = sp_balance_scope
         self.do_profile = do_profile
         self.end2end_profile = end2end_profile
         self.distributed_profile = distributed_profile
@@ -208,12 +210,15 @@ class Profiler:
 
         self.max_sp = torch.cuda.device_count()
         # in bytes
+        print(f"before compute memory cap")
         self.memory_cap = alloc_fraction * torch.cuda.mem_get_info()[1]
         self.logger = logging if verbose else None
         self.profile_depth = profile_depth
         if self.end2end_profile:
             self.profile_depth = None
+        self.parallel_mgr = parallel_mgr
 
+        print(f"before load profile")
         self._load_profile()
 
         self.timers: Dict[str, GroupTimer] = dict()
@@ -232,8 +237,9 @@ class Profiler:
 
             # Iterate through all profile_*.json files in the directory
             for filename in os.listdir(self.profile_path):
-                if filename.startswith("profile_") and filename.endswith(".json"):
+                if filename.startswith("profile") and filename.endswith(".json"):
                     profile_file = os.path.join(self.profile_path, filename)
+                    print(f"read profile results from {profile_file}")
                     with open(profile_file) as f:
                         partial_results = json.load(f)
                         # Merge results
@@ -245,8 +251,11 @@ class Profiler:
             # Convert frame numbers from strings to integers
             for ar_name in self.profile_results:
                 self.profile_results[ar_name] = {int(k): v for k, v in self.profile_results[ar_name].items()}
-
-            self.interpolate_profile_results()
+            print(f"finish load profile results")
+            if not self.dynamic_recompute and not self.auto_grad_acc:
+                if not self.dynamic_sp or self.sp_balance_scope == "epoch":
+                    self.interpolate_profile_results()
+            print(f"finish interpolate profile results")
 
             self.next_bucket_idx = None
             self.next_sp_size = None
@@ -749,6 +758,7 @@ def set_profiler(
     dynamic_sp,
     dynamic_recompute,
     auto_grad_acc,
+    sp_balance_scope,
     do_profile,
     end2end_profile,
     distributed_profile,
@@ -770,6 +780,7 @@ def set_profiler(
         dynamic_sp,
         dynamic_recompute,
         auto_grad_acc,
+        sp_balance_scope,
         do_profile,
         end2end_profile,
         distributed_profile,
