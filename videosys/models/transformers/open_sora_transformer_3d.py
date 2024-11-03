@@ -513,6 +513,18 @@ class STDiT3(PreTrainedModel):
     def forward(
         self, x, timestep, y, all_timesteps=None, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
     ):
+        _, _, Tx, Hx, Wx = x.size()
+        T, H, W = self.get_dynamic_size(x)
+
+        # === use cp instead of sp ===
+        switch_sp_cp = False
+        if self.parallel_manager.sp_size > 1 and T == 1:
+            assert self.parallel_manager.cp_size == 1
+            self.parallel_manager.cp_size = self.parallel_manager.sp_size
+            self.parallel_manager.cp_group = self.parallel_manager.sp_group
+            self.parallel_manager.sp_size = 1
+            switch_sp_cp = True
+
         # === Split batch ===
         if self.parallel_manager.cp_size > 1:
             x, timestep, y, x_mask, mask = batch_func(
@@ -531,8 +543,6 @@ class STDiT3(PreTrainedModel):
         y = y.to(dtype)
 
         # === get pos embed ===
-        _, _, Tx, Hx, Wx = x.size()
-        T, H, W = self.get_dynamic_size(x)
         S = H * W
         base_size = round(S**0.5)
         resolution_sq = (height[0].item() * width[0].item()) ** 0.5
@@ -610,6 +620,13 @@ class STDiT3(PreTrainedModel):
         # === Gather Output ===
         if self.parallel_manager.cp_size > 1:
             x = gather_sequence(x, self.parallel_manager.cp_group, dim=0)
+
+        # === reset sp ===
+        if switch_sp_cp:
+            self.parallel_manager.sp_size = self.parallel_manager.cp_size
+            self.parallel_manager.sp_group = self.parallel_manager.cp_group
+            self.parallel_manager.cp_group = None
+            self.parallel_manager.cp_size = 1
 
         return x
 
