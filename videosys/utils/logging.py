@@ -8,15 +8,15 @@ def init_logger(logging_dir: str = None, master_only: bool = True):
     Update the logger to write to a log file.
     """
     if dist.is_initialized() and master_only:
-        if_log = dist.get_rank() == 0
+        do_log = dist.get_rank() == 0
     else:
-        if_log = True
+        do_log = True
 
     # clear existing logger
     logger = logging.getLogger()
     logger.handlers.clear()
 
-    if if_log:
+    if do_log:
         additional_args = dict()
         if logging_dir is not None:
             additional_args["handlers"] = [
@@ -25,7 +25,7 @@ def init_logger(logging_dir: str = None, master_only: bool = True):
             ]
         logging.basicConfig(
             level=logging.INFO,
-            fmt="[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d:%(funcName)s]   %(message)s",
+            format="[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d:%(funcName)s]   %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
             **additional_args,
         )
