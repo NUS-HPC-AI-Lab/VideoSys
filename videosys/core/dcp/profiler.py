@@ -13,6 +13,7 @@ import torch
 import torch.distributed as dist
 
 from videosys.core.dcp.recompute import disable_profile, enable_profile, get_profile_context
+from videosys.core.distributed.parallel_mgr import DynamicParallelManager
 from videosys.training.datasets.open_sora.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
 from videosys.utils.training import GroupTimer, set_grad_accumulation_steps
 
@@ -203,6 +204,7 @@ class Profiler:
         self.alloc_fraction = alloc_fraction
         self.dump_dir = dump_dir
         self.profile_path = profile_path
+        self.parallel_mgr = parallel_mgr
 
         self.max_sp = torch.cuda.device_count()
         # in bytes
@@ -220,8 +222,6 @@ class Profiler:
         if self.need_profile():
             self.timers["iteration"] = GroupTimer("iteration")
         self.dummy_timer = nullcontext()
-
-        self.parallel_mgr = parallel_mgr
 
     ############################################################
     # init methods
@@ -676,7 +676,8 @@ class Profiler:
     def optimize_dynamics(self, batch, model):
         # set sequence parallel size if args.dynamic_sp is True
         sp_size = batch["sp_size"]
-        self.parallel_mgr.set_sp_size(sp_size)
+        if isinstance(self.parallel_mgr, DynamicParallelManager):
+            self.parallel_mgr.set_sp_size(sp_size)
         self.update_timer_group()
 
         # set grad accumulation steps if args.auto_grad_accumulation is True
