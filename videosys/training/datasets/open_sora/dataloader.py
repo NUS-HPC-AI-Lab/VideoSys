@@ -36,6 +36,7 @@ def prepare_dataloader(
     num_bucket_build_workers=1,
     prefetch_factor=None,
     optimized_schedule: str = None,
+    sp_balance_scope: str = "epoch",
     auto_grad_accumulation: bool = False,
     keep_last: bool = False,
     max_grad_accumulation_steps: int = 2,
@@ -56,6 +57,7 @@ def prepare_dataloader(
             verbose=True,
             num_bucket_build_workers=num_bucket_build_workers,
             optimized_schedule=optimized_schedule,
+            sp_balance_scope=sp_balance_scope,
             auto_grad_accumulation=auto_grad_accumulation,
             max_grad_accumulation_steps=max_grad_accumulation_steps,
         )

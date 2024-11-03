@@ -57,12 +57,12 @@ export TOKENIZERS_PARALLELISM=false
 
 # train
 mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
-    singularity exec --bind $SCRATCH_PATH:$SCRATCH_PATH --nv $SCRATCH_PATH/images/opensora_24.07v5.sif \
-    python scripts/opensora/train.py configs/opensora/train.yaml \
+    singularity exec --bind $SCRATCH_PATH:$SCRATCH_PATH --nv $SCRATCH_PATH/images/opensora_24.10v6.sif \
+    python tests/test_sampler.py examples/training/open_sora/train.yaml \
     --dummy-dataset --dummy-data-size 2000 --preprocessed-data --keep-last \
     --image-mixing-type exclusive --image-mixing-frac 5 \
     --dynamic-sp \
-    --profile --epochs 2 --outputs sp \
-    --profile-path archive/new_api/profile/sp/000-OpenSora/profile.json
+    --profile --epochs 2  \
+    --profile-path archive/block_ckpt/profile/sp/000-OpenSora
 
 rm $HOSTFILE
