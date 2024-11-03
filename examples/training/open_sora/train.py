@@ -508,8 +508,7 @@ def main(args):
                 log_step = 0
 
             # == checkpoint saving ==
-            ckpt_every = 2
-            if ckpt_every > 0 and (global_step + 1) % ckpt_every == 0:
+            if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
                 ema_gathering(model.module, ema)
                 save_dir = save(
                     exp_dir,
@@ -529,7 +528,6 @@ def main(args):
                     global_step + 1,
                     save_dir,
                 )
-                exit()
 
         if rank == 0 and not profiler.need_profile():
             logging.info(
