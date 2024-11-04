@@ -257,6 +257,7 @@ def main(args):
         bucket_config=args.bucket_config,
         num_bucket_build_workers=args.num_bucket_build_workers,
         preprocessed_data=args.preprocessed_data,
+        parallel_mgr=parallel_mgr,
         **dataloader_args,
     )
 
