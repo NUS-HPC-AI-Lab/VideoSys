@@ -13,14 +13,16 @@ import torch.distributed as dist
 import wandb
 from omegaconf import OmegaConf
 from tqdm import tqdm
+from transformers import AutoTokenizer, T5EncoderModel
 
 from videosys.core.dcp.profiler import Profiler, set_profiler
 from videosys.core.distributed.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
+from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2, STDiT3Config
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
 from videosys.training.ckpt_io import load, save, save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
-from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
+from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset
 from videosys.training.ema_distributed import ema_gathering, ema_sharding, update_ema
 from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
 from videosys.utils.logging import init_logger
@@ -134,6 +136,34 @@ class MaskGenerator:
         return masks
 
 
+def get_text_embeddings(tokenizer, text_encoder, texts):
+    text_tokens_and_mask = tokenizer(
+        texts,
+        max_length=300,
+        padding="max_length",
+        truncation=True,
+        return_attention_mask=True,
+        add_special_tokens=True,
+        return_tensors="pt",
+    )
+    device = text_encoder.device
+    input_ids = text_tokens_and_mask["input_ids"].to(device)
+    attention_mask = text_tokens_and_mask["attention_mask"].to(device)
+    with torch.no_grad():
+        text_encoder_embs = text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )["last_hidden_state"].detach()
+    return text_encoder_embs, attention_mask
+
+
+def encode_prompt(text_encoder, tokenizer, text):
+    caption_embs, emb_masks = get_text_embeddings(tokenizer, text_encoder, text)
+    caption_embs = caption_embs[:, None]
+    emb_masks = None
+    return dict(y=caption_embs, mask=emb_masks)
+
+
 def main(args):
     # ======================================================
     # 1. configs & runtime variables
@@ -217,23 +247,23 @@ def main(args):
     # ======================================================
     logging.info("Building dataset...")
     # == build dataset ==
-    if args.dummy_dataset:
-        dataset = DummyVariableVideoTextDataset(
-            data_size=args.dummy_data_size,
-            seed=args.seed,
-            data_path=args.data_path,
-            transform_name="resize_crop",
-            preprocessed_data=args.preprocessed_data,
-            bucket_config=args.bucket_config,
-            distribution=args.distribution,
-            zipf_offset=args.zipf_offset,
-            image_mixing_type=args.image_mixing_type,
-            image_mixing_frac=args.image_mixing_frac,
-            res_scale=args.res_scale,
-            frame_scale=args.frame_scale,
-        )
-    else:
-        dataset = VariableVideoTextDataset(transform_name="resize_crop", data_path=args.data_path)
+    # if args.dummy_dataset:
+    dataset = DummyVariableVideoTextDataset(
+        data_size=args.dummy_data_size,
+        seed=args.seed,
+        data_path=args.data_path,
+        transform_name="resize_crop",
+        preprocessed_data=args.preprocessed_data,
+        bucket_config=args.bucket_config,
+        distribution=args.distribution,
+        zipf_offset=args.zipf_offset,
+        image_mixing_type=args.image_mixing_type,
+        image_mixing_frac=args.image_mixing_frac,
+        res_scale=args.res_scale,
+        frame_scale=args.frame_scale,
+    )
+    # else:
+    #     dataset = VariableVideoTextDataset(transform_name="resize_crop", data_path=args.data_path)
     logging.info("Dataset contains %s samples.", len(dataset))
 
     # == build dataloader ==
@@ -265,46 +295,24 @@ def main(args):
     # 3. build model
     # ======================================================
     logging.info("Building models...")
-    # == build text-encoder ==
-    if args.preprocessed_data:
-        text_encoder_output_dim = 4096
-        text_encoder_model_max_length = 300
-    # else:
-    #     text_encoder = T5Encoder(
-    #         from_pretrained="DeepFloyd/t5-v1_1-xxl", model_max_length=300, shardformer=True, device=device, dtype=dtype
-    #     )
-    #     text_encoder_output_dim = text_encoder.output_dim
-    #     text_encoder_model_max_length = text_encoder.model_max_length
 
-    # == build vae ==
-    if args.preprocessed_data:
-        latent_size = [None, None, None]
-        vae_out_channels = 4
-    # else:
-    #     vae = OpenSoraVAE_V1_2(
-    #         micro_frame_size=17,
-    #         micro_batch_size=4,
-    #     )
-    #     vae = vae.to(device, dtype).eval()
-    #     input_size = (dataset.num_frames, *dataset.image_size)
-    #     latent_size = vae.get_latent_size(input_size)
-    #     vae_out_channels = vae.out_channels
+    # == build text-encoder and vae ==
+    if not args.preprocessed_data:
+        text_encoder = T5EncoderModel.from_pretrained("DeepFloyd/t5-v1_1-xxl", torch_dtype=dtype).to(device).eval()
+        tokenizer = AutoTokenizer.from_pretrained("DeepFloyd/t5-v1_1-xxl")
+        vae = (
+            OpenSoraVAE_V1_2(
+                from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
+                micro_frame_size=17,
+                micro_batch_size=4,
+                torch_dtype=dtype,
+            )
+            .to(device)
+            .eval()
+        )
 
     # == build diffusion model ==
-    model = (
-        STDiT3_XL_2(
-            from_pretrained=args.ckpt_path,
-            qk_norm=True,
-            enable_flash_attn=True,
-            freeze_y_embedder=True,
-            input_size=latent_size,
-            in_channels=vae_out_channels,
-            caption_channels=text_encoder_output_dim,
-            model_max_length=text_encoder_model_max_length,
-        )
-        .to(device, dtype)
-        .train()
-    )
+    model = STDiT3_XL_2(from_pretrained=args.ckpt_path, enable_flash_attn=True, torch_dtype=dtype).to(device).train()
     model_numel, model_numel_trainable = get_model_numel(model)
     logging.info(
         "[Diffusion] Trainable model params: %s, Total model params: %s",
@@ -441,11 +449,20 @@ def main(args):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
 
-                    # move data
-                    x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
-                    y = batch_data.pop("text").to(device, dtype)
-                    mask = batch_data.pop("mask").to(device)
-                    model_args = dict(y=y, mask=mask)
+                    if args.preprocessed_data:
+                        # move data
+                        x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
+                        y = batch_data.pop("text").to(device, dtype)
+                        mask = batch_data.pop("mask").to(device)
+                        model_args = dict(y=y, mask=mask)
+                    else:
+                        with torch.no_grad():
+                            x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
+                            y = batch_data.pop("text")
+                            # Prepare visual inputs
+                            x = vae.encode(x)  # [B, C, T, H/P, W/P]
+                            # Prepare text inputs
+                            model_args = encode_prompt(text_encoder, tokenizer, y)
 
                     for k, v in batch_data.items():
                         if isinstance(v, torch.Tensor):
@@ -482,7 +499,8 @@ def main(args):
 
             # == update log info ==
             all_reduce_mean(iter_loss)
-            running_loss += iter_loss.item()
+            iter_loss = iter_loss.item() / total_gas
+            running_loss += iter_loss
             global_step = epoch * num_steps_per_epoch + step
             log_step += 1
             acc_step += 1
@@ -499,7 +517,7 @@ def main(args):
                             "iter": global_step,
                             "acc_step": acc_step,
                             "epoch": epoch,
-                            "loss": iter_loss.item(),
+                            "loss": iter_loss,
                             "avg_loss": avg_loss,
                             "lr": optimizer.param_groups[0]["lr"],
                         },

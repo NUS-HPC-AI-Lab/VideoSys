@@ -70,7 +70,7 @@ def prepare_dataloader(
                 worker_init_fn=get_seed_worker(seed),
                 pin_memory=pin_memory,
                 num_workers=num_workers,
-                collate_fn=_collate_fn if preprocessed_data else collate_fn_default,
+                collate_fn=_collate_fn,
                 prefetch_factor=prefetch_factor,
                 **_kwargs,
             ),

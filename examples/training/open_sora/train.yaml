@@ -25,18 +25,17 @@ mask_ratios: {
 # Log settings
 # seed: 42
 # outputs: "outputs"
-wandb: False
+wandb: true
 # epochs: 1
-log_every: 10
-ckpt_every: 0
+log_every: 1
+ckpt_every: 50
 
 # optimization settings
-load: null
 grad_clip: 1.0
-lr: 1e-4
+lr: 1e-5
 ema_decay: 0.99
 adam_eps: 1e-15
-warmup_steps: 1000
+warmup_steps: 10
 
 # original opensora bucket settings
 # bucket_config:
