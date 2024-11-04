@@ -1,6 +1,5 @@
 import logging
 import os
-from glob import glob
 
 import numpy as np
 import pandas as pd
@@ -128,12 +127,10 @@ class VariableVideoTextDataset(VideoTextDataset):
         frame_interval=1,
         image_size=(None, None),
         transform_name=None,
-        dummy_text_feature=False,
     ):
         super().__init__(data_path, num_frames, frame_interval, image_size, transform_name=None)
         self.transform_name = transform_name
         self.data["id"] = np.arange(len(self.data))
-        self.dummy_text_feature = dummy_text_feature
 
     def get_data_info(self, index):
         T = self.data.iloc[index]["num_frames"]
@@ -143,7 +140,7 @@ class VariableVideoTextDataset(VideoTextDataset):
 
     def getitem(self, index):
         # a hack to pass in the (time, height, width) info from sampler
-        index, num_frames, height, width = [int(val) for val in index.split("-")]
+        index, num_frames, height, width, ar_name, sp_size, gas = index
 
         sample = self.data.iloc[index]
         path = sample["path"]
@@ -187,13 +184,12 @@ class VariableVideoTextDataset(VideoTextDataset):
             "width": width,
             "ar": ar,
             "fps": video_fps,
+            "ar_name": ar_name,
+            "sp_size": sp_size,
+            "gas": gas,
         }
         if self.get_text:
             ret["text"] = sample["text"]
-        if self.dummy_text_feature:
-            text_len = 50
-            ret["text"] = torch.zeros((1, text_len, 1152))
-            ret["mask"] = text_len
         return ret
 
     def __getitem__(self, index):
@@ -470,56 +466,3 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
         self,
     ):
         return self.data_size
-
-
-class BatchFeatureDataset(torch.utils.data.Dataset):
-    """
-    The dataset is composed of multiple .bin files.
-    Each .bin file is a list of batch data (like a buffer). All .bin files have the same length.
-    In each training iteration, one batch is fetched from the current buffer.
-    Once a buffer is consumed, load another one.
-    Avoid loading the same .bin on two difference GPUs, i.e., one .bin is assigned to one GPU only.
-    """
-
-    def __init__(self, data_path=None):
-        self.path_list = sorted(glob(data_path + "/**/*.bin"))
-
-        self._len_buffer = len(torch.load(self.path_list[0]))
-        self._num_buffers = len(self.path_list)
-        self.num_samples = self.len_buffer * len(self.path_list)
-
-        self.cur_file_idx = -1
-        self.cur_buffer = None
-
-    @property
-    def num_buffers(self):
-        return self._num_buffers
-
-    @property
-    def len_buffer(self):
-        return self._len_buffer
-
-    def _load_buffer(self, idx):
-        file_idx = idx // self.len_buffer
-        if file_idx != self.cur_file_idx:
-            self.cur_file_idx = file_idx
-            self.cur_buffer = torch.load(self.path_list[file_idx])
-
-    def __len__(self):
-        return self.num_samples
-
-    def __getitem__(self, idx):
-        self._load_buffer(idx)
-
-        batch = self.cur_buffer[idx % self.len_buffer]  # dict; keys are {'x', 'fps'} and text related
-
-        ret = {
-            "video": batch["x"],
-            "text": batch["y"],
-            "mask": batch["mask"],
-            "fps": batch["fps"],
-            "height": batch["height"],
-            "width": batch["width"],
-            "num_frames": batch["num_frames"],
-        }
-        return ret

@@ -22,7 +22,7 @@ from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2, S
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
 from videosys.training.ckpt_io import load, save, save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
-from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset
+from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
 from videosys.training.ema_distributed import ema_gathering, ema_sharding, update_ema
 from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
 from videosys.utils.logging import init_logger
@@ -247,23 +247,23 @@ def main(args):
     # ======================================================
     logging.info("Building dataset...")
     # == build dataset ==
-    # if args.dummy_dataset:
-    dataset = DummyVariableVideoTextDataset(
-        data_size=args.dummy_data_size,
-        seed=args.seed,
-        data_path=args.data_path,
-        transform_name="resize_crop",
-        preprocessed_data=args.preprocessed_data,
-        bucket_config=args.bucket_config,
-        distribution=args.distribution,
-        zipf_offset=args.zipf_offset,
-        image_mixing_type=args.image_mixing_type,
-        image_mixing_frac=args.image_mixing_frac,
-        res_scale=args.res_scale,
-        frame_scale=args.frame_scale,
-    )
-    # else:
-    #     dataset = VariableVideoTextDataset(transform_name="resize_crop", data_path=args.data_path)
+    if args.dummy_dataset:
+        dataset = DummyVariableVideoTextDataset(
+            data_size=args.dummy_data_size,
+            seed=args.seed,
+            data_path=args.data_path,
+            transform_name="resize_crop",
+            preprocessed_data=args.preprocessed_data,
+            bucket_config=args.bucket_config,
+            distribution=args.distribution,
+            zipf_offset=args.zipf_offset,
+            image_mixing_type=args.image_mixing_type,
+            image_mixing_frac=args.image_mixing_frac,
+            res_scale=args.res_scale,
+            frame_scale=args.frame_scale,
+        )
+    else:
+        dataset = VariableVideoTextDataset(transform_name="resize_crop", data_path=args.data_path)
     logging.info("Dataset contains %s samples.", len(dataset))
 
     # == build dataloader ==
@@ -305,9 +305,8 @@ def main(args):
                 from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
                 micro_frame_size=17,
                 micro_batch_size=4,
-                torch_dtype=dtype,
             )
-            .to(device)
+            .to(device, dtype)
             .eval()
         )
 
