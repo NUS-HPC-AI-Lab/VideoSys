@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import requests
 import torch
+import torch.distributed as dist
 import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
@@ -48,6 +49,13 @@ def read_file(input_path):
         return pd.read_parquet(input_path)
     else:
         raise NotImplementedError(f"Unsupported file format: {input_path}")
+
+
+def split_df_by_rank(df):
+    world_size = dist.get_world_size()
+    rank = dist.get_rank()
+    chunk_size = len(df) // world_size
+    return df.iloc[rank * chunk_size : (rank + 1) * chunk_size]
 
 
 def download_url(input_path):

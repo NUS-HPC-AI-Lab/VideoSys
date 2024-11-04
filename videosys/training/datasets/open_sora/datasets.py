@@ -9,7 +9,14 @@ from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
 
 from .aspect import ASPECT_RATIOS, COMMON_AR
 from .read_video import read_video
-from .utils import VID_EXTENSIONS, get_transforms_image, get_transforms_video, read_file, temporal_random_crop
+from .utils import (
+    VID_EXTENSIONS,
+    get_transforms_image,
+    get_transforms_video,
+    read_file,
+    split_df_by_rank,
+    temporal_random_crop,
+)
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 IMG_FPS = 120
@@ -466,3 +473,105 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
         self,
     ):
         return self.data_size
+
+
+class VideoPreProcesssDataset(torch.utils.data.Dataset):
+    """load video according to the csv file.
+
+    Args:
+        target_video_len (int): the number of video frames will be load.
+        align_transform (callable): Align different videos in a specified size.
+        temporal_sample (callable): Sample the target length of a video.
+    """
+
+    def __init__(
+        self,
+        data_path=None,
+        num_frames=16,
+        frame_interval=1,
+        image_size=(256, 256),
+        transform_name="center",
+    ):
+        self.data_path = data_path
+        self.data = read_file(data_path)
+        self.num_frames = num_frames
+        self.frame_interval = frame_interval
+        self.image_size = image_size
+        self.transforms = {
+            "image": get_transforms_image(transform_name, image_size),
+            "video": get_transforms_video(transform_name, image_size),
+        }
+        self.data = split_df_by_rank(self.data)
+
+    def get_type(self, path):
+        ext = os.path.splitext(path)[-1].lower()
+        if ext.lower() in VID_EXTENSIONS:
+            return "video"
+        else:
+            assert ext.lower() in IMG_EXTENSIONS, f"Unsupported file format: {ext}"
+            return "image"
+
+    def getitem(self, index):
+        sample = self.data.iloc[index]
+        path = sample["path"]
+        file_type = self.get_type(path)
+
+        if file_type == "video":
+            # loading
+            vframes, vinfo = read_video(path, backend="av")
+            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
+
+            # Sampling video frames
+            video = temporal_random_crop(vframes, self.num_frames, self.frame_interval)
+
+            # transform
+            transform = self.transforms["video"]
+            video = transform(video)  # T C H W
+        else:
+            # loading
+            image = pil_loader(path)
+            video_fps = IMG_FPS
+
+            # transform
+            transform = self.transforms["image"]
+            image = transform(image)
+
+            # repeat
+            video = image.unsqueeze(0).repeat(self.num_frames, 1, 1, 1)
+
+        # TCHW -> CTHW
+        video = video.permute(1, 0, 2, 3)
+
+        ret = {"video": video, "fps": video_fps}
+        return ret
+
+    def __getitem__(self, index):
+        for _ in range(10):
+            try:
+                return self.getitem(index)
+            except Exception as e:
+                path = self.data.iloc[index]["path"]
+                print(f"data {path}: {e}")
+                index = np.random.randint(len(self))
+        raise RuntimeError("Too many bad data.")
+
+    def __len__(self):
+        return len(self.data)
+
+
+class TextDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        data_path=None,
+    ):
+        self.data_path = data_path
+        self.data = read_file(data_path)
+        self.data = split_df_by_rank(self.data)
+
+    def __getitem__(self, index):
+        sample = self.data.iloc[index]
+        ret = {"text": sample["text"]}
+        return ret
+
+    def __len__(self):
+        return len(self.data)

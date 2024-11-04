@@ -333,14 +333,13 @@ def main(args):
     # == setup optimizer ==
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
-        # adamw_mode=True,
         lr=args.lr,
         weight_decay=args.weight_decay,
         eps=args.adam_eps,
     )
 
+    # == setup learning rate scheduler ==
     warmup_steps = args.warmup_steps
-
     if warmup_steps is None:
         lr_scheduler = None
     else:
@@ -355,11 +354,12 @@ def main(args):
         mask_generator = MaskGenerator(args.mask_ratios)
 
     # =======================================================
-    # 4. distributed training preparation with colossalai
+    # 4. distributed training preparation
     # =======================================================
     logging.info("Preparing for distributed training...")
     # == boosting ==
-    # NOTE: we set dtype first to make initialization of model consistent with the dtype; then reset it to the fp32 as we make diffusion scheduler in fp32
+    # we set dtype first to make initialization of model consistent with the dtype
+    # then reset it to the fp32 as we make diffusion scheduler in fp32
     torch.set_default_dtype(dtype)
     ds_config = {
         "train_micro_batch_size_per_gpu": 1,

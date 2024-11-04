@@ -121,7 +121,7 @@ def initialize(
         torch.backends.cudnn.allow_tf32 = True
 
 
-def set_distributed_state(distributed_profile):
+def set_distributed_state(distributed_profile=None):
     # OMPI_* assume for OpenMPI, RANK/WORLD_SIZE assume torchrun
     rank = int(os.getenv("RANK", os.getenv("OMPI_COMM_WORLD_RANK", "-1")))
     world_size = int(os.getenv("WORLD_SIZE", os.getenv("OMPI_COMM_WORLD_SIZE", "-1")))
