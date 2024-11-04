@@ -604,13 +604,14 @@ class STDiT3(PreTrainedModel):
             spatial_block = self.spatial_blocks[depth]
             temporal_block = self.temporal_blocks[depth]
             x = spatial_block(_x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep)
-            x = temporal_block(_x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep)
+            x = temporal_block(x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep)
 
             return x
 
         # === blocks ===
         valid_depth = kwargs.get("valid_depth", self.depth)
         for depth in range(valid_depth):
+            # TODO: more elegant
             x = auto_recompute(self.config, layer_forward, depth, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         if self.parallel_manager.sp_size > 1:

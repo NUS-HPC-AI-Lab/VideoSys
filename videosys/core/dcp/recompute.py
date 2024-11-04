@@ -194,9 +194,11 @@ def auto_recompute(model_config, forward_func, depth, x, *args, **kwargs):
 
     if if_enable_profile:
         output = checkpoint(recompute_func, forward_func, depth, x, *args, **kwargs, use_reentrant=True)
-    elif depth < model_config.non_recompute_depth:
+    elif hasattr(model_config, "non_recompute_depth") and depth < model_config.non_recompute_depth:
         output = forward_func(depth, x, *args, **kwargs)
-    else:
+    elif x.requires_grad:
         output = checkpoint(forward_func, depth, x, *args, **kwargs, use_reentrant=False)
+    else:
+        output = forward_func(depth, x, *args, **kwargs)
 
     return output
