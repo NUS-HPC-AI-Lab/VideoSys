@@ -62,47 +62,52 @@ class OpenSoraAttention(nn.Module):
 
         qkv = qkv.view(qkv_shape).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
-        if self.qk_norm_legacy:
-            # WARNING: this may be a bug
-            if self.rope:
-                q = self.rotary_emb(q)
-                k = self.rotary_emb(k)
-            q, k = self.q_norm(q), self.k_norm(k)
-        else:
-            q, k = self.q_norm(q), self.k_norm(k)
-            if self.rope:
-                q = self.rotary_emb(q)
-                k = self.rotary_emb(k)
 
-        if self.enable_flash_attn and use_flash_attn:
-            from flash_attn import flash_attn_func
-
-            # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
-            q = q.permute(0, 2, 1, 3)
-            k = k.permute(0, 2, 1, 3)
-            v = v.permute(0, 2, 1, 3)
-            x = flash_attn_func(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-                softmax_scale=self.scale,
-            )
-        elif not use_flash_attn:
-            dtype = q.dtype
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)  # translate attn to float32
-            attn = attn.to(torch.float32)
-            attn = attn.softmax(dim=-1)
-            attn = attn.to(dtype)  # cast back attn to original dtype
-            attn = self.attn_drop(attn)
-            x = attn @ v
+        if N == 1:
+            x = v
         else:
-            x = F.scaled_dot_product_attention(q, k, v)
+            if self.qk_norm_legacy:
+                # WARNING: this may be a bug
+                if self.rope:
+                    q = self.rotary_emb(q)
+                    k = self.rotary_emb(k)
+                q, k = self.q_norm(q), self.k_norm(k)
+            else:
+                q, k = self.q_norm(q), self.k_norm(k)
+                if self.rope:
+                    q = self.rotary_emb(q)
+                    k = self.rotary_emb(k)
+
+            if self.enable_flash_attn and use_flash_attn:
+                from flash_attn import flash_attn_func
+
+                # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
+                q = q.permute(0, 2, 1, 3)
+                k = k.permute(0, 2, 1, 3)
+                v = v.permute(0, 2, 1, 3)
+                x = flash_attn_func(
+                    q,
+                    k,
+                    v,
+                    dropout_p=self.attn_drop.p if self.training else 0.0,
+                    softmax_scale=self.scale,
+                )
+            elif not use_flash_attn:
+                dtype = q.dtype
+                q = q * self.scale
+                attn = q @ k.transpose(-2, -1)  # translate attn to float32
+                attn = attn.to(torch.float32)
+                attn = attn.softmax(dim=-1)
+                attn = attn.to(dtype)  # cast back attn to original dtype
+                attn = self.attn_drop(attn)
+                x = attn @ v
+            else:
+                x = F.scaled_dot_product_attention(q, k, v)
 
         x_output_shape = (B, N, C)
         if not (self.enable_flash_attn and use_flash_attn):
             x = x.transpose(1, 2)
+
         x = x.reshape(x_output_shape)
         x = self.proj(x)
         x = self.proj_drop(x)
