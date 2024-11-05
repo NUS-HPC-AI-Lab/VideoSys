@@ -141,14 +141,11 @@ def main(args):
             text_list.append(emb_path)
 
     # == save data_df ==
-    # broadcast to first rank
     dist.barrier()
     video_lists = [None for _ in range(dist.get_world_size())]
     text_lists = [None for _ in range(dist.get_world_size())]
     dist.all_gather_object(video_lists, video_list)
     dist.all_gather_object(text_lists, text_list)
-    print(f"video_lists: {video_lists}")
-    print(f"text_lists: {text_lists}")
     if dist.get_rank() == 0:
         video_list = [v for vl in video_lists for v in vl]
         text_list = [t for tl in text_lists for t in tl]
