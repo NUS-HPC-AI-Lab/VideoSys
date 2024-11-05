@@ -82,6 +82,14 @@ def temporal_random_crop(vframes, num_frames, frame_interval):
     return video
 
 
+def remove_interval(vframes, frame_interval):
+    total_frames = len(vframes)
+    target_frames = total_frames // frame_interval
+    frame_indice = np.linspace(0, total_frames - 1, target_frames, dtype=int)
+    video = vframes[frame_indice]
+    return video
+
+
 def get_transforms_video(name="center", image_size=(256, 256)):
     if name is None:
         return None

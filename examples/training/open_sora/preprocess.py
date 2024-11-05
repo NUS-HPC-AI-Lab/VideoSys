@@ -1,19 +1,22 @@
 import argparse
 import logging
+import os
 from datetime import timedelta
 
 import deepspeed
+import pandas as pd
 import torch
 import torch.distributed as dist
+from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer, T5EncoderModel
 
 from videosys.core.distributed.parallel_mgr import set_distributed_state
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
-from videosys.training.datasets.open_sora.datasets import TextDataset, VideoPreProcesssDataset
+from videosys.training.datasets.open_sora.datasets import TextPreProcessDataset, VideoPreProcesssDataset
 from videosys.utils.logging import init_logger
-from videosys.utils.utils import set_seed, str_to_dtype
+from videosys.utils.utils import merge_args, set_seed, str_to_dtype
 
 
 def get_text_embeddings(tokenizer, text_encoder, texts):
@@ -40,7 +43,6 @@ def get_text_embeddings(tokenizer, text_encoder, texts):
 def encode_prompt(text_encoder, tokenizer, text):
     caption_embs, emb_masks = get_text_embeddings(tokenizer, text_encoder, text)
     caption_embs = caption_embs[:, None]
-    emb_masks = None
     return dict(y=caption_embs, mask=emb_masks)
 
 
@@ -51,7 +53,6 @@ def main(args):
     # ======================================================
     # == device and dtype ==
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
-    assert args.dtype in ["fp16", "bf16"], f"Unknown mixed precision {args.dtype}"
     dtype = str_to_dtype(args.dtype)
 
     # == init distributed training ==
@@ -77,15 +78,16 @@ def main(args):
     # ======================================================
     logging.info("Building dataset...")
     # == build dataset ==
+    video_list, text_list = [], []
     video_dataset = VideoPreProcesssDataset(transform_name="resize_crop", data_path=args.data_path)
-    text_dataset = TextDataset(data_path=args.data_path)
+    text_dataset = TextPreProcessDataset(data_path=args.data_path)
     logging.info("Dataset contains %s samples.", len(video_dataset))
 
     # == build dataloader ==
     video_dataloader = DataLoader(
         video_dataset, batch_size=1, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True
     )
-    text_dataloader = DataLoader(text_dataset, batch_size=8)
+    text_dataloader = DataLoader(text_dataset, batch_size=args.batch_size)
 
     # ======================================================
     # 3. build model
@@ -112,33 +114,74 @@ def main(args):
     # == vae encode ==
     dist.barrier()
     logging.info("Start vae encoding")
+    os.makedirs(args.output_emb_path, exist_ok=True)
     for batch in tqdm(video_dataloader, total=len(video_dataloader)):
         x = batch["video"].to(device, dtype)
         x = vae.encode(x)
+        for i in range(x.shape[0]):
+            emb_path = os.path.join(
+                args.output_emb_path, os.path.basename(batch["path"][i]) + f"_{int(batch['index'][i])}_vae.pt"
+            )
+            torch.save(x[i], emb_path)
+            video_list.append(emb_path)
 
     # == text encode ==
     dist.barrier()
     logging.info("Start text encoding")
+    os.makedirs(args.output_emb_path, exist_ok=True)
     for batch in tqdm(text_dataloader, total=len(text_dataloader)):
         y = batch["text"]
-        encode_prompt(text_encoder, tokenizer, y)
+        model_args = encode_prompt(text_encoder, tokenizer, y)
+        for i in range(len(y)):
+            cur_model_args = {k: v[i] for k, v in model_args.items()}
+            emb_path = os.path.join(
+                args.output_emb_path, os.path.basename(batch["path"][i]) + f"_{int(batch['index'][i])}_text.pt"
+            )
+            torch.save(cur_model_args, emb_path)
+            text_list.append(emb_path)
+
+    # == save data_df ==
+    # broadcast to first rank
+    dist.barrier()
+    video_lists = [None for _ in range(dist.get_world_size())]
+    text_lists = [None for _ in range(dist.get_world_size())]
+    dist.all_gather_object(video_lists, video_list)
+    dist.all_gather_object(text_lists, text_list)
+    print(f"video_lists: {video_lists}")
+    print(f"text_lists: {text_lists}")
+    if dist.get_rank() == 0:
+        video_list = [v for vl in video_lists for v in vl]
+        text_list = [t for tl in text_lists for t in tl]
+        data_df = pd.read_csv(args.data_path)
+        data_df["vae_emb"] = video_list
+        data_df["text_emb"] = text_list
+        data_df.to_csv(args.output_csv_path, index=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # model config
-    # parser.add_argument("config", help="model config file path")
+    parser.add_argument("config", help="model config file path")
 
+    # path
+    parser.add_argument("--data-path", default="assets/example_data/demo.csv", type=str, help="path to input data csv")
+    parser.add_argument(
+        "--output-emb-path", default="assets/example_data/embs", type=str, help="outputs embedding path"
+    )
+    parser.add_argument(
+        "--output-csv-path", default="assets/example_data/demo_preprocess.csv", type=str, help="outputs csv path"
+    )
+
+    # settings
     parser.add_argument("--seed", default=1024, type=int, help="seed for reproducibility")
-    parser.add_argument("--batch-size", default=None, type=int, help="batch size")
-    parser.add_argument("--data-path", default=None, type=str, help="path to data csv")
+    parser.add_argument("--batch-size", default=2, type=int, help="batch size")
     parser.add_argument("--dtype", default="bf16", type=str, help="data type")
     parser.add_argument("--num-workers", default=4, type=int, help="number of workers")
     parser.add_argument("--prefetch-factor", default=2, type=int, help="prefetch factor")
 
     args = parser.parse_args()
-    # config_args = OmegaConf.load(args.config)
-    # args = merge_args(args, config_args)
+    config_args = OmegaConf.load(args.config)
+    args = merge_args(args, config_args)
 
     main(args)

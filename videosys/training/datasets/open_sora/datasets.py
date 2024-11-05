@@ -14,6 +14,7 @@ from .utils import (
     get_transforms_image,
     get_transforms_video,
     read_file,
+    remove_interval,
     split_df_by_rank,
     temporal_random_crop,
 )
@@ -522,7 +523,7 @@ class VideoPreProcesssDataset(torch.utils.data.Dataset):
             video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
 
             # Sampling video frames
-            video = temporal_random_crop(vframes, self.num_frames, self.frame_interval)
+            video = remove_interval(vframes, self.frame_interval)
 
             # transform
             transform = self.transforms["video"]
@@ -542,7 +543,7 @@ class VideoPreProcesssDataset(torch.utils.data.Dataset):
         # TCHW -> CTHW
         video = video.permute(1, 0, 2, 3)
 
-        ret = {"video": video, "fps": video_fps}
+        ret = {"video": video, "fps": video_fps, "path": path, "index": index}
         return ret
 
     def __getitem__(self, index):
@@ -559,7 +560,7 @@ class VideoPreProcesssDataset(torch.utils.data.Dataset):
         return len(self.data)
 
 
-class TextDataset(torch.utils.data.Dataset):
+class TextPreProcessDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         data_path=None,
@@ -570,7 +571,7 @@ class TextDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         sample = self.data.iloc[index]
-        ret = {"text": sample["text"]}
+        ret = {"text": sample["text"], "path": sample["path"], "index": index}
         return ret
 
     def __len__(self):
