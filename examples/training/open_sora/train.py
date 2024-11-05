@@ -68,8 +68,8 @@ def main(args):
 
     # == init logger, tensorboard & wandb ==
     init_logger(exp_dir)
-    logging.info("Experiment directory created at %s", exp_dir)
-    logging.info("Training configuration:\n %s", pformat(vars(args)))
+    logging.info(f"Experiment directory created at {exp_dir}")
+    logging.info(f"Training configuration:\n {pformat(vars(args))}")
     if dist.get_rank() == 0:
         if args.wandb:
             wandb.init(project="Open-Sora", name=exp_name, config=vars(args), dir="./outputs/wandb")
@@ -86,7 +86,13 @@ def main(args):
     # bonus: profile for better batching
     # =======================================================
     model_config = STDiT3Config.from_pretrained(args.ckpt_path)
-
+    if args.profile_path is None or not os.path.exists(args.profile_path):
+        do_profile = True
+        logging.info(
+            f"[ATTENTION!] Profile file is not found at `{args.profile_path}`! Profiling will be performed then exit."
+        )
+    else:
+        do_profile = False
     # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
         model_config=model_config,
@@ -98,7 +104,7 @@ def main(args):
         dynamic_sp=args.dynamic_sp,
         dynamic_recompute=args.dynamic_recompute,
         auto_grad_accumulation=args.auto_grad_accumulation,
-        do_profile=args.profile,
+        do_profile=do_profile,
         distributed_profile=args.distributed_profile,
         node_rank=node_rank,
         node_size=node_size,
@@ -130,7 +136,7 @@ def main(args):
         dataset = VariableVideoTextDataset(
             transform_name="resize_crop", data_path=args.data_path, preprocessed_data=args.preprocessed_data
         )
-    logging.info("Dataset contains %s samples.", len(dataset))
+    logging.info(f"Dataset contains {len(dataset)} samples.")
 
     # == build dataloader ==
     dataloader, sampler = prepare_dataloader(
@@ -172,9 +178,8 @@ def main(args):
     model = STDiT3_XL_2(from_pretrained=args.ckpt_path, enable_flash_attn=True, torch_dtype=dtype).to(device).train()
     model_numel, model_numel_trainable = get_model_numel(model)
     logging.info(
-        "[Diffusion] Trainable model params: %s, Total model params: %s",
-        format_numel_str(model_numel_trainable),
-        format_numel_str(model_numel),
+        f"[Diffusion] Trainable model params: {format_numel_str(model_numel_trainable)}, "
+        f"Total model params: {format_numel_str(model_numel)}",
     )
 
     # == build ema for diffusion model ==
@@ -256,16 +261,19 @@ def main(args):
         )
         if not args.start_from_scratch:
             start_epoch, start_step = ret
-        logging.info("Loaded checkpoint %s at epoch %s step %s", args.load, start_epoch, start_step)
+        logging.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
 
     # == ema model sharding ==
     ema_sharding(model.module, ema)
     ema = ema.to(device, torch.float32)
 
     # == global variables ==
-    cfg_epochs = args.epochs + (1 if profiler.need_profile() else 0)
+    if do_profile:
+        start_epoch, cfg_epochs = 0, 1
+    else:
+        cfg_epochs = args.epochs
     running_loss = 0.0
-    logging.info("Training for %s epochs with profiling %s", args.epochs, profiler.need_profile())
+    logging.info(f"Training for {args.epochs} epochs{' with profiling' if profiler.need_profile() else ''}.")
 
     # =======================================================
     # 5. training loop
@@ -286,7 +294,7 @@ def main(args):
             num_steps_per_epoch = len(dataloader)
             dataloader_iter = iter(dataloader)
             epoch_desc = f"Epoch {epoch}"
-        logging.info("Beginning %s...", epoch_desc)
+        logging.info(f"Beginning {epoch_desc}...")
 
         # == training loop in an epoch ==
         pbar = tqdm(
@@ -399,11 +407,7 @@ def main(args):
                 )
                 ema_sharding(model.module, ema)
                 logging.info(
-                    "Saved checkpoint at epoch %s, step %s, global_step %s to %s",
-                    epoch,
-                    step + 1,
-                    global_step + 1,
-                    save_dir,
+                    f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
 
         if rank == 0 and not profiler.need_profile():
@@ -416,6 +420,14 @@ def main(args):
         start_step = 0
 
     dist.barrier()
+
+    if do_profile:
+        logging.info(
+            f"Profiling is done and saved to {args.profile_path}. Please restart this programe for training with "
+            f"`profile_path: {args.profile_path}` in the config file. Exiting..."
+        )
+    else:
+        logging.info("Training is done. Exiting...")
 
 
 if __name__ == "__main__":
@@ -471,7 +483,6 @@ if __name__ == "__main__":
         type=float,
         help="This is an empirical value (tuned on A100-SXM4-40GB) to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
     )
-    parser.add_argument("--profile", action="store_true")
     parser.add_argument("--profile-path", default=None, type=str)
     parser.add_argument("--distributed-profile", action="store_true")
 
