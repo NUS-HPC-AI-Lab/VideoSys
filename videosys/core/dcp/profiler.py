@@ -168,14 +168,13 @@ class Profiler:
         dynamic_sp,
         dynamic_recompute,
         auto_grad_acc,
-        sp_balance_scope,
         do_profile,
-        end2end_profile,
         distributed_profile,
         node_rank,
         node_size,
         alloc_fraction,
         dump_dir,
+        sp_balance_scope="iter",
         profile_path=None,
         verbose=True,
         profile_depth=2,
@@ -200,7 +199,6 @@ class Profiler:
         self.auto_grad_acc = auto_grad_acc
         self.sp_balance_scope = sp_balance_scope
         self.do_profile = do_profile
-        self.end2end_profile = end2end_profile
         self.distributed_profile = distributed_profile
         self.node_rank = node_rank
         self.node_size = node_size
@@ -215,8 +213,6 @@ class Profiler:
         self.memory_cap = alloc_fraction * torch.cuda.mem_get_info()[1]
         self.logger = logging if verbose else None
         self.profile_depth = profile_depth
-        if self.end2end_profile:
-            self.profile_depth = None
         self.parallel_mgr = parallel_mgr
 
         print(f"before load profile")
@@ -733,11 +729,6 @@ class Profiler:
 
     ############################################################
     # Functionality: timing. Refer to args.register_timer_keys and train_step
-    def register_timers(self, timer_keys):
-        for key in timer_keys:
-            if key not in self.timers:
-                self.registered_timer_keys.append(key)
-                self.timers[key] = GroupTimer(key)
 
     @contextmanager
     def timeit(self, name):
@@ -755,12 +746,6 @@ class Profiler:
             for t in self.timers:
                 self.timers[t].group = cur_group
 
-    def registered_timer_log(self):
-        log_str = ""
-        for key in self.registered_timer_keys:
-            log_str += f"{key}: {self.timers[key].elapsed_time:.3f}s | "
-        return log_str
-
 
 def set_profiler(
     model_config,
@@ -772,9 +757,7 @@ def set_profiler(
     dynamic_sp,
     dynamic_recompute,
     auto_grad_acc,
-    sp_balance_scope,
     do_profile,
-    end2end_profile,
     distributed_profile,
     node_rank,
     node_size,
@@ -785,24 +768,22 @@ def set_profiler(
 ) -> Profiler:
     global PROFILER
     PROFILER = Profiler(
-        model_config,
-        bucket_config,
-        text_max_seq_len,
-        text_hidden_size,
-        device,
-        dtype,
-        dynamic_sp,
-        dynamic_recompute,
-        auto_grad_acc,
-        sp_balance_scope,
-        do_profile,
-        end2end_profile,
-        distributed_profile,
-        node_rank,
-        node_size,
-        alloc_fraction,
-        dump_dir,
-        profile_path,
+        model_config=model_config,
+        bucket_config=bucket_config,
+        text_max_seq_len=text_max_seq_len,
+        text_hidden_size=text_hidden_size,
+        device=device,
+        dtype=dtype,
+        dynamic_sp=dynamic_sp,
+        dynamic_recompute=dynamic_recompute,
+        auto_grad_acc=auto_grad_acc,
+        do_profile=do_profile,
+        distributed_profile=distributed_profile,
+        node_rank=node_rank,
+        node_size=node_size,
+        alloc_fraction=alloc_fraction,
+        dump_dir=dump_dir,
+        profile_path=profile_path,
         parallel_mgr=parallel_mgr,
     )
     return PROFILER

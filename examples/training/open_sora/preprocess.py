@@ -15,35 +15,9 @@ from transformers import AutoTokenizer, T5EncoderModel
 from videosys.core.distributed.parallel_mgr import set_distributed_state
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
 from videosys.training.datasets.open_sora.datasets import TextPreProcessDataset, VideoPreProcesssDataset
+from videosys.training.datasets.open_sora.utils import encode_prompt
 from videosys.utils.logging import init_logger
 from videosys.utils.utils import merge_args, set_seed, str_to_dtype
-
-
-def get_text_embeddings(tokenizer, text_encoder, texts):
-    text_tokens_and_mask = tokenizer(
-        texts,
-        max_length=300,
-        padding="max_length",
-        truncation=True,
-        return_attention_mask=True,
-        add_special_tokens=True,
-        return_tensors="pt",
-    )
-    device = text_encoder.device
-    input_ids = text_tokens_and_mask["input_ids"].to(device)
-    attention_mask = text_tokens_and_mask["attention_mask"].to(device)
-    with torch.no_grad():
-        text_encoder_embs = text_encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )["last_hidden_state"].detach()
-    return text_encoder_embs, attention_mask
-
-
-def encode_prompt(text_encoder, tokenizer, text):
-    caption_embs, emb_masks = get_text_embeddings(tokenizer, text_encoder, text)
-    caption_embs = caption_embs[:, None]
-    return dict(y=caption_embs, mask=emb_masks)
 
 
 @torch.no_grad()

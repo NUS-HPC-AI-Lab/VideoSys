@@ -79,11 +79,9 @@ class VariableVideoBatchSampler(DistributedSampler):
         shuffle: bool = True,
         seed: int = 0,
         drop_last: bool = False,
-        keep_last: bool = False,
         verbose: bool = False,
         num_bucket_build_workers: int = 1,
-        optimized_schedule: str = None,
-        sp_balance_scope: str = "epoch",
+        sp_balance_scope: str = "iter",
         auto_grad_accumulation: bool = False,
         max_grad_accumulation_steps: int = 2,
         parallel_mgr=None,
@@ -96,16 +94,16 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.verbose = verbose
         self.last_micro_batch_access_index = 0
         self.approximate_num_batch = None
-        self.keep_last = keep_last
+        self.keep_last = not drop_last
 
         self._get_num_batch_cached_bucket_sample_dict = None
         self.num_bucket_build_workers = num_bucket_build_workers
 
-        self.optimized_schedule = optimized_schedule
         self.sp_balance_scope = sp_balance_scope
         self.auto_grad_accumulation = auto_grad_accumulation
         self.max_grad_accumulation_steps = max_grad_accumulation_steps
         self.profiler = get_profiler()
+        self.optimized_schedule = "local" if self.profiler.dynamic_sp else None
         self.generator = None
         if self.shuffle:
             self.generator = torch.Generator()
@@ -121,12 +119,12 @@ class VariableVideoBatchSampler(DistributedSampler):
         else:
             bucket_sample_dict = self.group_by_bucket()
             if self.optimized_schedule is not None:
-                self.get_num_batch_with_optimized_schedule(bucket_sample_dict, self.optimized_schedule == "global")
+                self.get_num_batch_with_optimized_schedule(bucket_sample_dict)
             else:
                 self.get_num_batch(bucket_sample_dict)
 
         if self.optimized_schedule is not None:
-            yield from self._optimized_schedule_iter(bucket_sample_dict, self.optimized_schedule == "global")
+            yield from self._optimized_schedule_iter(bucket_sample_dict)
         else:
             yield from self._bucketized_iter(bucket_sample_dict)
 
@@ -292,7 +290,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         self._get_num_batch_cached_bucket_sample_dict = bucket_sample_dict
 
         if self.optimized_schedule is not None:
-            return self.get_num_batch_with_optimized_schedule(bucket_sample_dict, self.optimized_schedule == "global")
+            return self.get_num_batch_with_optimized_schedule(bucket_sample_dict)
         else:
             return self.get_num_batch(bucket_sample_dict) // self.num_replicas
 
@@ -322,94 +320,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                 bucket_sample_dict[bucket_id] = []
             bucket_sample_dict[bucket_id].append(i)
         return bucket_sample_dict
-
-    def _group_bucket_by_sp_size(self, bucket_sample_dict):
-        # group the buckets by sp size, and collect the micro batch access order for each sp size
-        self.effective_samples = 0
-        sp_bucket_id_access_order = defaultdict(list)
-        for bucket_id, data_list in bucket_sample_dict.items():
-            ar_name, num_frame = bucket_id[:2]
-            if ar_name not in self.profile_results or num_frame not in self.profile_results[ar_name]:
-                continue
-
-            if self.generator is not None:
-                data_indices = torch.randperm(len(data_list), generator=self.generator).tolist()
-                data_list = [data_list[i] for i in data_indices]
-                bucket_sample_dict[bucket_id] = data_list
-
-            cur_len = len(data_list)
-            sp_size = self.profile_results[ar_name][num_frame]["sp_size"]
-            max_bs = self.profile_results[ar_name][num_frame]["max"]["bs"]
-            remainder = cur_len % max_bs
-            if remainder > 0:
-                if self.drop_last:
-                    data_list = data_list[:-remainder]
-                else:
-                    pad = max_bs - remainder
-                    if pad > cur_len:
-                        data_list = data_list * ((pad + cur_len - 1) // cur_len + 1)
-                        data_list = data_list[: pad + cur_len]
-                    else:
-                        data_list += data_list[:pad]
-                bucket_sample_dict[bucket_id] = data_list
-                logging.info(f"bucket {bucket_id} has been padded from {cur_len} to {len(data_list)}")
-                cur_len = len(data_list)
-            num_micro_batches = (cur_len + max_bs - 1) // max_bs
-
-            sp_bucket_id_access_order[sp_size].extend(num_micro_batches * [bucket_id])
-            self.effective_samples += cur_len
-
-        return sp_bucket_id_access_order
-
-    def _build_global_bucket_id_access_order(self, sp_bucket_id_access_order):
-        wsize = dist.get_world_size()
-
-        # group micro batches to saturate the wsize
-        # greedy strategy
-        bucket_id_access_order, bucket_list_for_remainder, wsize_for_remainder = [], [], 0
-        sp_size_list = sorted(sp_bucket_id_access_order.keys(), reverse=True)
-        for sp_size in sp_size_list:
-            assert wsize % sp_size == 0, f"sp size {sp_size} cannot divide wsize {wsize}"
-
-            order = sp_bucket_id_access_order[sp_size]
-            sort_by_exec_time = sorted(
-                order, key=lambda x: self.profile_results[x[0]][x[1]]["max"]["execution_time"], reverse=True
-            )
-
-            curr_len = len(sort_by_exec_time)
-            consumed_concurrent_micro_batches = 0
-            if wsize_for_remainder > 0:
-                assert bucket_list_for_remainder, "bucket_list_for_remainder is empty"
-                # resolve remainder from previous sp size
-                wsize_exclude_remainder = wsize - wsize_for_remainder
-                assert wsize_exclude_remainder % sp_size == 0, f"remainder {wsize_exclude_remainder} in sp {sp_size}"
-
-                consumed_concurrent_micro_batches += wsize_exclude_remainder // sp_size
-                if consumed_concurrent_micro_batches > curr_len:
-                    bucket_list_for_remainder.extend(sort_by_exec_time)
-                    wsize_for_remainder += len(sort_by_exec_time) * sp_size
-                    continue
-
-                bucket_list_for_remainder.extend(sort_by_exec_time[:consumed_concurrent_micro_batches])
-                bucket_id_access_order.append(bucket_list_for_remainder)
-                bucket_list_for_remainder, wsize_for_remainder = [], 0
-
-            curr_len = curr_len - consumed_concurrent_micro_batches
-            concurrent_micro_batches = wsize // sp_size
-            while curr_len >= concurrent_micro_batches:
-                bucket_id_access_order.append(
-                    sort_by_exec_time[
-                        consumed_concurrent_micro_batches : consumed_concurrent_micro_batches + concurrent_micro_batches
-                    ]
-                )
-                consumed_concurrent_micro_batches += concurrent_micro_batches
-                curr_len -= concurrent_micro_batches
-
-            if curr_len > 0:
-                bucket_list_for_remainder.extend(sort_by_exec_time[consumed_concurrent_micro_batches:])
-                wsize_for_remainder += curr_len * sp_size
-
-        return bucket_id_access_order, bucket_list_for_remainder, wsize_for_remainder
 
     def _build_local_bucket_id_access_order_acc(self, bucket_sample_dict):
         wsize = dist.get_world_size()
@@ -771,7 +681,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         return bucket_id_access_order
 
-    def _optimized_schedule_iter(self, bucket_sample_dict, is_global):
+    def _optimized_schedule_iter(self, bucket_sample_dict):
         rank, wsize = dist.get_rank(), dist.get_world_size()
         is_sp_balance_iter = (
             self.profiler.dynamic_sp
@@ -853,7 +763,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         self.reset()
 
-    def get_num_batch_with_optimized_schedule(self, bucket_sample_dict, is_global) -> int:
+    def get_num_batch_with_optimized_schedule(self, bucket_sample_dict) -> int:
         if (
             self.profiler.dynamic_sp
             and self.sp_balance_scope == "iter"
@@ -863,9 +773,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         ):
             bucket_id_access_order = self._build_local_bucket_id_access_order_sp_balance(bucket_sample_dict)
             self.cached_bucket_id_access_order = bucket_id_access_order
-        elif is_global:
-            sp_bucket_id_access_order = self._group_bucket_by_sp_size(bucket_sample_dict)
-            bucket_id_access_order, _, _ = self._build_global_bucket_id_access_order(sp_bucket_id_access_order)
         else:
             bucket_id_access_order = self._build_local_bucket_id_access_order_acc(bucket_sample_dict)
             self.cached_bucket_id_access_order = bucket_id_access_order

@@ -229,9 +229,9 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
         num_frames=None,
         image_size=(None, None),
         bucket_config=None,
-        distribution: str = "uniform",  # uniform or zipf
+        distribution: str = "zipf",  # uniform or zipf
         zipf_offset: float = 10,
-        image_mixing_type: str = "inclusive",
+        image_mixing_type: str = "exclusive",
         image_mixing_frac: float = -1.0,
         res_scale: float = None,
         frame_scale: float = None,

@@ -1,8 +1,6 @@
 import argparse
 import logging
-import math
 import os
-import random
 from copy import deepcopy
 from datetime import timedelta
 from pprint import pformat
@@ -23,6 +21,7 @@ from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
 from videosys.training.ckpt_io import load, save, save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
 from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
+from videosys.training.datasets.open_sora.utils import MaskGenerator, encode_prompt
 from videosys.training.ema_distributed import ema_gathering, ema_sharding, update_ema
 from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
 from videosys.utils.logging import init_logger
@@ -34,134 +33,6 @@ from videosys.utils.training import (
     requires_grad,
 )
 from videosys.utils.utils import merge_args, set_seed, str_to_dtype
-
-
-class MaskGenerator:
-    def __init__(self, mask_ratios):
-        valid_mask_names = [
-            "identity",
-            "quarter_random",
-            "quarter_head",
-            "quarter_tail",
-            "quarter_head_tail",
-            "image_random",
-            "image_head",
-            "image_tail",
-            "image_head_tail",
-            "random",
-            "intepolate",
-        ]
-        assert all(
-            mask_name in valid_mask_names for mask_name in mask_ratios.keys()
-        ), f"mask_name should be one of {valid_mask_names}, got {mask_ratios.keys()}"
-        assert all(
-            mask_ratio >= 0 for mask_ratio in mask_ratios.values()
-        ), f"mask_ratio should be greater than or equal to 0, got {mask_ratios.values()}"
-        assert all(
-            mask_ratio <= 1 for mask_ratio in mask_ratios.values()
-        ), f"mask_ratio should be less than or equal to 1, got {mask_ratios.values()}"
-        # sum of mask_ratios should be 1
-        if "identity" not in mask_ratios:
-            mask_ratios["identity"] = 1.0 - sum(mask_ratios.values())
-        assert math.isclose(
-            sum(mask_ratios.values()), 1.0, abs_tol=1e-6
-        ), f"sum of mask_ratios should be 1, got {sum(mask_ratios.values())}"
-        logging.info("mask ratios: %s", mask_ratios)
-        self.mask_ratios = mask_ratios
-
-    def get_mask(self, x):
-        mask_type = random.random()
-        mask_name = None
-        prob_acc = 0.0
-        for mask, mask_ratio in self.mask_ratios.items():
-            prob_acc += mask_ratio
-            if mask_type < prob_acc:
-                mask_name = mask
-                break
-
-        num_frames = x.shape[2]
-        # Hardcoded condition_frames
-        condition_frames_max = num_frames // 4
-
-        mask = torch.ones(num_frames, dtype=torch.bool, device=x.device)
-        if num_frames <= 1:
-            return mask
-
-        if mask_name == "quarter_random":
-            random_size = random.randint(1, condition_frames_max)
-            random_pos = random.randint(0, x.shape[2] - random_size)
-            mask[random_pos : random_pos + random_size] = 0
-        elif mask_name == "image_random":
-            random_size = 1
-            random_pos = random.randint(0, x.shape[2] - random_size)
-            mask[random_pos : random_pos + random_size] = 0
-        elif mask_name == "quarter_head":
-            random_size = random.randint(1, condition_frames_max)
-            mask[:random_size] = 0
-        elif mask_name == "image_head":
-            random_size = 1
-            mask[:random_size] = 0
-        elif mask_name == "quarter_tail":
-            random_size = random.randint(1, condition_frames_max)
-            mask[-random_size:] = 0
-        elif mask_name == "image_tail":
-            random_size = 1
-            mask[-random_size:] = 0
-        elif mask_name == "quarter_head_tail":
-            random_size = random.randint(1, condition_frames_max)
-            mask[:random_size] = 0
-            mask[-random_size:] = 0
-        elif mask_name == "image_head_tail":
-            random_size = 1
-            mask[:random_size] = 0
-            mask[-random_size:] = 0
-        elif mask_name == "intepolate":
-            random_start = random.randint(0, 1)
-            mask[random_start::2] = 0
-        elif mask_name == "random":
-            mask_ratio = random.uniform(0.1, 0.9)
-            mask = torch.rand(num_frames, device=x.device) > mask_ratio
-            # if mask is all False, set the last frame to True
-            if not mask.any():
-                mask[-1] = 1
-
-        return mask
-
-    def get_masks(self, x):
-        masks = []
-        for _ in range(len(x)):
-            mask = self.get_mask(x)
-            masks.append(mask)
-        masks = torch.stack(masks, dim=0)
-        return masks
-
-
-def get_text_embeddings(tokenizer, text_encoder, texts):
-    text_tokens_and_mask = tokenizer(
-        texts,
-        max_length=300,
-        padding="max_length",
-        truncation=True,
-        return_attention_mask=True,
-        add_special_tokens=True,
-        return_tensors="pt",
-    )
-    device = text_encoder.device
-    input_ids = text_tokens_and_mask["input_ids"].to(device)
-    attention_mask = text_tokens_and_mask["attention_mask"].to(device)
-    with torch.no_grad():
-        text_encoder_embs = text_encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )["last_hidden_state"].detach()
-    return text_encoder_embs, attention_mask
-
-
-def encode_prompt(text_encoder, tokenizer, text):
-    caption_embs, emb_masks = get_text_embeddings(tokenizer, text_encoder, text)
-    caption_embs = caption_embs[:, None]
-    emb_masks = None
-    return dict(y=caption_embs, mask=emb_masks)
 
 
 def main(args):
@@ -214,32 +85,27 @@ def main(args):
     # =======================================================
     # bonus: profile for better batching
     # =======================================================
-    # TODO: hardcoded for T5
-    text_max_seq_len = 300
-    text_hidden_size = 4096
     model_config = STDiT3Config.from_pretrained(args.ckpt_path)
 
     # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
-        model_config,
-        args.bucket_config,
-        text_max_seq_len,
-        text_hidden_size,
-        device,
-        dtype,
-        args.dynamic_sp,
-        args.dynamic_recompute,
-        args.auto_grad_accumulation,
-        args.sp_balance_scope,
-        args.profile,
-        args.end2end_profile,
-        args.distributed_profile,
-        node_rank,
-        node_size,
-        args.alloc_memory_fraction,
-        exp_dir,
-        args.profile_path,
-        parallel_mgr,
+        model_config=model_config,
+        bucket_config=args.bucket_config,
+        text_max_seq_len=model_config.model_max_length,
+        text_hidden_size=model_config.caption_channels,
+        device=device,
+        dtype=dtype,
+        dynamic_sp=args.dynamic_sp,
+        dynamic_recompute=args.dynamic_recompute,
+        auto_grad_accumulation=args.auto_grad_accumulation,
+        do_profile=args.profile,
+        distributed_profile=args.distributed_profile,
+        node_rank=node_rank,
+        node_size=node_size,
+        alloc_fraction=args.alloc_memory_fraction,
+        dump_dir=exp_dir,
+        profile_path=args.profile_path,
+        parallel_mgr=parallel_mgr,
     )
 
     # ======================================================
@@ -259,8 +125,6 @@ def main(args):
             zipf_offset=args.zipf_offset,
             image_mixing_type=args.image_mixing_type,
             image_mixing_frac=args.image_mixing_frac,
-            res_scale=args.res_scale,
-            frame_scale=args.frame_scale,
         )
     else:
         dataset = VariableVideoTextDataset(
@@ -269,28 +133,20 @@ def main(args):
     logging.info("Dataset contains %s samples.", len(dataset))
 
     # == build dataloader ==
-    dataloader_args = dict(
+    dataloader, sampler = prepare_dataloader(
         dataset=dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         seed=args.seed,
         shuffle=True,
         drop_last=args.drop_last,
-        keep_last=args.keep_last,
-        pin_memory=True,
         process_group=parallel_mgr.dp_group,
         prefetch_factor=args.prefetch_factor,
-        optimized_schedule=args.sampler_schedule_type if args.dynamic_sp else None,
-        sp_balance_scope=args.sp_balance_scope,
         auto_grad_accumulation=args.auto_grad_accumulation,
-        max_grad_accumulation_steps=args.max_grad_accumulation_steps,
-    )
-    dataloader, sampler = prepare_dataloader(
         bucket_config=args.bucket_config,
         num_bucket_build_workers=args.num_bucket_build_workers,
         preprocessed_data=args.preprocessed_data,
         parallel_mgr=parallel_mgr,
-        **dataloader_args,
     )
 
     # ======================================================
@@ -597,32 +453,18 @@ if __name__ == "__main__":
     parser.add_argument("--start-from-scratch", action="store_true", help="start training from scratch")
     parser.add_argument("--warmup-steps", default=None, type=int, help="warmup steps")
 
-    parser.add_argument(
-        "--register-timer-keys",
-        default=[],
-        type=str,
-        nargs="+",
-        help="register timer keys",
-        choices=["move_data", "mask", "diffusion", "backward", "update_ema", "reduce_loss"],
-    )
-
     # experimental features
     parser.add_argument("--drop-last", action="store_true")
-    parser.add_argument("--keep-last", action="store_true")
     parser.add_argument("--dummy-dataset", action="store_true")
     parser.add_argument("--dummy-data-size", default=100, type=int)
     parser.add_argument("--preprocessed-data", action="store_true")
-    parser.add_argument("--image-mixing-type", default="inclusive", type=str, choices=["inclusive", "exclusive"])
+    parser.add_argument("--image-mixing-type", default="exclusive", type=str, choices=["inclusive", "exclusive"])
     parser.add_argument("--image-mixing-frac", default=-1.0, type=float)
-    parser.add_argument("--distribution", default="uniform", type=str, choices=["zipf", "uniform"])
+    parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
-    parser.add_argument("--res-scale", default=None, type=float)
-    parser.add_argument("--frame-scale", default=None, type=float)
     parser.add_argument("--dynamic-sp", action="store_true")
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")
-    parser.add_argument("--max-grad-accumulation-steps", default=2, type=int)
-    parser.add_argument("--sp-balance-scope", default="epoch", type=str, choices=["iter", "epoch"])
     parser.add_argument(
         "--alloc-memory-fraction",
         default=0.75,
@@ -632,10 +474,6 @@ if __name__ == "__main__":
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--profile-path", default=None, type=str)
     parser.add_argument("--distributed-profile", action="store_true")
-
-    # deprecated features
-    parser.add_argument("--end2end-profile", action="store_true")
-    parser.add_argument("--sampler-schedule-type", default="local", type=str)
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)
