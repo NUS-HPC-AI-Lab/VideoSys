@@ -263,7 +263,9 @@ def main(args):
             frame_scale=args.frame_scale,
         )
     else:
-        dataset = VariableVideoTextDataset(transform_name="resize_crop", data_path=args.data_path)
+        dataset = VariableVideoTextDataset(
+            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=args.preprocessed_data
+        )
     logging.info("Dataset contains %s samples.", len(dataset))
 
     # == build dataloader ==

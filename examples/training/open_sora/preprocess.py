@@ -122,7 +122,7 @@ def main(args):
             emb_path = os.path.join(
                 args.output_emb_path, os.path.basename(batch["path"][i]) + f"_{int(batch['index'][i])}_vae.pt"
             )
-            torch.save(x[i], emb_path)
+            torch.save(x[i].cpu(), emb_path)
             video_list.append(emb_path)
 
     # == text encode ==
@@ -133,7 +133,7 @@ def main(args):
         y = batch["text"]
         model_args = encode_prompt(text_encoder, tokenizer, y)
         for i in range(len(y)):
-            cur_model_args = {k: v[i] for k, v in model_args.items()}
+            cur_model_args = {k: v[i].cpu() for k, v in model_args.items()}
             emb_path = os.path.join(
                 args.output_emb_path, os.path.basename(batch["path"][i]) + f"_{int(batch['index'][i])}_text.pt"
             )

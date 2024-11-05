@@ -135,10 +135,12 @@ class VariableVideoTextDataset(VideoTextDataset):
         frame_interval=1,
         image_size=(None, None),
         transform_name=None,
+        preprocessed_data=False,
     ):
         super().__init__(data_path, num_frames, frame_interval, image_size, transform_name=None)
         self.transform_name = transform_name
         self.data["id"] = np.arange(len(self.data))
+        self.preprocessed_data = preprocessed_data
 
     def get_data_info(self, index):
         T = self.data.iloc[index]["num_frames"]
@@ -152,36 +154,46 @@ class VariableVideoTextDataset(VideoTextDataset):
 
         sample = self.data.iloc[index]
         path = sample["path"]
-        file_type = self.get_type(path)
+        text = sample["text"]
         ar = height / width
-
         video_fps = 24  # default fps
-        if file_type == "video":
-            # loading
-            vframes, vinfo = read_video(path, backend="av")
-            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
 
-            # Sampling video frames
-            video = temporal_random_crop(vframes, num_frames, self.frame_interval)
-            video = video.clone()
-            del vframes
+        if not self.preprocessed_data:
+            file_type = self.get_type(path)
+            if file_type == "video":
+                # loading
+                vframes, vinfo = read_video(path, backend="av")
+                video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
 
-            video_fps = video_fps // self.frame_interval
+                # Sampling video frames
+                video = temporal_random_crop(vframes, num_frames, self.frame_interval)
+                video = video.clone()
+                del vframes
 
-            # transform
-            transform = get_transforms_video(self.transform_name, (height, width))
-            video = transform(video)  # T C H W
+                video_fps = video_fps // self.frame_interval
+
+                # transform
+                transform = get_transforms_video(self.transform_name, (height, width))
+                video = transform(video)  # T C H W
+            else:
+                # loading
+                image = pil_loader(path)
+                video_fps = IMG_FPS
+
+                # transform
+                transform = get_transforms_image(self.transform_name, (height, width))
+                image = transform(image)
+
+                # repeat
+                video = image.unsqueeze(0)
         else:
-            # loading
-            image = pil_loader(path)
-            video_fps = IMG_FPS
-
-            # transform
-            transform = get_transforms_image(self.transform_name, (height, width))
-            image = transform(image)
-
-            # repeat
-            video = image.unsqueeze(0)
+            video = torch.load(sample["vae_emb"], weights_only=False)  # C T H W
+            nf = max(num_frames * 5 // 17, 1)
+            video = video.permute(1, 0, 2, 3)  # T C H W
+            video = temporal_random_crop(video, nf, 1)
+            model_args = torch.load(sample["text_emb"], weights_only=False)
+            text = model_args["y"]
+            mask = model_args["mask"]
 
         # TCHW -> CTHW
         video = video.permute(1, 0, 2, 3)
@@ -195,9 +207,10 @@ class VariableVideoTextDataset(VideoTextDataset):
             "ar_name": ar_name,
             "sp_size": sp_size,
             "gas": gas,
+            "text": text,
         }
-        if self.get_text:
-            ret["text"] = sample["text"]
+        if self.preprocessed_data:
+            ret["mask"] = mask
         return ret
 
     def __getitem__(self, index):
