@@ -151,7 +151,6 @@ def main(args):
         auto_grad_accumulation=args.auto_grad_accumulation,
         bucket_config=args.bucket_config,
         num_bucket_build_workers=args.num_bucket_build_workers,
-        preprocessed_data=args.preprocessed_data,
         parallel_mgr=parallel_mgr,
     )
 
@@ -280,10 +279,9 @@ def main(args):
     # =======================================================
     dist.barrier()
 
-    profiler.register_timers(args.register_timer_keys)
-
     for epoch in range(start_epoch, cfg_epochs):
         if profiler.need_profile():
+            # TODO: add timer for profile
             num_steps_per_epoch = None
             dataloader_iter = profiler.get_data_iter()
             epoch_desc = "Profiling"

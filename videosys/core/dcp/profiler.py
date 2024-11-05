@@ -226,7 +226,7 @@ class Profiler:
     ############################################################
     # init methods
     def _load_profile(self):
-        if self.profile_path is not None:
+        if not self.do_profile and self.profile_path is not None:
             assert os.path.exists(self.profile_path) and os.path.isdir(self.profile_path)
             self.profile_results = {}
 
@@ -409,6 +409,7 @@ class Profiler:
                 columns=["ar", "num_frame", "bs", "sp_size", "execution_time", "max_alloc_memory"]
                 + self.profile_ctx.get_profile_fields(),
             )
+            os.makedirs(self.profile_path, exist_ok=True)
             df.to_csv(f"{self.profile_path}/raw_results_{self.node_rank}-{self.node_size}.csv", index=False)
 
             detail_df = pd.DataFrame(
