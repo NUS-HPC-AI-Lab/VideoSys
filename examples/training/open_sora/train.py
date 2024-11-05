@@ -103,7 +103,7 @@ def main(args):
         dtype=dtype,
         dynamic_sp=args.dynamic_sp,
         dynamic_recompute=args.dynamic_recompute,
-        auto_grad_accumulation=args.auto_grad_accumulation,
+        auto_grad_acc=args.auto_grad_accumulation,
         do_profile=do_profile,
         distributed_profile=args.distributed_profile,
         node_rank=node_rank,
@@ -480,9 +480,9 @@ if __name__ == "__main__":
     parser.add_argument("--auto-grad-accumulation", action="store_true")
     parser.add_argument(
         "--alloc-memory-fraction",
-        default=0.75,
+        default=0.65,
         type=float,
-        help="This is an empirical value (tuned on A100-SXM4-40GB) to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
+        help="This is an empirical value to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
     )
     parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")

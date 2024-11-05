@@ -1,11 +1,17 @@
 image_mixing_frac: 5
-sp_size: 2
+zipf_offset: 5
+sp_size: 4
 outputs: exp/baseline
 profile_path: exp/profile/baseline
 verbose: true
+alloc_memory_fraction: 0.65
+dynamic_sp: false
+dynamic_recompute: false
+auto_grad_accumulation: false
 
 
 # ==== training config ====
+
 # preprocess embedding
 data_path: "./assets/example_data/demo_preprocess.csv"
 preprocessed_data: true

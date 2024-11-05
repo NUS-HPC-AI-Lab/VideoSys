@@ -13,6 +13,12 @@ num_workers: 8
 dtype: "bf16"
 plugin: "zero2"
 
+# data centric parallel
+alloc_memory_fraction: 0.65  # if communication(nccl) error, try to decrease this value
+dynamic_sp: true
+# dynamic_recompute: true
+# auto_grad_accumulation: true
+
 # log
 seed: 42
 wandb: true
@@ -24,7 +30,6 @@ ckpt_every: 100
 grad_clip: 1.0
 lr: 1e-4
 ema_decay: 0.99
-adam_eps: 1e-15
 warmup_steps: 10
 
 # data
