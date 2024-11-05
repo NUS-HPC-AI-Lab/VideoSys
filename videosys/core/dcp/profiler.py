@@ -173,10 +173,9 @@ class Profiler:
         node_rank,
         node_size,
         alloc_fraction,
-        dump_dir,
         sp_balance_scope="iter",
         profile_path=None,
-        verbose=True,
+        verbose=False,
         profile_depth=2,
         parallel_mgr=None,
     ):
@@ -203,7 +202,6 @@ class Profiler:
         self.node_rank = node_rank
         self.node_size = node_size
         self.alloc_fraction = alloc_fraction
-        self.dump_dir = dump_dir
         self.profile_path = profile_path
         self.parallel_mgr = parallel_mgr
 
@@ -411,7 +409,7 @@ class Profiler:
                 columns=["ar", "num_frame", "bs", "sp_size", "execution_time", "max_alloc_memory"]
                 + self.profile_ctx.get_profile_fields(),
             )
-            df.to_csv(f"{self.dump_dir}/raw_results_{self.node_rank}-{self.node_size}.csv", index=False)
+            df.to_csv(f"{self.profile_path}/raw_results_{self.node_rank}-{self.node_size}.csv", index=False)
 
             detail_df = pd.DataFrame(
                 self.detail_results,
@@ -423,9 +421,9 @@ class Profiler:
                     else []
                 ),
             )
-            detail_df.to_csv(f"{self.dump_dir}/detail_profile_{self.node_rank}-{self.node_size}.csv", index=False)
+            detail_df.to_csv(f"{self.profile_path}/detail_profile_{self.node_rank}-{self.node_size}.csv", index=False)
 
-            with open(f"{self.dump_dir}/profile_{self.node_rank}-{self.node_size}.json", "w") as f:
+            with open(f"{self.profile_path}/profile_{self.node_rank}-{self.node_size}.json", "w") as f:
                 json.dump(self.profile_results, f)
 
         # reverse status
@@ -762,9 +760,9 @@ def set_profiler(
     node_rank,
     node_size,
     alloc_fraction,
-    dump_dir,
-    profile_path=None,
-    parallel_mgr=None,
+    profile_path,
+    parallel_mgr,
+    verbose,
 ) -> Profiler:
     global PROFILER
     PROFILER = Profiler(
@@ -782,9 +780,9 @@ def set_profiler(
         node_rank=node_rank,
         node_size=node_size,
         alloc_fraction=alloc_fraction,
-        dump_dir=dump_dir,
         profile_path=profile_path,
         parallel_mgr=parallel_mgr,
+        verbose=verbose,
     )
     return PROFILER
 

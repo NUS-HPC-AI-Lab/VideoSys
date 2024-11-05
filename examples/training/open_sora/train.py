@@ -109,9 +109,9 @@ def main(args):
         node_rank=node_rank,
         node_size=node_size,
         alloc_fraction=args.alloc_memory_fraction,
-        dump_dir=exp_dir,
         profile_path=args.profile_path,
         parallel_mgr=parallel_mgr,
+        verbose=args.verbose,
     )
 
     # ======================================================
@@ -464,6 +464,7 @@ if __name__ == "__main__":
     parser.add_argument("--load", default=None, type=str, help="path to continue training")
     parser.add_argument("--start-from-scratch", action="store_true", help="start training from scratch")
     parser.add_argument("--warmup-steps", default=None, type=int, help="warmup steps")
+    parser.add_argument("--verbose", action="store_true", help="verbose")
 
     # experimental features
     parser.add_argument("--drop-last", action="store_true")
@@ -483,7 +484,7 @@ if __name__ == "__main__":
         type=float,
         help="This is an empirical value (tuned on A100-SXM4-40GB) to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
     )
-    parser.add_argument("--profile-path", default=None, type=str)
+    parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")
 
     args = parser.parse_args()

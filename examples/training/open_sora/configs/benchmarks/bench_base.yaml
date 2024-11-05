@@ -1,13 +1,17 @@
+image_mixing_frac: 5
+sp_size: 2
+outputs: exp/baseline
+profile_path: exp/profile/baseline
+verbose: true
+
+
+# ==== training config ====
 # preprocess embedding
 data_path: "./assets/example_data/demo_preprocess.csv"
 preprocessed_data: true
-# not preprocess embedding
-# data_path: "./assets/example_data/demo.csv"
-# preprocessed_data: false
 
 # train
 ckpt_path: "hpcai-tech/OpenSora-STDiT-v3"
-profile_path: exp/profile
 grad_checkpoint: True
 num_workers: 8
 dtype: "bf16"
@@ -15,10 +19,10 @@ plugin: "zero2"
 
 # log
 seed: 42
-wandb: true
-epochs: 10
-log_every: 1
-ckpt_every: 100
+wandb: false
+epochs: 1
+log_every: 0
+ckpt_every: 0
 
 # optimization
 grad_clip: 1.0
