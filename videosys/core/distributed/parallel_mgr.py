@@ -64,10 +64,6 @@ class DynamicParallelManager:
             [0, 0, 0], dtype=torch.int, device=torch.device(f"cuda:{torch.cuda.current_device()}")
         )
 
-        self.gas_queue = None
-        if enable_gas_queue:
-            self.gas_queue = deque()
-
     def _build_clusters(self):
         wsize = dist.get_world_size()
         _s = 1

@@ -536,15 +536,15 @@ class STDiT3(PreTrainedModel):
         # === Split batch ===
         if self.parallel_manager.cp_size > 1:
             set_pad("batch", x.shape[0], self.parallel_manager.cp_group)
-            x, timestep, y, x_mask, mask, fps = batch_func(
+            x, timestep, y, x_mask, fps = batch_func(
                 partial(split_sequence, process_group=self.parallel_manager.cp_group, dim=0, pad=get_pad("batch")),
                 x,
                 timestep,
                 y,
                 x_mask,
-                mask,
                 fps,
             )
+            mask = split_sequence(mask, self.parallel_manager.cp_group, dim=0, pad=get_pad("batch"), pad_val=1)
 
         dtype = self.x_embedder.proj.weight.dtype
         B = x.size(0)
