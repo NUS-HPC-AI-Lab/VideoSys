@@ -1,4 +1,7 @@
+import logging
+import math
 import os
+import random
 import re
 
 import numpy as np
@@ -231,3 +234,131 @@ def resize_crop_to_fill(pil_image, image_size):
     arr = np.array(image)
     assert i + th <= arr.shape[0] and j + tw <= arr.shape[1]
     return Image.fromarray(arr[i : i + th, j : j + tw])
+
+
+class MaskGenerator:
+    def __init__(self, mask_ratios):
+        valid_mask_names = [
+            "identity",
+            "quarter_random",
+            "quarter_head",
+            "quarter_tail",
+            "quarter_head_tail",
+            "image_random",
+            "image_head",
+            "image_tail",
+            "image_head_tail",
+            "random",
+            "intepolate",
+        ]
+        assert all(
+            mask_name in valid_mask_names for mask_name in mask_ratios.keys()
+        ), f"mask_name should be one of {valid_mask_names}, got {mask_ratios.keys()}"
+        assert all(
+            mask_ratio >= 0 for mask_ratio in mask_ratios.values()
+        ), f"mask_ratio should be greater than or equal to 0, got {mask_ratios.values()}"
+        assert all(
+            mask_ratio <= 1 for mask_ratio in mask_ratios.values()
+        ), f"mask_ratio should be less than or equal to 1, got {mask_ratios.values()}"
+        # sum of mask_ratios should be 1
+        if "identity" not in mask_ratios:
+            mask_ratios["identity"] = 1.0 - sum(mask_ratios.values())
+        assert math.isclose(
+            sum(mask_ratios.values()), 1.0, abs_tol=1e-6
+        ), f"sum of mask_ratios should be 1, got {sum(mask_ratios.values())}"
+        logging.info("mask ratios: %s", mask_ratios)
+        self.mask_ratios = mask_ratios
+
+    def get_mask(self, x):
+        mask_type = random.random()
+        mask_name = None
+        prob_acc = 0.0
+        for mask, mask_ratio in self.mask_ratios.items():
+            prob_acc += mask_ratio
+            if mask_type < prob_acc:
+                mask_name = mask
+                break
+
+        num_frames = x.shape[2]
+        # Hardcoded condition_frames
+        condition_frames_max = num_frames // 4
+
+        mask = torch.ones(num_frames, dtype=torch.bool, device=x.device)
+        if num_frames <= 1:
+            return mask
+
+        if mask_name == "quarter_random":
+            random_size = random.randint(1, condition_frames_max)
+            random_pos = random.randint(0, x.shape[2] - random_size)
+            mask[random_pos : random_pos + random_size] = 0
+        elif mask_name == "image_random":
+            random_size = 1
+            random_pos = random.randint(0, x.shape[2] - random_size)
+            mask[random_pos : random_pos + random_size] = 0
+        elif mask_name == "quarter_head":
+            random_size = random.randint(1, condition_frames_max)
+            mask[:random_size] = 0
+        elif mask_name == "image_head":
+            random_size = 1
+            mask[:random_size] = 0
+        elif mask_name == "quarter_tail":
+            random_size = random.randint(1, condition_frames_max)
+            mask[-random_size:] = 0
+        elif mask_name == "image_tail":
+            random_size = 1
+            mask[-random_size:] = 0
+        elif mask_name == "quarter_head_tail":
+            random_size = random.randint(1, condition_frames_max)
+            mask[:random_size] = 0
+            mask[-random_size:] = 0
+        elif mask_name == "image_head_tail":
+            random_size = 1
+            mask[:random_size] = 0
+            mask[-random_size:] = 0
+        elif mask_name == "intepolate":
+            random_start = random.randint(0, 1)
+            mask[random_start::2] = 0
+        elif mask_name == "random":
+            mask_ratio = random.uniform(0.1, 0.9)
+            mask = torch.rand(num_frames, device=x.device) > mask_ratio
+            # if mask is all False, set the last frame to True
+            if not mask.any():
+                mask[-1] = 1
+
+        return mask
+
+    def get_masks(self, x):
+        masks = []
+        for _ in range(len(x)):
+            mask = self.get_mask(x)
+            masks.append(mask)
+        masks = torch.stack(masks, dim=0)
+        return masks
+
+
+def get_text_embeddings(tokenizer, text_encoder, texts):
+    text_tokens_and_mask = tokenizer(
+        texts,
+        max_length=300,
+        padding="max_length",
+        truncation=True,
+        return_attention_mask=True,
+        add_special_tokens=True,
+        return_tensors="pt",
+    )
+    device = text_encoder.device
+    input_ids = text_tokens_and_mask["input_ids"].to(device)
+    attention_mask = text_tokens_and_mask["attention_mask"].to(device)
+    with torch.no_grad():
+        text_encoder_embs = text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )["last_hidden_state"].detach()
+    return text_encoder_embs, attention_mask
+
+
+def encode_prompt(text_encoder, tokenizer, text):
+    caption_embs, emb_masks = get_text_embeddings(tokenizer, text_encoder, text)
+    caption_embs = caption_embs[:, None]
+    emb_masks = None
+    return dict(y=caption_embs, mask=emb_masks)
