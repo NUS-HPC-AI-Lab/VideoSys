@@ -405,7 +405,6 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
 
                         ar_name, num_frame = bucket
                         height_width_pool = pd.DataFrame(COMMON_AR[ar_name][1].values(), columns=["height", "width"])
-                        print(f"bucket: {bucket}, cnt: {cnt}, pool size: {len(height_width_pool)}")
                         idx = self.generator.integers(low=0, high=len(height_width_pool), size=(cnt,))
                         bucket_data = height_width_pool.iloc[idx]
                         bucket_data.reset_index(drop=True, inplace=True)
