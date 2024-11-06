@@ -523,29 +523,48 @@ class Profiler:
             if is_success:
                 self.raw_results.append(row)
 
-                avail_mem = self.memory_cap - pred_full_mem
+                avail_mem = int(np.floor((self.memory_cap - pred_full_mem) / GB))
 
                 if self.dynamic_recompute:
-                    module_time_cost = row.submodule_fwd_time[0]
-                    module_mem_cost = row.submodule_memory[0]
+                    num_modules = len(row.submodule_fields)
 
-                    non_recompute_depth = avail_mem // module_mem_cost
-                    non_recompute_depth = int(min(non_recompute_depth, self.model_config.depth))
-                    reduced_time = module_time_cost * non_recompute_depth
+                    dp = torch.zeros(avail_mem + 1, dtype=torch.float)
+                    trace = torch.zeros((avail_mem + 1, num_modules), dtype=torch.int)
+
+                    for i in range(num_modules):
+                        module_time_cost = row.submodule_fwd_time[i]
+                        module_mem_cost_in_bytes = row.submodule_memory[i]
+
+                        temp_dp = dp.clone()
+                        temp_trace = trace.clone()
+
+                        for cnt in range(1, self.model_config.depth + 1):
+                            time_cost = module_time_cost * cnt
+                            mem_cost = int(np.ceil(module_mem_cost_in_bytes * cnt / GB))
+
+                            for cur_mem in range(mem_cost, avail_mem + 1):
+                                if temp_dp[cur_mem] < dp[cur_mem - mem_cost] + time_cost:
+                                    temp_dp[cur_mem] = dp[cur_mem - mem_cost] + time_cost
+                                    temp_trace[cur_mem] = trace[cur_mem - mem_cost].clone()
+                                    temp_trace[cur_mem, i] = cnt
+                        dp = temp_dp
+                        trace = temp_trace
+                    reduced_time = dp[avail_mem].item()
                     best_full_time = pred_full_time - reduced_time
-
-                    avail_mem -= non_recompute_depth * module_mem_cost
-                    assert avail_mem >= 0, f"rest memory: {avail_mem}"
+                    best_trace = trace[avail_mem].tolist()
+                    for i in range(num_modules):
+                        avail_mem -= int(np.ceil(row.submodule_memory[i] * best_trace[i] / GB))
+                    assert avail_mem >= 0, f"rest memory: {avail_mem}, trace: {best_trace}"
                     result_row = [
                         row.ar_name,
                         row.num_frame,
                         row.bs,
                         row.sp_size,
                         best_full_time,
-                        (self.memory_cap - avail_mem) / GB,
+                        self.memory_cap / GB - avail_mem,
                         reduced_time,
-                        avail_mem / GB,
-                    ] + [non_recompute_depth]
+                        avail_mem,
+                    ] + best_trace
                 else:
                     result_row = [
                         row.ar_name,
@@ -555,7 +574,7 @@ class Profiler:
                         pred_full_time,
                         pred_full_mem / GB,
                         0,
-                        avail_mem / GB,
+                        avail_mem,
                     ]
 
                 self.dp_results.append(result_row)
@@ -602,7 +621,10 @@ class Profiler:
                     )
 
                     if self.dynamic_recompute:
-                        self.profile_results[ar_name][num_frame]["recompute_cfg"] = best[8]
+                        self.profile_results[ar_name][num_frame]["recompute_cfg"] = {
+                            "spatial": best[8],
+                            "temporal": best[9],
+                        }
 
                     self.dp_results = []
                     self.update_next_data_plan()
@@ -708,7 +730,9 @@ class Profiler:
         num_frame = batch["num_frame"]
         if self.dynamic_recompute and not self.need_profile():
             recompute_cfg = self.get_recompute_cfg(ar_name, num_frame)
-            model.module.config.non_recompute_depth = recompute_cfg
+            for d in range(model.module.config.depth):
+                model.module.spatial_blocks[d].grad_checkpointing = d >= recompute_cfg["spatial"]
+                model.module.temporal_blocks[d].grad_checkpointing = d >= recompute_cfg["temporal"]
 
     def set_gradient_accumulation_boundary(self, model, batch, gas):
         """

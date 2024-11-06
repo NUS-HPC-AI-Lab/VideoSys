@@ -139,14 +139,15 @@ class BlockProfileContext:
 
 class TimeStamp(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, tensor, tick):
+    def forward(ctx, tensor, prefix, tick):
         torch.cuda.synchronize()
         time_stamp = time.time()
         memory = torch.cuda.memory_allocated()
 
         global PROFILE_CONTEXT
-        PROFILE_CONTEXT.record(tick, time_stamp, memory, tensor.nbytes, True)
+        PROFILE_CONTEXT.record(prefix, tick, time_stamp, memory, tensor.nbytes, True)
 
+        ctx.prefix = prefix
         ctx.tick = tick
         return tensor
 
@@ -157,18 +158,24 @@ class TimeStamp(torch.autograd.Function):
         memory = torch.cuda.memory_allocated()
 
         global PROFILE_CONTEXT
-        PROFILE_CONTEXT.record(ctx.tick, time_stamp, memory, 0, False)
+        PROFILE_CONTEXT.record(ctx.prefix, ctx.tick, time_stamp, memory, 0, False)
         return grad_output, None, None
 
 
-def add_timestamp(tensor, tick):
+def add_block_timestamp(tensor, tick):
     tensor = TimeStamp.apply(tensor, tick)
+    return tensor
+
+
+def add_spatial_temporal_timestamp(tensor, is_temporal, tick):
+    prefix = "temporal_" if is_temporal else "spatial_"
+    tensor = TimeStamp.apply(tensor, prefix, tick)
     return tensor
 
 
 def enable_profile():
     global PROFILE_CONTEXT
-    PROFILE_CONTEXT = BlockProfileContext()
+    PROFILE_CONTEXT = SpatialTemporalProfileContext()
 
 
 def disable_profile():
@@ -181,24 +188,23 @@ def get_profile_context():
     return PROFILE_CONTEXT
 
 
-def recompute_func(forward_func, depth, x, *args, **kwargs):
-    x = add_timestamp(x, 0)
-    x = forward_func(depth, x, *args, **kwargs)
-    x = add_timestamp(x, 1)
+def recompute_func(module, x, *args, **kwargs):
+    x = add_spatial_temporal_timestamp(x, module.temporal, 0)
+    x = module(x, *args, **kwargs)
+    x = add_spatial_temporal_timestamp(x, module.temporal, 1)
     return x
 
 
-def auto_recompute(model_config, forward_func, depth, x, *args, **kwargs):
+def auto_recompute(block_module, x, *args, **kwargs):
     global PROFILE_CONTEXT
     if_enable_profile = PROFILE_CONTEXT is not None
 
     if if_enable_profile:
-        output = checkpoint(recompute_func, forward_func, depth, x, *args, **kwargs, use_reentrant=True)
-    elif hasattr(model_config, "non_recompute_depth") and depth < model_config.non_recompute_depth:
-        output = forward_func(depth, x, *args, **kwargs)
-    elif x.requires_grad:
-        output = checkpoint(forward_func, depth, x, *args, **kwargs, use_reentrant=False)
+        assert block_module.grad_checkpointing == True
+        output = checkpoint(recompute_func, block_module, x, *args, **kwargs, use_reentrant=True)
+    elif block_module.grad_checkpointing:
+        output = checkpoint(block_module, x, *args, **kwargs, use_reentrant=False)
     else:
-        output = forward_func(depth, x, *args, **kwargs)
+        output = block_module(x, *args, **kwargs)
 
     return output

@@ -141,6 +141,8 @@ class STDiT3Block(nn.Module):
         # parallel
         self.parallel_manager: ParallelManager = None
 
+        self.grad_checkpointing = True
+
         # pab
         self.block_idx = block_idx
         self.attn_count = 0
@@ -467,7 +469,11 @@ class STDiT3(PreTrainedModel):
                     module.parallel_manager = self.parallel_manager
 
     def enable_grad_checkpointing(self):
-        self.config.non_recompute_depth = 0
+        for block in self.spatial_blocks:
+            block.grad_checkpointing = True
+
+        for block in self.temporal_blocks:
+            block.grad_checkpointing = True
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -597,22 +603,13 @@ class STDiT3(PreTrainedModel):
 
         x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
 
-        def layer_forward(depth, _x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep):
-            """
-            this abstracts the forward pass of a single transformer block
-            """
-            spatial_block = self.spatial_blocks[depth]
-            temporal_block = self.temporal_blocks[depth]
-            x = spatial_block(_x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep)
-            x = temporal_block(x, _y, _t_mlp, _y_lens, _x_mask, _t0_mlp, _T, _S, _timestep)
-
-            return x
-
         # === blocks ===
         valid_depth = kwargs.get("valid_depth", self.depth)
         for depth in range(valid_depth):
-            # TODO: more elegant
-            x = auto_recompute(self.config, layer_forward, depth, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+            spatial_block = self.spatial_blocks[depth]
+            temporal_block = self.temporal_blocks[depth]
+            x = auto_recompute(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+            x = auto_recompute(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         if self.parallel_manager.sp_size > 1:
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
