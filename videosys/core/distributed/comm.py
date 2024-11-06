@@ -249,7 +249,7 @@ def all_to_all_comm(input_, process_group=None, scatter_dim=2, gather_dim=1):
 # ======================================================
 
 
-def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
+def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int, pad_val: int = 0):
     # skip if only one rank involved
     world_size = dist.get_world_size(pg)
     rank = dist.get_rank(pg)
@@ -259,7 +259,7 @@ def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
     if pad > 0:
         pad_size = list(input_.shape)
         pad_size[dim] = pad
-        input_ = torch.cat([input_, torch.zeros(pad_size, dtype=input_.dtype, device=input_.device)], dim=dim)
+        input_ = torch.cat([input_, torch.empty(pad_size, dtype=input_.dtype, device=input_.device).fill_(pad_val)], dim=dim)
 
     dim_size = input_.size(dim)
     assert dim_size % world_size == 0, f"dim_size ({dim_size}) is not divisible by world_size ({world_size})"
@@ -339,12 +339,12 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
         return _split_sequence_func(input_)
 
     @staticmethod
-    def forward(ctx, input_, process_group, dim, grad_scale, pad):
+    def forward(ctx, input_, process_group, dim, grad_scale, pad, pad_val):
         ctx.process_group = process_group
         ctx.dim = dim
         ctx.grad_scale = grad_scale
         ctx.pad = pad
-        return _split_sequence_func(input_, process_group, dim, pad)
+        return _split_sequence_func(input_, process_group, dim, pad, pad_val)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -352,11 +352,11 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
             grad_output = grad_output * dist.get_world_size(ctx.process_group)
         elif ctx.grad_scale == "down":
             grad_output = grad_output / dist.get_world_size(ctx.process_group)
-        return _gather_sequence_func(grad_output, ctx.process_group, ctx.dim, ctx.pad), None, None, None, None
+        return _gather_sequence_func(grad_output, ctx.process_group, ctx.dim, ctx.pad), None, None, None, None, None
 
 
-def split_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):
-    return _SplitForwardGatherBackward.apply(input_, process_group, dim, grad_scale, pad)
+def split_sequence(input_, process_group, dim, grad_scale=1.0, pad=0, pad_val=0):
+    return _SplitForwardGatherBackward.apply(input_, process_group, dim, grad_scale, pad, pad_val)
 
 
 def gather_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):
