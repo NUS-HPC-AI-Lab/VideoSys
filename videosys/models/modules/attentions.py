@@ -12,6 +12,7 @@ from diffusers.models.attention_processor import AttnProcessor
 from einops import rearrange
 from torch import nn
 from torch.amp import autocast
+from apex.normalization.fused_layer_norm import FusedRMSNorm
 
 from videosys.core.distributed.comm import all_to_all_with_pad, get_pad, set_pad
 from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
@@ -27,7 +28,7 @@ class OpenSoraAttention(nn.Module):
         qk_norm: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        norm_layer: nn.Module = LlamaRMSNorm,
+        norm_layer: nn.Module = FusedRMSNorm,
         enable_flash_attn: bool = False,
         rope=None,
         qk_norm_legacy: bool = False,
@@ -56,7 +57,7 @@ class OpenSoraAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         # flash attn is not memory efficient for small sequences, this is empirical
-        use_flash_attn = N > B
+        use_flash_attn = True #N > B
         qkv = self.qkv(x)
         qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
 
@@ -77,7 +78,7 @@ class OpenSoraAttention(nn.Module):
                 if self.rope:
                     q = self.rotary_emb(q)
                     k = self.rotary_emb(k)
-
+                    
             if self.enable_flash_attn and use_flash_attn:
                 from flash_attn import flash_attn_func
 
