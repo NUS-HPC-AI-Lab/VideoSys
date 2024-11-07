@@ -434,9 +434,7 @@ class Profiler:
         self.global_timer = None
         clean_cache()
 
-    def init_profiler(
-        self,
-    ):
+    def init_profiler(self):
         torch.cuda.set_per_process_memory_fraction(self.alloc_fraction)
         self.profile_pbar = tqdm(
             range(self.next_bucket_idx, self.bucket_partition_boundary),
@@ -471,7 +469,7 @@ class Profiler:
         self.profile_unit_grad_in_bytes = int(profile_unit_grad_in_bytes.item())
         if self.logger:
             self.logger.info(
-                f">>> [Profiling] Profile with grad accumulation, unit grad in bytes: {self.profile_unit_grad_in_bytes} (expect {21255696*2*2})"
+                f">>> [Profiling] Profile with grad accumulation, unit grad in bytes: {self.profile_unit_grad_in_bytes}"
             )
 
     @contextmanager
