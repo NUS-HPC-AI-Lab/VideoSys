@@ -117,6 +117,7 @@ def main(args):
             transform_name="resize_crop",
             preprocessed_data=preprocessed_data,
             bucket_config=args.bucket_config,
+            common_ar=args.common_ar,
             distribution=args.distribution,
             zipf_offset=args.zipf_offset,
             image_mixing_type=args.image_mixing_type,
@@ -270,6 +271,7 @@ if __name__ == "__main__":
     parser.add_argument("--drop-last", action="store_true")
     parser.add_argument("--dummy-dataset", action="store_true")
     parser.add_argument("--dummy-data-size", default=100, type=int)
+    parser.add_argument("--common-ar", type=dict, default=None)
     parser.add_argument("--preprocessed-data", action="store_true")
     parser.add_argument("--image-mixing-type", default="exclusive", type=str, choices=["inclusive", "exclusive"])
     parser.add_argument("--image-mixing-frac", default=-1.0, type=float)

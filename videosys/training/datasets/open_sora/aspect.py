@@ -598,6 +598,23 @@ COMMON_AR = {
 }
 
 
+def update_common_ar(bucket_config, override_common_ar):
+    new_common_ar = {}
+    global COMMON_AR
+    for res in COMMON_AR:
+        if res not in bucket_config:
+            continue
+        new_common_ar[res] = COMMON_AR[res]
+
+    if override_common_ar is not None:
+        for name in override_common_ar:
+            if name not in new_common_ar:
+                continue
+            new_common_ar[name][1].clear()
+            new_common_ar[name][1].update(override_common_ar[name])
+    COMMON_AR = new_common_ar
+
+
 def get_num_pixels(name):
     return ASPECT_RATIOS[name][0]
 
