@@ -1,5 +1,6 @@
 import time
 from enum import Enum, auto
+import logging
 
 import torch
 from torch.utils.checkpoint import checkpoint
@@ -18,66 +19,59 @@ class STDiT3BlockRecomputeConfig(Enum):
     SELF_ATTN_AND_MLP = auto()
 
 
-class SpatialTemporalProfileContext:
+class ProfileContext:
     """
-    This profiler context should only be used within sampler profile process.
+    This profiler context should only be used within profiler.profile process.
     """
 
     def __init__(
         self,
+        module_keys,
     ):
-        self.keys = [
-            "layer",
-        ]
+        self.module_keys = module_keys
+        logging.info(f"module keys: {module_keys}")
+
         self.prev_time = 0
         self.prev_memory = 0
 
         self.fwd_time_record = dict()
         self.bwd_time_record = dict()
-        self.memory_record = dict()
-        self.submodule_fields = []
+        self.input_memory = dict()
+        self.layer_memory = dict()
+        
+        for k in self.module_keys:
+            self.fwd_time_record[k] = 0
+            self.bwd_time_record[k] = 0
+            self.input_memory[k] = 0
+            self.layer_memory[k] = 0
 
-        self.memory_record["spatial_input_memory"] = 0
-        self.memory_record["temporal_input_memory"] = 0
-        for prefix in ["spatial_", "temporal_"]:
-            for key in self.keys:
-                self.fwd_time_record[prefix + key + "_fwd"] = 0.0
-                self.bwd_time_record[prefix + key + "_bwd"] = 0.0
-                self.memory_record[prefix + key + "_memory"] = 0
-                self.submodule_fields.append(prefix + key)
-
-    def record(self, prefix, tick, time_stamp, memory, tensor_nbytes, is_fwd):
-        key = "null"
+    def record(self, module_name, tick, time_stamp, memory, input_memory_in_bytes, is_fwd):
         if is_fwd:
             if tick == 0:
-                key = prefix + "input_memory"
-                self.memory_record[key] = tensor_nbytes
+                self.input_memory[module_name] = input_memory_in_bytes
             else:
-                key = prefix + self.keys[tick - 1]
-                self.fwd_time_record[key + "_fwd"] = time_stamp - self.prev_time
-                self.memory_record[key + "_memory"] = memory - self.prev_memory
+                self.fwd_time_record[module_name] = time_stamp - self.prev_time
+                self.layer_memory[module_name] = memory - self.prev_memory
             self.prev_memory = memory
         else:
-            if tick < len(self.keys):
-                key = prefix + self.keys[tick]
-                self.bwd_time_record[key + "_bwd"] = time_stamp - self.prev_time
-
+            if tick == 0:
+                self.bwd_time_record[module_name] = time_stamp - self.prev_time
         self.prev_time = time_stamp
+
         # print(f"rank: {torch.distributed.get_rank()} key: {key}, is fwd: {is_fwd}"
         #       f", time: {self.prev_time}, memory: {self.prev_memory/1024**2}")
 
     def get_profile_fields(self):
-        return list(self.fwd_time_record.keys()) + list(self.bwd_time_record.keys()) + list(self.memory_record.keys())
-
-    def get_profile_results(self):
-        return (
-            list(self.fwd_time_record.values())
-            + list(self.bwd_time_record.values())
-            + list(self.memory_record.values())
-        )
+        fields = []
+        for k in self.module_keys:
+            fields.append(k + "_fwd")
+            fields.append(k + "_bwd")
+            fields.append(k + "_input_memory")
+            fields.append(k + "_layer_memory")
+        return fields
 
     def get_submodule_fields(self):
-        return self.submodule_fields
+        return self.module_keys
 
     def get_submodule_fwd_time(self):
         return list(self.fwd_time_record.values())
@@ -86,96 +80,47 @@ class SpatialTemporalProfileContext:
         return list(self.bwd_time_record.values())
 
     def get_submodule_memory(self):
-        return [self.memory_record[each + "_memory"] for each in self.submodule_fields]
+        return list(self.layer_memory.values())
 
     def get_input_memory(self):
-        return [self.memory_record["spatial_input_memory"], self.memory_record["temporal_input_memory"]]
-
-
-class BlockProfileContext:
-    def __init__(self):
-        self.prev_time = 0
-        self.prev_memory = 0
-
-        self.fwd_time_record = 0
-        self.bwd_time_record = 0
-        self.input_memory = 0
-        self.layer_memory = 0
-
-    def record(self, tick, time_stamp, memory, tensor_nbytes, is_fwd):
-        if is_fwd:
-            if tick == 0:
-                self.input_memory = tensor_nbytes
-            else:
-                self.fwd_time_record = time_stamp - self.prev_time
-                self.layer_memory = memory - self.prev_memory
-            self.prev_memory = memory
-        else:
-            if tick == 0:
-                self.bwd_time_record = time_stamp - self.prev_time
-        self.prev_time = time_stamp
-
-    def get_profile_fields(self):
-        return ["layer_fwd", "layer_bwd", "input_memory", "layer_memory"]
-
-    def get_profile_results(self):
-        return [self.fwd_time_record, self.bwd_time_record, self.input_memory, self.layer_memory]
-
-    def get_submodule_fields(self):
-        return ["layer"]
-
-    def get_submodule_fwd_time(self):
-        return [self.fwd_time_record]
-
-    def get_submodule_bwd_time(self):
-        return [self.bwd_time_record]
-
-    def get_submodule_memory(self):
-        return [self.layer_memory]
-
-    def get_input_memory(self):
-        return [self.input_memory]
+        return list(self.input_memory.values())
 
 
 class TimeStamp(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, tensor, prefix, tick):
+    def forward(ctx, module_key, tick, *inputs):
         torch.cuda.synchronize()
         time_stamp = time.time()
         memory = torch.cuda.memory_allocated()
 
-        global PROFILE_CONTEXT
-        PROFILE_CONTEXT.record(prefix, tick, time_stamp, memory, tensor.nbytes, True)
+        input_memory_in_bytes = sum([x.nbytes for x in inputs if (isinstance(x, torch.Tensor) and x.requires_grad)])
 
-        ctx.prefix = prefix
+        global PROFILE_CONTEXT
+        PROFILE_CONTEXT.record(module_key, tick, time_stamp, memory, input_memory_in_bytes, True)
+
+        ctx.prefix = module_key
         ctx.tick = tick
-        return tensor
+        return inputs
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, *grad_output):
         torch.cuda.synchronize()
         time_stamp = time.time()
         memory = torch.cuda.memory_allocated()
 
         global PROFILE_CONTEXT
         PROFILE_CONTEXT.record(ctx.prefix, ctx.tick, time_stamp, memory, 0, False)
-        return grad_output, None, None
+        return (None, None) + grad_output
 
 
-def add_block_timestamp(tensor, tick):
-    tensor = TimeStamp.apply(tensor, tick)
-    return tensor
+def add_timestamp(module_key, *inputs, tick):
+    inputs = TimeStamp.apply(module_key, tick, *inputs)
+    return inputs
 
 
-def add_spatial_temporal_timestamp(tensor, is_temporal, tick):
-    prefix = "temporal_" if is_temporal else "spatial_"
-    tensor = TimeStamp.apply(tensor, prefix, tick)
-    return tensor
-
-
-def enable_profile():
+def enable_profile(module_keys):
     global PROFILE_CONTEXT
-    PROFILE_CONTEXT = SpatialTemporalProfileContext()
+    PROFILE_CONTEXT = ProfileContext(module_keys)
 
 
 def disable_profile():
@@ -188,23 +133,30 @@ def get_profile_context():
     return PROFILE_CONTEXT
 
 
-def recompute_func(module, x, *args, **kwargs):
-    x = add_spatial_temporal_timestamp(x, module.temporal, 0)
-    x = module(x, *args, **kwargs)
-    x = add_spatial_temporal_timestamp(x, module.temporal, 1)
-    return x
+def recompute_func(module, *args):
+    args = add_timestamp(module.__profile_module_key, *args, tick=0)    
+    args = module(*args)
+    
+    ret_as_tuple = True
+    if not isinstance(args, tuple):
+        ret_as_tuple = False
+        args = (args,)
+    args = add_timestamp(module.__profile_module_key, *args, tick=1)
+    if ret_as_tuple:
+        return args
+    return args[0]
 
 
-def auto_recompute(block_module, x, *args, **kwargs):
+def auto_recompute(block_module, *args):
     global PROFILE_CONTEXT
     if_enable_profile = PROFILE_CONTEXT is not None
 
     if if_enable_profile:
         assert block_module.grad_checkpointing == True
-        output = checkpoint(recompute_func, block_module, x, *args, **kwargs, use_reentrant=True)
+        output = checkpoint(recompute_func, block_module, *args, use_reentrant=True)
     elif block_module.grad_checkpointing:
-        output = checkpoint(block_module, x, *args, **kwargs, use_reentrant=False)
+        output = checkpoint(block_module, *args, use_reentrant=False)
     else:
-        output = block_module(x, *args, **kwargs)
+        output = block_module(*args)
 
     return output

@@ -41,7 +41,7 @@ class ParallelManager(ProcessGroupMesh):
 
 
 class DynamicParallelManager:
-    def __init__(self, dp_size, enable_gas_queue=False):
+    def __init__(self):
         self._rank = dist.get_rank()
         self.dp_group: ProcessGroup = dist.new_group(list(range(0, dist.get_world_size())))
         self.dp_rank = dist.get_rank(self.dp_group)

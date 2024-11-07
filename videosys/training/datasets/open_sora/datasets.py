@@ -384,7 +384,8 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
                     img_candidate_cnts = img_size * img_candidate_prob / np.sum(img_candidate_prob)
 
                     img_candidate_cnts = np.round(img_candidate_cnts).astype(int)
-                    img_candidate_cnts[0] += img_size - np.sum(img_candidate_cnts)
+                    if len(img_candidate_cnts) > 0:
+                        img_candidate_cnts[0] += img_size - np.sum(img_candidate_cnts)
 
                     ranks = np.power(np.arange(1, len(vid_candidates) + 1 + zipf_offset), zipf_alpha)
                     H_N_s = np.sum(1 / ranks)
@@ -393,7 +394,8 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
                     vid_candidate_cnts = vid_size * vid_candidate_prob / np.sum(vid_candidate_prob)
 
                     vid_candidate_cnts = np.round(vid_candidate_cnts).astype(int)
-                    vid_candidate_cnts[0] += vid_size - np.sum(vid_candidate_cnts)
+                    if len(vid_candidate_cnts) > 0:
+                        vid_candidate_cnts[0] += vid_size - np.sum(vid_candidate_cnts)
                 else:
                     raise ValueError(f"unsupported distributionL {distribution}")
 

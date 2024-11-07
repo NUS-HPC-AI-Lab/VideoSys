@@ -1,9 +1,9 @@
 image_mixing_frac: 5
 zipf_offset: 15
-outputs: exp/baseline
-profile_path: exp/profile/baseline
+outputs: exp/dynamic_sp
+profile_path: exp/profile/dynamic_sp
 verbose: true
-sp_size: 2
+dynamic_sp: true
 dummy_dataset: true
 
 
