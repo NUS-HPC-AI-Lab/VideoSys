@@ -88,6 +88,7 @@ def main(args):
     model_config = STDiT3Config.from_pretrained(args.ckpt_path)
     if args.profile_path is None or not os.path.exists(args.profile_path):
         do_profile = True
+        args.preprocessed_data = True
         logging.info(
             f"[ATTENTION!] Profile file is not found at `{args.profile_path}`! Profiling will be performed then exit."
         )
