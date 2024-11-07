@@ -1,5 +1,6 @@
 import logging
 import os
+from pprint import pformat
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,7 @@ import torch
 from PIL import ImageFile
 from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
 
-from .aspect import COMMON_AR
+from .aspect import COMMON_AR, update_common_ar
 from .read_video import read_video
 from .utils import (
     VID_EXTENSIONS,
@@ -229,6 +230,7 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
         num_frames=None,
         image_size=(None, None),
         bucket_config=None,
+        common_ar=None,
         distribution: str = "zipf",  # uniform or zipf
         zipf_offset: float = 10,
         image_mixing_type: str = "exclusive",
@@ -246,6 +248,8 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
         self.image_mixing_frac = image_mixing_frac
         self.res_scale = res_scale
         self.frame_scale = frame_scale
+        update_common_ar(bucket_config, common_ar)
+        logging.info(f"common ar for data synthesis: {pformat(COMMON_AR)}")
         self._build_dummy_dataset(bucket_config, distribution, zipf_offset)
 
         self.frame_interval = frame_interval
