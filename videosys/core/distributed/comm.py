@@ -259,7 +259,9 @@ def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int, pad_
     if pad > 0:
         pad_size = list(input_.shape)
         pad_size[dim] = pad
-        input_ = torch.cat([input_, torch.empty(pad_size, dtype=input_.dtype, device=input_.device).fill_(pad_val)], dim=dim)
+        input_ = torch.cat(
+            [input_, torch.empty(pad_size, dtype=input_.dtype, device=input_.device).fill_(pad_val)], dim=dim
+        )
 
     dim_size = input_.size(dim)
     assert dim_size % world_size == 0, f"dim_size ({dim_size}) is not divisible by world_size ({world_size})"

@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
+from tqdm import tqdm
 
 from videosys.core.dcp.recompute import disable_profile, enable_profile, get_profile_context
 from videosys.core.distributed.comm import _switch_sp_cp_bwd
@@ -108,8 +109,6 @@ class ProfileDataIter:
         self.next_idx = 0
 
     def __iter__(self):
-        self.profiler.device
-        self.profiler.dtype
         while self.next_idx < len(self.data_plan):
             data_plan = self.data_plan[self.next_idx]
             data_idx = self.next_idx
@@ -160,11 +159,10 @@ class Profiler:
     def __init__(
         self,
         model_config,
+        total_layers,
         bucket_config,
         text_max_seq_len,
         text_hidden_size,
-        device,
-        dtype,
         dynamic_sp,
         dynamic_recompute,
         auto_grad_acc,
@@ -180,6 +178,7 @@ class Profiler:
         parallel_mgr=None,
     ):
         self.model_config = model_config
+        self.total_layers = total_layers
 
         # [(ar_name, num_frame)]
         self.bucket_config = []
@@ -190,8 +189,6 @@ class Profiler:
 
         self.text_max_seq_len = text_max_seq_len
         self.text_hidden_size = text_hidden_size
-        self.device = device
-        self.dtype = dtype
 
         self.dynamic_sp = dynamic_sp
         self.dynamic_recompute = dynamic_recompute
@@ -221,11 +218,16 @@ class Profiler:
             self.timers["iteration"] = GroupTimer("iteration")
         self.dummy_timer = nullcontext()
 
+        # used by profile
+        self.profile_unit_grad_in_bytes = 0
+        self.module_dict = None
+
     ############################################################
     # init methods
     def _load_profile(self):
-        if not self.do_profile and self.profile_path is not None:
-            assert os.path.exists(self.profile_path) and os.path.isdir(self.profile_path)
+        self.profile_pbar = None
+        if not self.do_profile:
+            assert os.path.isdir(self.profile_path)
             self.profile_results = {}
 
             # Iterate through all profile_*.json files in the directory
@@ -275,7 +277,7 @@ class Profiler:
             self.next_bs = 1
             self.next_warmup_iter = True
 
-            self._need_profile = self.do_profile
+            self._need_profile = True
 
         self.profile_ctx = None
         self.latest_raw_result = None
@@ -283,14 +285,14 @@ class Profiler:
         self.detail_results = []
         self.dp_results = []
 
-        if self.logger is not None:
-            self.logger.info(f"Profile results: {pformat(self.profile_results, sort_dicts=False)}")
+        logging.info(f"Profile results: {pformat(self.profile_results, sort_dicts=False)}")
 
     def interpolate_profile_results(self):
         if not self.dynamic_recompute and not self.auto_grad_acc:
-            self.logger.info(
-                f">>> [Profiling] Profile results before adjustment: {pformat(self.profile_results, sort_dicts=False)}"
-            )
+            if self.logger:
+                self.logger.info(
+                    f">>> [Profiling] Profile results before adjustment: {pformat(self.profile_results, sort_dicts=False)}"
+                )
 
             def score_func(new_time, median_time):
                 if not self.dynamic_sp:
@@ -378,6 +380,7 @@ class Profiler:
 
     def update_next_data_plan(self):
         self.next_bucket_idx += 1
+        self.profile_pbar.update()
 
         self.next_bs = 1
         self.next_warmup_iter = not self.auto_grad_acc
@@ -393,11 +396,12 @@ class Profiler:
     def finalize_profile(self):
         assert self._need_profile
         self._need_profile = False
+        self.profile_pbar.close()
 
         # exit profiling, dump results and clean up
         self.global_timer.__exit__(0, 0, 0)
-        self.logger.info(f">>> [Profiling] Profile cost: {self.global_timer.elapsed_time:.2f} s")
-        self.logger.info(f">>> [Profiling] Profile results: {pformat(self.profile_results, sort_dicts=False)}")
+        logging.info(f">>> [Profiling] Profile cost: {self.global_timer.elapsed_time:.2f} s")
+        logging.info(f">>> [Profiling] Profile results: {pformat(self.profile_results, sort_dicts=False)}")
 
         if dist.get_rank() == 0:
             df = pd.DataFrame(
@@ -432,18 +436,46 @@ class Profiler:
 
     def init_profiler(self):
         torch.cuda.set_per_process_memory_fraction(self.alloc_fraction)
+        self.profile_pbar = tqdm(
+            range(self.next_bucket_idx, self.bucket_partition_boundary),
+            desc="Profiling",
+            disable=dist.get_rank() != 0,
+            initial=self.next_bucket_idx,
+            total=self.bucket_partition_boundary - self.next_bucket_idx,
+        )
 
-        enable_profile()
+        enable_profile(list(self.module_dict.keys()))
         self.profile_ctx = get_profile_context()
 
         self.global_timer = GroupTimer("global", group=self.parallel_mgr.dp_group)
         dist.barrier()
         self.global_timer.__enter__()
 
+    def register_modules(self, module_dict):
+        self.module_dict = module_dict
+        for name, module_list in module_dict.items():
+            assert len(module_list) == self.total_layers
+
+            for module in module_list:
+                setattr(module, "__profile_module_key", name)
+
+            if self.auto_grad_acc:
+                # only a single module
+                for p in module_list[0].parameters():
+                    if p.requires_grad:
+                        self.profile_unit_grad_in_bytes += p.nbytes
+        profile_unit_grad_in_bytes = torch.tensor([self.profile_unit_grad_in_bytes], device=torch.cuda.current_device())
+        dist.all_reduce(profile_unit_grad_in_bytes, op=dist.ReduceOp.MAX)
+        self.profile_unit_grad_in_bytes = int(profile_unit_grad_in_bytes.item())
+        if self.logger:
+            self.logger.info(
+                f">>> [Profiling] Profile with grad accumulation, unit grad in bytes: {self.profile_unit_grad_in_bytes}"
+            )
+
     @contextmanager
     def profile(self, batch, model, gas):
         if not self.need_profile():
-            yield model.module.config.depth
+            yield self.total_layers
             return
 
         ar_name = batch["ar_name"]
@@ -457,7 +489,7 @@ class Profiler:
         if warmup_iter or (self.auto_grad_acc and gas == 0):
             clean_cache()
 
-        if self.logger is not None:
+        if self.logger:
             self.get_memory_stats(
                 f"START bucket {ar_name} {num_frame} {bs} with sp {sp_size} is wamrup: {warmup_iter}, gas: {gas}"
             )
@@ -622,8 +654,7 @@ class Profiler:
 
                     if self.dynamic_recompute:
                         self.profile_results[ar_name][num_frame]["recompute_cfg"] = {
-                            "spatial": best[8],
-                            "temporal": best[9],
+                            k: best[i + 8] for i, k in enumerate(row.submodule_fields)
                         }
 
                     self.dp_results = []
@@ -644,9 +675,10 @@ class Profiler:
                         )
                 else:
                     assert self.latest_raw_result is not None
-                    self.logger.info(
-                        f">>> [Profiling] STOP BS search for bucket {ar_name} {num_frame} at {bs} sp {sp_size}"
-                    )
+                    if self.logger:
+                        self.logger.info(
+                            f">>> [Profiling] STOP BS search for bucket {ar_name} {num_frame} at {bs} sp {sp_size}"
+                        )
 
                     ar_name = self.latest_raw_result.ar_name
                     num_frame = self.latest_raw_result.num_frame
@@ -696,14 +728,14 @@ class Profiler:
         layer_time = fwd_time * 2 + bwd_time
         layer_memory = sum(profile_result.input_memory)
 
-        missing_gradient_per_layer = 0
-        if self.auto_grad_acc:
-            # TODO: support other model
-            # STDiT block * (spatial + temporal) * 2 bytes
-            missing_gradient_per_layer = 21255696 * 2 * 2
+        # missing_gradient_per_layer = 0
+        # if self.auto_grad_acc:
+        #     # TODO: support other model
+        #     # STDiT block * (spatial + temporal) * 2 bytes
+        #     missing_gradient_per_layer = 21255696 * 2 * 2
 
         pred_full_time = profile_result.execution_time + layer_time * (self.model_config.depth - self.profile_depth)
-        pred_full_mem = profile_result.max_alloc_memory + (layer_memory + missing_gradient_per_layer) * (
+        pred_full_mem = profile_result.max_alloc_memory + (layer_memory + self.profile_unit_grad_in_bytes) * (
             self.model_config.depth - self.profile_depth
         )
 
@@ -730,9 +762,9 @@ class Profiler:
         num_frame = batch["num_frame"]
         if self.dynamic_recompute and not self.need_profile():
             recompute_cfg = self.get_recompute_cfg(ar_name, num_frame)
-            for d in range(model.module.config.depth):
-                model.module.spatial_blocks[d].grad_checkpointing = d >= recompute_cfg["spatial"]
-                model.module.temporal_blocks[d].grad_checkpointing = d >= recompute_cfg["temporal"]
+            for d in range(self.total_layers):
+                for k, module_list in self.module_dict.items():
+                    module_list[d].grad_checkpointing = d >= recompute_cfg[k]
 
     def set_gradient_accumulation_boundary(self, model, batch, gas):
         """
@@ -768,11 +800,10 @@ class Profiler:
 
 def set_profiler(
     model_config,
+    total_layers,
     bucket_config,
     text_max_seq_len,
     text_hidden_size,
-    device,
-    dtype,
     dynamic_sp,
     dynamic_recompute,
     auto_grad_acc,
@@ -788,11 +819,10 @@ def set_profiler(
     global PROFILER
     PROFILER = Profiler(
         model_config=model_config,
+        total_layers=total_layers,
         bucket_config=bucket_config,
         text_max_seq_len=text_max_seq_len,
         text_hidden_size=text_hidden_size,
-        device=device,
-        dtype=dtype,
         dynamic_sp=dynamic_sp,
         dynamic_recompute=dynamic_recompute,
         auto_grad_acc=auto_grad_acc,

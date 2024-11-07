@@ -76,7 +76,7 @@ def main(args):
 
     # == init parallel manager ==
     if args.dynamic_sp:
-        parallel_mgr = DynamicParallelManager(dist.get_world_size(), args.sampler_schedule_type == "local")
+        parallel_mgr = DynamicParallelManager()
     else:
         parallel_mgr = ParallelManager(dist.get_world_size() // args.sp_size, 1, args.sp_size)
 
@@ -85,9 +85,11 @@ def main(args):
     # =======================================================
     # bonus: profile for better batching
     # =======================================================
+    preprocessed_data = args.preprocessed_data
     model_config = STDiT3Config.from_pretrained(args.ckpt_path)
     if args.profile_path is None or not os.path.exists(args.profile_path):
         do_profile = True
+        preprocessed_data = True
         logging.info(
             f"[ATTENTION!] Profile file is not found at `{args.profile_path}`! Profiling will be performed then exit."
         )
@@ -96,11 +98,10 @@ def main(args):
     # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
         model_config=model_config,
+        total_layers=model_config.depth,
         bucket_config=args.bucket_config,
         text_max_seq_len=model_config.model_max_length,
         text_hidden_size=model_config.caption_channels,
-        device=device,
-        dtype=dtype,
         dynamic_sp=args.dynamic_sp,
         dynamic_recompute=args.dynamic_recompute,
         auto_grad_acc=args.auto_grad_accumulation,
@@ -125,7 +126,7 @@ def main(args):
             seed=args.seed,
             data_path=args.data_path,
             transform_name="resize_crop",
-            preprocessed_data=args.preprocessed_data,
+            preprocessed_data=preprocessed_data,
             bucket_config=args.bucket_config,
             distribution=args.distribution,
             zipf_offset=args.zipf_offset,
@@ -134,7 +135,7 @@ def main(args):
         )
     else:
         dataset = VariableVideoTextDataset(
-            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=args.preprocessed_data
+            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=preprocessed_data
         )
     logging.info(f"Dataset contains {len(dataset)} samples.")
 
@@ -160,7 +161,7 @@ def main(args):
     logging.info("Building models...")
 
     # == build text-encoder and vae ==
-    if not args.preprocessed_data:
+    if not preprocessed_data:
         text_encoder = T5EncoderModel.from_pretrained("DeepFloyd/t5-v1_1-xxl", torch_dtype=dtype).to(device).eval()
         tokenizer = AutoTokenizer.from_pretrained("DeepFloyd/t5-v1_1-xxl")
         vae = (
@@ -243,7 +244,12 @@ def main(args):
         optimizer=optimizer,
         config=ds_config,
     )
-
+    profiler.register_modules(
+        {
+            "spatial": model.module.spatial_blocks,
+            "temporal": model.module.temporal_blocks,
+        }
+    )
     torch.set_default_dtype(torch.float)
     logging.info("Boosting model for distributed training")
 
@@ -282,6 +288,7 @@ def main(args):
     for epoch in range(start_epoch, cfg_epochs):
         if profiler.need_profile():
             # TODO: add timer for profile
+            disable = True
             num_steps_per_epoch = None
             dataloader_iter = profiler.get_data_iter()
             epoch_desc = "Profiling"
@@ -289,6 +296,7 @@ def main(args):
         else:
             # == set dataloader to new epoch ==
             sampler.set_epoch(epoch)
+            disable = not dist.get_rank() == 0
             num_steps_per_epoch = len(dataloader)
             dataloader_iter = iter(dataloader)
             epoch_desc = f"Epoch {epoch}"
@@ -298,7 +306,7 @@ def main(args):
         pbar = tqdm(
             enumerate(dataloader_iter, start=start_step),
             desc=epoch_desc,
-            disable=not dist.get_rank() == 0,
+            disable=disable,
             initial=start_step,
             total=num_steps_per_epoch,
         )
@@ -312,7 +320,7 @@ def main(args):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
 
-                    if args.preprocessed_data:
+                    if preprocessed_data:
                         # move data
                         x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
                         y = batch_data.pop("text").to(device, dtype)
@@ -408,7 +416,7 @@ def main(args):
                     f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
 
-        if rank == 0 and not profiler.need_profile():
+        if rank == 0 and not disable:
             logging.info(
                 f"Epoch {epoch}: steps: {num_steps_per_epoch} effective samples: {sampler.effective_samples}, "
                 f"throughput: {sampler.effective_samples / pbar.format_dict['elapsed']} samples/s"
@@ -440,7 +448,6 @@ if __name__ == "__main__":
     parser.add_argument("--data-path", default=None, type=str, help="path to data csv")
     parser.add_argument("--dtype", default="bf16", type=str, help="data type")
     parser.add_argument("--grad-clip", default=0, type=float, help="gradient clipping")
-    parser.add_argument("--plugin", default="zero2", type=str, help="plugin")
     parser.add_argument("--sp-size", default=1, type=int, help="sequence parallelism size")
     parser.add_argument("--reduce-bucket-size-in-m", default=20, type=int, help="reduce bucket size in MB")
     parser.add_argument("--epochs", default=100, type=int, help="number of epochs")
@@ -454,7 +461,7 @@ if __name__ == "__main__":
     parser.add_argument("--mask-ratios", default=None, type=str, help="mask ratios")
     parser.add_argument("--ema-decay", default=0.99, type=float, help="ema decay")
     parser.add_argument("--log-every", default=1, type=int, help="log every")
-    parser.add_argument("--ckpt-every", default=1000, type=int, help="checkpoint every")
+    parser.add_argument("--ckpt-every", default=-1, type=int, help="checkpoint every")
     parser.add_argument("--ckpt-path", default="hpcai-tech/OpenSora-STDiT-v3", type=str, help="path to model ckpt")
 
     parser.add_argument("--lr", default=1e-4, type=float, help="learning rate")
@@ -478,7 +485,7 @@ if __name__ == "__main__":
     parser.add_argument("--auto-grad-accumulation", action="store_true")
     parser.add_argument(
         "--alloc-memory-fraction",
-        default=0.65,
+        default=0.70,
         type=float,
         help="This is an empirical value to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
     )

@@ -1,8 +1,10 @@
 image_mixing_frac: 5
 zipf_offset: 15
-outputs: exp/baseline
-profile_path: exp/profile/baseline
-sp_size: 2
+outputs: exp/dynamic_ga
+profile_path: exp/profile/dynamic_ga
+dynamic_sp: true
+dynamic_recompute: true
+auto_grad_accumulation: true
 dummy_dataset: true
 
 
