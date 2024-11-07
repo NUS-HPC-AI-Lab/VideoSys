@@ -1,10 +1,8 @@
 image_mixing_frac: 5
 zipf_offset: 15
-outputs: exp/dynamic_sp_ga
-profile_path: exp/profile/dynamic_sp_ga
+outputs: exp/dynamic_sp
+profile_path: exp/profile/dynamic_sp
 dynamic_sp: true
-dynamic_recompute: false
-auto_grad_accumulation: true
 dummy_dataset: true
 dummy_data_size: 4000
 
@@ -43,9 +41,14 @@ bucket_config:
   "720p": {1: [1.0, 14], 51: [1.0, 1], 102: [1.0, 1], 204: [1.0, 1], 408: [1.0, 1]}
 
 # override default common ar
-# common_ar:
-#   "144p": {"1.78": [256, 144]}
-#   "720p": {"1.00": [960, 960]}
+# for benchmark, we use single ar for all resolutions
+# otherwise the data will be too sparse
+common_ar:
+  "144p": {"0.56": [144, 256]}
+  "240p": {"0.56": [240, 426]}
+  "360p": {"0.56": [360, 640]}
+  "480p": {"0.56": [480, 854]}
+  "720p": {"0.56": [720, 1280]}
 
 # mask
 mask_ratios: {
