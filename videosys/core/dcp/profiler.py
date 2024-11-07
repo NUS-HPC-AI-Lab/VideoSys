@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from tqdm import tqdm
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from itertools import accumulate
@@ -224,6 +225,7 @@ class Profiler:
     ############################################################
     # init methods
     def _load_profile(self):
+        self.profile_pbar = None
         if not self.do_profile:
             assert os.path.isdir(self.profile_path)
             self.profile_results = {}
@@ -283,14 +285,14 @@ class Profiler:
         self.detail_results = []
         self.dp_results = []
 
-        if self.logger is not None:
-            self.logger.info(f"Profile results: {pformat(self.profile_results, sort_dicts=False)}")
+        logging.info(f"Profile results: {pformat(self.profile_results, sort_dicts=False)}")
 
     def interpolate_profile_results(self):
         if not self.dynamic_recompute and not self.auto_grad_acc:
-            self.logger.info(
-                f">>> [Profiling] Profile results before adjustment: {pformat(self.profile_results, sort_dicts=False)}"
-            )
+            if self.logger:
+                self.logger.info(
+                    f">>> [Profiling] Profile results before adjustment: {pformat(self.profile_results, sort_dicts=False)}"
+                )
 
             def score_func(new_time, median_time):
                 if not self.dynamic_sp:
@@ -378,8 +380,7 @@ class Profiler:
 
     def update_next_data_plan(self):
         self.next_bucket_idx += 1
-        if self.logger is not None:
-            self.logger.info(f">>> [Profiling] Progress: {self.next_bucket_idx}/{self.bucket_partition_boundary}")
+        self.profile_pbar.update()
 
         self.next_bs = 1
         self.next_warmup_iter = not self.auto_grad_acc
@@ -395,11 +396,12 @@ class Profiler:
     def finalize_profile(self):
         assert self._need_profile
         self._need_profile = False
+        self.profile_pbar.close()
 
         # exit profiling, dump results and clean up
         self.global_timer.__exit__(0, 0, 0)
-        self.logger.info(f">>> [Profiling] Profile cost: {self.global_timer.elapsed_time:.2f} s")
-        self.logger.info(f">>> [Profiling] Profile results: {pformat(self.profile_results, sort_dicts=False)}")
+        logging.info(f">>> [Profiling] Profile cost: {self.global_timer.elapsed_time:.2f} s")
+        logging.info(f">>> [Profiling] Profile results: {pformat(self.profile_results, sort_dicts=False)}")
 
         if dist.get_rank() == 0:
             df = pd.DataFrame(
@@ -434,7 +436,14 @@ class Profiler:
 
     def init_profiler(self,):
         torch.cuda.set_per_process_memory_fraction(self.alloc_fraction)
-
+        self.profile_pbar = tqdm(
+            range(self.next_bucket_idx, self.bucket_partition_boundary),
+            desc="Profiling",
+            disable=dist.get_rank() != 0,
+            initial=self.next_bucket_idx,
+            total=self.bucket_partition_boundary-self.next_bucket_idx,
+        )
+        
         enable_profile(list(self.module_dict.keys()))
         self.profile_ctx = get_profile_context()
 
@@ -458,8 +467,9 @@ class Profiler:
         profile_unit_grad_in_bytes = torch.tensor([self.profile_unit_grad_in_bytes], device=torch.cuda.current_device())
         dist.all_reduce(profile_unit_grad_in_bytes, op=dist.ReduceOp.MAX)
         self.profile_unit_grad_in_bytes = int(profile_unit_grad_in_bytes.item())
-        self.logger.info(f">>> [Profiling] Profile with grad accumulation, unit grad in bytes: {self.profile_unit_grad_in_bytes} (expect {21255696*2*2})")
-                    
+        if self.logger:
+            self.logger.info(f">>> [Profiling] Profile with grad accumulation, unit grad in bytes: {self.profile_unit_grad_in_bytes} (expect {21255696*2*2})")
+
     @contextmanager
     def profile(self, batch, model, gas):
         if not self.need_profile():
@@ -477,10 +487,10 @@ class Profiler:
         if warmup_iter or (self.auto_grad_acc and gas == 0):
             clean_cache()
 
-        # if self.logger is not None:
-        #     self.get_memory_stats(
-        #         f"START bucket {ar_name} {num_frame} {bs} with sp {sp_size} is wamrup: {warmup_iter}, gas: {gas}"
-        #     )
+        if self.logger:
+            self.get_memory_stats(
+                f"START bucket {ar_name} {num_frame} {bs} with sp {sp_size} is wamrup: {warmup_iter}, gas: {gas}"
+            )
 
         pass_depth_loop = True
         try:
@@ -663,9 +673,10 @@ class Profiler:
                         )
                 else:
                     assert self.latest_raw_result is not None
-                    self.logger.info(
-                        f">>> [Profiling] STOP BS search for bucket {ar_name} {num_frame} at {bs} sp {sp_size}"
-                    )
+                    if self.logger:
+                        self.logger.info(
+                            f">>> [Profiling] STOP BS search for bucket {ar_name} {num_frame} at {bs} sp {sp_size}"
+                        )
 
                     ar_name = self.latest_raw_result.ar_name
                     num_frame = self.latest_raw_result.num_frame

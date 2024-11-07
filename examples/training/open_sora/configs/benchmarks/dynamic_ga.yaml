@@ -2,7 +2,6 @@ image_mixing_frac: 5
 zipf_offset: 15
 outputs: exp/dynamic_ga
 profile_path: exp/profile/dynamic_ga
-verbose: true
 dynamic_sp: true
 dynamic_recompute: true
 auto_grad_accumulation: true

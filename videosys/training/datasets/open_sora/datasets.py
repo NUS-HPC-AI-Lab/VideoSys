@@ -254,174 +254,146 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
         self.image_size = image_size
 
     def _build_dummy_dataset(self, bucket_config, distribution, zipf_offset):
-        if not self.preprocessed_data:
-            org_meta_data = read_file(self.data_path)
+        self.get_text = False
+        assert bucket_config is not None
 
-            # get path and text fields
-            idx = self.generator.integers(low=0, high=len(org_meta_data), size=(self.data_size,))
-            self.data = org_meta_data.iloc[idx, :2]
-            self.data.reset_index(drop=True, inplace=True)
+        data, frame_data = [], []
+        log_str = "build dummy dataset:"
+        if self.res_scale is not None and self.frame_scale is not None:
+            res_list, frame_list = set(), set()
+            data_dict = {}
+            for ar_name in bucket_config:
+                res_list.add(COMMON_AR[ar_name][0])
+                for num_frame in bucket_config[ar_name]:
+                    if bucket_config[ar_name][num_frame][1] is not None:
+                        frame_list.add(num_frame)
+                        data_dict[(ar_name, num_frame)] = {}
+            res_list = np.array(sorted(list(res_list)))
+            frame_list = np.array(sorted(list(frame_list)))
 
-            # get num_frames
-            # current only support <= 600 frames
-            rand_frames = self.generator.integers(low=0, high=600 // 51, size=(self.data_size,)) * 51
-            rand_frames[rand_frames == 0] = 1
-            self.data["num_frames"] = rand_frames
+            res_weights = res_list / max(res_list) * self.res_scale
+            frame_weights = np.sqrt(np.sqrt(frame_list / max(frame_list))) * self.frame_scale
 
-            # get height, width
-            ar_df = []
-            for each in ASPECT_RATIOS:
-                ar_df.extend(ASPECT_RATIOS[each][1].values())
-            ar_df = pd.DataFrame(ar_df, columns=["height", "width"])
-            idx = self.generator.integers(low=0, high=len(ar_df), size=(self.data_size,))
-            ar_df = ar_df.iloc[idx]
-            ar_df.reset_index(drop=True, inplace=True)
+            total = 0.0
+            for ar_name, num_frame in data_dict:
+                res_w = res_weights[np.where(res_list == COMMON_AR[ar_name][0])[0][0]]
+                frame_w = frame_weights[np.where(frame_list == num_frame)[0][0]]
+                prob = half_normal_pdf(res_w) * half_normal_pdf(frame_w)
+                data_dict[(ar_name, num_frame)] = dict(
+                    res_weight=res_w,
+                    frame_weight=frame_w,
+                    prob=prob,
+                )
+                total += prob
 
-            self.data["height"] = ar_df["height"]
-            self.data["width"] = ar_df["width"]
-            self.data["id"] = np.arange(len(self.data))
-            self.get_text = "text" in self.data.columns
+            img_cnt, vid_cnt = 0, 0
+            keys = sorted(data_dict.keys(), key=lambda x: COMMON_AR[x[0]][0] * x[1])
+            for ar_name, num_frame in keys:
+                prob = data_dict[(ar_name, num_frame)]["prob"] / total
+                data_dict[(ar_name, num_frame)]["prob"] = prob
+
+                cnt = int(prob * self.data_size)
+                data_dict[(ar_name, num_frame)]["cnt"] = cnt
+
+                log_str += f"\n ({ar_name}, {num_frame}), cnt: {cnt}"
+                if num_frame == 1:
+                    img_cnt += cnt
+                else:
+                    vid_cnt += cnt
+
+                height_width_pool = pd.DataFrame(COMMON_AR[ar_name][1].values(), columns=["height", "width"])
+                idx = self.generator.integers(low=0, high=len(height_width_pool), size=(cnt,))
+                bucket_data = height_width_pool.iloc[idx]
+                bucket_data.reset_index(drop=True, inplace=True)
+                data.append(bucket_data)
+                frame_data.extend([num_frame] * cnt)
+            log_str += f"\nimg_cnt: {img_cnt}, vid_cnt: {vid_cnt}, ratio: {img_cnt / vid_cnt}"
         else:
-            self.get_text = False
-            assert bucket_config is not None
+            # collect valid bucket candidate, only consider ar_name and num_frame
+            img_candidates, vid_candidates = [], []
+            for ar_name in bucket_config:
+                for num_frame in bucket_config[ar_name]:
+                    if bucket_config[ar_name][num_frame][1] is not None:
+                        if num_frame == 1:
+                            img_candidates.append((ar_name, num_frame))
+                        else:
+                            vid_candidates.append((ar_name, num_frame))
+            # sort by total pixels = num_frame * pixels
+            vid_candidates = sorted(vid_candidates, key=lambda x: x[1] * COMMON_AR[x[0]][0])
+            img_candidates = sorted(img_candidates, key=lambda x: COMMON_AR[x[0]][0])
 
-            data, frame_data = [], []
-            log_str = "build dummy dataset:"
-            if self.res_scale is not None and self.frame_scale is not None:
-                res_list, frame_list = set(), set()
-                data_dict = {}
-                for ar_name in bucket_config:
-                    res_list.add(COMMON_AR[ar_name][0])
-                    for num_frame in bucket_config[ar_name]:
-                        if bucket_config[ar_name][num_frame][1] is not None:
-                            frame_list.add(num_frame)
-                            data_dict[(ar_name, num_frame)] = {}
-                res_list = np.array(sorted(list(res_list)))
-                frame_list = np.array(sorted(list(frame_list)))
-
-                res_weights = res_list / max(res_list) * self.res_scale
-                frame_weights = np.sqrt(np.sqrt(frame_list / max(frame_list))) * self.frame_scale
-
-                total = 0.0
-                for ar_name, num_frame in data_dict:
-                    res_w = res_weights[np.where(res_list == COMMON_AR[ar_name][0])[0][0]]
-                    frame_w = frame_weights[np.where(frame_list == num_frame)[0][0]]
-                    prob = half_normal_pdf(res_w) * half_normal_pdf(frame_w)
-                    data_dict[(ar_name, num_frame)] = dict(
-                        res_weight=res_w,
-                        frame_weight=frame_w,
-                        prob=prob,
+            if self.image_mixing_type == "inclusive":
+                if self.image_mixing_frac < 0:
+                    img_size = int(
+                        (len(img_candidates) / (len(vid_candidates) + len(img_candidates))) * self.data_size
                     )
-                    total += prob
+                    vid_size = self.data_size - img_size
+                else:
+                    assert self.image_mixing_frac <= 1.0
+                    img_size = int(self.image_mixing_frac * self.data_size)
+                    vid_size = self.data_size - img_size
+            elif self.image_mixing_type == "exclusive":
+                assert self.image_mixing_frac >= 0
+                img_size = int(self.image_mixing_frac * self.data_size)
+                vid_size = self.data_size
+            else:
+                raise ValueError(f"unsupported image mixing type: {self.image_mixing_type}")
 
-                img_cnt, vid_cnt = 0, 0
-                keys = sorted(data_dict.keys(), key=lambda x: COMMON_AR[x[0]][0] * x[1])
-                for ar_name, num_frame in keys:
-                    prob = data_dict[(ar_name, num_frame)]["prob"] / total
-                    data_dict[(ar_name, num_frame)]["prob"] = prob
+            if distribution == "uniform":
+                idx = self.generator.integers(low=0, high=len(img_candidates), size=(img_size,))
+                img_candidate_cnts = np.bincount(idx, minlength=len(img_candidates))
 
-                    cnt = int(prob * self.data_size)
-                    data_dict[(ar_name, num_frame)]["cnt"] = cnt
+                idx = self.generator.integers(low=0, high=len(vid_candidates), size=(vid_size,))
+                vid_candidate_cnts = np.bincount(idx, minlength=len(vid_candidates))
 
-                    log_str += f"\n ({ar_name}, {num_frame}), cnt: {cnt}"
-                    if num_frame == 1:
-                        img_cnt += cnt
-                    else:
-                        vid_cnt += cnt
+            elif distribution == "zipf":
+                zipf_alpha = 1.05
+                # https://en.wikipedia.org/wiki/Zipf%27s_law#Formal_definition
+                ranks = np.power(np.arange(1, len(img_candidates) + 1 + zipf_offset), zipf_alpha)
+                H_N_s = np.sum(1 / ranks)
+                img_candidate_prob = 1 / (ranks * H_N_s)
+                img_candidate_prob = img_candidate_prob[zipf_offset:]
+                img_candidate_cnts = img_size * img_candidate_prob / np.sum(img_candidate_prob)
 
+                img_candidate_cnts = np.round(img_candidate_cnts).astype(int)
+                if len(img_candidate_cnts) > 0:
+                    img_candidate_cnts[0] += img_size - np.sum(img_candidate_cnts)
+
+                ranks = np.power(np.arange(1, len(vid_candidates) + 1 + zipf_offset), zipf_alpha)
+                H_N_s = np.sum(1 / ranks)
+                vid_candidate_prob = 1 / (ranks * H_N_s)
+                vid_candidate_prob = vid_candidate_prob[zipf_offset:]
+                vid_candidate_cnts = vid_size * vid_candidate_prob / np.sum(vid_candidate_prob)
+
+                vid_candidate_cnts = np.round(vid_candidate_cnts).astype(int)
+                if len(vid_candidate_cnts) > 0:
+                    vid_candidate_cnts[0] += vid_size - np.sum(vid_candidate_cnts)
+            else:
+                raise ValueError(f"unsupported distributionL {distribution}")
+
+            for candidates, candidate_cnts in zip(
+                [img_candidates, vid_candidates], [img_candidate_cnts, vid_candidate_cnts]
+            ):
+                for bucket, cnt in zip(candidates, candidate_cnts):
+                    log_str += f"\nbucket: {bucket}, cnt: {cnt}"
+
+                    ar_name, num_frame = bucket
                     height_width_pool = pd.DataFrame(COMMON_AR[ar_name][1].values(), columns=["height", "width"])
                     idx = self.generator.integers(low=0, high=len(height_width_pool), size=(cnt,))
                     bucket_data = height_width_pool.iloc[idx]
                     bucket_data.reset_index(drop=True, inplace=True)
                     data.append(bucket_data)
                     frame_data.extend([num_frame] * cnt)
-                log_str += f"\nimg_cnt: {img_cnt}, vid_cnt: {vid_cnt}, ratio: {img_cnt / vid_cnt}"
-            else:
-                # collect valid bucket candidate, only consider ar_name and num_frame
-                img_candidates, vid_candidates = [], []
-                for ar_name in bucket_config:
-                    for num_frame in bucket_config[ar_name]:
-                        if bucket_config[ar_name][num_frame][1] is not None:
-                            if num_frame == 1:
-                                img_candidates.append((ar_name, num_frame))
-                            else:
-                                vid_candidates.append((ar_name, num_frame))
-                # sort by total pixels = num_frame * pixels
-                vid_candidates = sorted(vid_candidates, key=lambda x: x[1] * COMMON_AR[x[0]][0])
-                img_candidates = sorted(img_candidates, key=lambda x: COMMON_AR[x[0]][0])
 
-                if self.image_mixing_type == "inclusive":
-                    if self.image_mixing_frac < 0:
-                        img_size = int(
-                            (len(img_candidates) / (len(vid_candidates) + len(img_candidates))) * self.data_size
-                        )
-                        vid_size = self.data_size - img_size
-                    else:
-                        assert self.image_mixing_frac <= 1.0
-                        img_size = int(self.image_mixing_frac * self.data_size)
-                        vid_size = self.data_size - img_size
-                elif self.image_mixing_type == "exclusive":
-                    assert self.image_mixing_frac >= 0
-                    img_size = int(self.image_mixing_frac * self.data_size)
-                    vid_size = self.data_size
-                else:
-                    raise ValueError(f"unsupported image mixing type: {self.image_mixing_type}")
+        data = pd.concat(data, ignore_index=True)
+        data.reset_index(drop=True, inplace=True)
 
-                if distribution == "uniform":
-                    idx = self.generator.integers(low=0, high=len(img_candidates), size=(img_size,))
-                    img_candidate_cnts = np.bincount(idx, minlength=len(img_candidates))
-
-                    idx = self.generator.integers(low=0, high=len(vid_candidates), size=(vid_size,))
-                    vid_candidate_cnts = np.bincount(idx, minlength=len(vid_candidates))
-
-                elif distribution == "zipf":
-                    zipf_alpha = 1.05
-                    # https://en.wikipedia.org/wiki/Zipf%27s_law#Formal_definition
-                    ranks = np.power(np.arange(1, len(img_candidates) + 1 + zipf_offset), zipf_alpha)
-                    H_N_s = np.sum(1 / ranks)
-                    img_candidate_prob = 1 / (ranks * H_N_s)
-                    img_candidate_prob = img_candidate_prob[zipf_offset:]
-                    img_candidate_cnts = img_size * img_candidate_prob / np.sum(img_candidate_prob)
-
-                    img_candidate_cnts = np.round(img_candidate_cnts).astype(int)
-                    if len(img_candidate_cnts) > 0:
-                        img_candidate_cnts[0] += img_size - np.sum(img_candidate_cnts)
-
-                    ranks = np.power(np.arange(1, len(vid_candidates) + 1 + zipf_offset), zipf_alpha)
-                    H_N_s = np.sum(1 / ranks)
-                    vid_candidate_prob = 1 / (ranks * H_N_s)
-                    vid_candidate_prob = vid_candidate_prob[zipf_offset:]
-                    vid_candidate_cnts = vid_size * vid_candidate_prob / np.sum(vid_candidate_prob)
-
-                    vid_candidate_cnts = np.round(vid_candidate_cnts).astype(int)
-                    if len(vid_candidate_cnts) > 0:
-                        vid_candidate_cnts[0] += vid_size - np.sum(vid_candidate_cnts)
-                else:
-                    raise ValueError(f"unsupported distributionL {distribution}")
-
-                for candidates, candidate_cnts in zip(
-                    [img_candidates, vid_candidates], [img_candidate_cnts, vid_candidate_cnts]
-                ):
-                    for bucket, cnt in zip(candidates, candidate_cnts):
-                        log_str += f"\nbucket: {bucket}, cnt: {cnt}"
-
-                        ar_name, num_frame = bucket
-                        height_width_pool = pd.DataFrame(COMMON_AR[ar_name][1].values(), columns=["height", "width"])
-                        idx = self.generator.integers(low=0, high=len(height_width_pool), size=(cnt,))
-                        bucket_data = height_width_pool.iloc[idx]
-                        bucket_data.reset_index(drop=True, inplace=True)
-                        data.append(bucket_data)
-                        frame_data.extend([num_frame] * cnt)
-
-            data = pd.concat(data, ignore_index=True)
-            data.reset_index(drop=True, inplace=True)
-
-            data["num_frames"] = np.array(frame_data)
-            data["id"] = np.arange(len(data))
-            self.data = data
-            log_str += f"\ndefault data_size: {self.data_size}, full data size: {data.shape[0]}"
-            logging.info(log_str)
-            self.data_size = data.shape[0]
+        data["num_frames"] = np.array(frame_data)
+        data["id"] = np.arange(len(data))
+        self.data = data
+        log_str += f"\ndefault data_size: {self.data_size}, full data size: {data.shape[0]}"
+        logging.info(log_str)
+        self.data_size = data.shape[0]
 
     def __getitem__(self, index):
         if isinstance(index, int):
@@ -433,52 +405,25 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
         ar = height / width
 
         video_fps = 24
+        ret = {
+            # "id": index,
+            "num_frames": num_frames,
+            "height": height,
+            "width": width,
+            "ar": ar,
+            "fps": video_fps,
+        }
         if not self.preprocessed_data:
-            sample = self.data.iloc[index]
-            path = sample["path"]
-
-            vframes, vinfo = read_video(path, backend="av")
-            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
-
-            # Sampling video frames
-            video = temporal_random_crop(vframes, num_frames, self.frame_interval)
-            video = video.clone()
-            del vframes
-
-            video_fps = video_fps // self.frame_interval
-
-            # transform
-            transform = get_transforms_video(self.transform_name, (height, width))
-            video = transform(video)  # T C H W
-            # TCHW -> CTHW
-            video = video.permute(1, 0, 2, 3)
-
-            ret = {
-                "video": video,
-                "num_frames": num_frames,
-                "height": height,
-                "width": width,
-                "ar": ar,
-                "fps": video_fps,
-            }
-            if self.get_text:
-                ret["text"] = sample["text"]
+            ret["video"] = torch.randn(3, num_frames, height, width, generator=self.torch_generator)
+            ret["text"] = "dummy text"
         else:
             nf = 1
             if num_frames > 1:
                 nf = num_frames * 5 // 17
             self.torch_generator.manual_seed(self.seed + index + self.data_size)
-            ret = {
-                # "id": index,
-                "video": torch.randn(4, nf, height // 8, width // 8, generator=self.torch_generator),
-                "text": torch.rand(1, 300, 4096, generator=self.torch_generator),
-                "mask": torch.ones(300, dtype=torch.long),
-                "num_frames": num_frames,
-                "height": height,
-                "width": width,
-                "ar": ar,
-                "fps": video_fps,
-            }
+            ret["video"] = torch.randn(4, nf, height // 8, width // 8, generator=self.torch_generator)
+            ret["text"] = torch.rand(1, 300, 4096, generator=self.torch_generator)
+            ret["mask"] = torch.ones(300, dtype=torch.long)
 
         ret["ar_name"] = ar_name
         ret["sp_size"] = sp_size
