@@ -1,6 +1,6 @@
+import logging
 import time
 from enum import Enum, auto
-import logging
 
 import torch
 from torch.utils.checkpoint import checkpoint
@@ -38,7 +38,7 @@ class ProfileContext:
         self.bwd_time_record = dict()
         self.input_memory = dict()
         self.layer_memory = dict()
-        
+
         for k in self.module_keys:
             self.fwd_time_record[k] = 0
             self.bwd_time_record[k] = 0
@@ -134,9 +134,9 @@ def get_profile_context():
 
 
 def recompute_func(module, *args):
-    args = add_timestamp(module.__profile_module_key, *args, tick=0)    
+    args = add_timestamp(module.__profile_module_key, *args, tick=0)
     args = module(*args)
-    
+
     ret_as_tuple = True
     if not isinstance(args, tuple):
         ret_as_tuple = False

@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-from tqdm import tqdm
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from itertools import accumulate
@@ -12,6 +11,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
+from tqdm import tqdm
 
 from videosys.core.dcp.recompute import disable_profile, enable_profile, get_profile_context
 from videosys.core.distributed.comm import _switch_sp_cp_bwd
@@ -434,16 +434,18 @@ class Profiler:
         self.global_timer = None
         clean_cache()
 
-    def init_profiler(self,):
+    def init_profiler(
+        self,
+    ):
         torch.cuda.set_per_process_memory_fraction(self.alloc_fraction)
         self.profile_pbar = tqdm(
             range(self.next_bucket_idx, self.bucket_partition_boundary),
             desc="Profiling",
             disable=dist.get_rank() != 0,
             initial=self.next_bucket_idx,
-            total=self.bucket_partition_boundary-self.next_bucket_idx,
+            total=self.bucket_partition_boundary - self.next_bucket_idx,
         )
-        
+
         enable_profile(list(self.module_dict.keys()))
         self.profile_ctx = get_profile_context()
 
@@ -457,7 +459,7 @@ class Profiler:
             assert len(module_list) == self.total_layers
 
             for module in module_list:
-                setattr(module, '__profile_module_key', name)
+                setattr(module, "__profile_module_key", name)
 
             if self.auto_grad_acc:
                 # only a single module
@@ -468,7 +470,9 @@ class Profiler:
         dist.all_reduce(profile_unit_grad_in_bytes, op=dist.ReduceOp.MAX)
         self.profile_unit_grad_in_bytes = int(profile_unit_grad_in_bytes.item())
         if self.logger:
-            self.logger.info(f">>> [Profiling] Profile with grad accumulation, unit grad in bytes: {self.profile_unit_grad_in_bytes} (expect {21255696*2*2})")
+            self.logger.info(
+                f">>> [Profiling] Profile with grad accumulation, unit grad in bytes: {self.profile_unit_grad_in_bytes} (expect {21255696*2*2})"
+            )
 
     @contextmanager
     def profile(self, batch, model, gas):
@@ -652,7 +656,7 @@ class Profiler:
 
                     if self.dynamic_recompute:
                         self.profile_results[ar_name][num_frame]["recompute_cfg"] = {
-                            k: best[i+8] for i, k in enumerate(row.submodule_fields)
+                            k: best[i + 8] for i, k in enumerate(row.submodule_fields)
                         }
 
                     self.dp_results = []

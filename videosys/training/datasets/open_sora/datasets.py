@@ -7,7 +7,7 @@ import torch
 from PIL import ImageFile
 from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
 
-from .aspect import ASPECT_RATIOS, COMMON_AR
+from .aspect import COMMON_AR
 from .read_video import read_video
 from .utils import (
     VID_EXTENSIONS,
@@ -324,9 +324,7 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
 
             if self.image_mixing_type == "inclusive":
                 if self.image_mixing_frac < 0:
-                    img_size = int(
-                        (len(img_candidates) / (len(vid_candidates) + len(img_candidates))) * self.data_size
-                    )
+                    img_size = int((len(img_candidates) / (len(vid_candidates) + len(img_candidates))) * self.data_size)
                     vid_size = self.data_size - img_size
                 else:
                     assert self.image_mixing_frac <= 1.0

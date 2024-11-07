@@ -85,10 +85,11 @@ def main(args):
     # =======================================================
     # bonus: profile for better batching
     # =======================================================
+    preprocessed_data = args.preprocessed_data
     model_config = STDiT3Config.from_pretrained(args.ckpt_path)
     if args.profile_path is None or not os.path.exists(args.profile_path):
         do_profile = True
-        args.preprocessed_data = True
+        preprocessed_data = True
         logging.info(
             f"[ATTENTION!] Profile file is not found at `{args.profile_path}`! Profiling will be performed then exit."
         )
@@ -125,7 +126,7 @@ def main(args):
             seed=args.seed,
             data_path=args.data_path,
             transform_name="resize_crop",
-            preprocessed_data=args.preprocessed_data,
+            preprocessed_data=preprocessed_data,
             bucket_config=args.bucket_config,
             distribution=args.distribution,
             zipf_offset=args.zipf_offset,
@@ -134,7 +135,7 @@ def main(args):
         )
     else:
         dataset = VariableVideoTextDataset(
-            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=args.preprocessed_data
+            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=preprocessed_data
         )
     logging.info(f"Dataset contains {len(dataset)} samples.")
 
@@ -160,7 +161,7 @@ def main(args):
     logging.info("Building models...")
 
     # == build text-encoder and vae ==
-    if not args.preprocessed_data:
+    if not preprocessed_data:
         text_encoder = T5EncoderModel.from_pretrained("DeepFloyd/t5-v1_1-xxl", torch_dtype=dtype).to(device).eval()
         tokenizer = AutoTokenizer.from_pretrained("DeepFloyd/t5-v1_1-xxl")
         vae = (
@@ -243,10 +244,12 @@ def main(args):
         optimizer=optimizer,
         config=ds_config,
     )
-    profiler.register_modules({
-        "spatial": model.module.spatial_blocks,
-        "temporal": model.module.temporal_blocks,
-    })
+    profiler.register_modules(
+        {
+            "spatial": model.module.spatial_blocks,
+            "temporal": model.module.temporal_blocks,
+        }
+    )
     torch.set_default_dtype(torch.float)
     logging.info("Boosting model for distributed training")
 
@@ -317,7 +320,7 @@ def main(args):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
 
-                    if args.preprocessed_data:
+                    if preprocessed_data:
                         # move data
                         x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
                         y = batch_data.pop("text").to(device, dtype)
