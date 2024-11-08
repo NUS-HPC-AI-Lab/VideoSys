@@ -65,8 +65,11 @@ class ProfileContext:
         fields = []
         for k in self.module_keys:
             fields.append(k + "_fwd")
+        for k in self.module_keys:
             fields.append(k + "_bwd")
+        for k in self.module_keys:
             fields.append(k + "_input_memory")
+        for k in self.module_keys:
             fields.append(k + "_layer_memory")
         return fields
 

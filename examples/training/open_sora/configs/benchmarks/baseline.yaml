@@ -1,9 +1,9 @@
-image_mixing_frac: 5
 zipf_offset: 15
 outputs: exp/baseline
 profile_path: exp/profile/baseline
-sp_size: 2
+sp_size: 4
 dummy_dataset: true
+dummy_data_size: 4000
 dummy_data_size: 4000
 
 

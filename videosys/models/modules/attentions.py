@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from torch.utils.checkpoint import checkpoint
 from diffusers.models.attention import Attention
 from diffusers.models.attention_processor import AttnProcessor
 from einops import rearrange
@@ -57,7 +58,7 @@ class OpenSoraAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         # flash attn is not memory efficient for small sequences, this is empirical
-        use_flash_attn = True #N > B
+        use_flash_attn = N >= 30
         qkv = self.qkv(x)
         qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
 
@@ -81,7 +82,7 @@ class OpenSoraAttention(nn.Module):
                     
             if self.enable_flash_attn and use_flash_attn:
                 from flash_attn import flash_attn_func
-
+                # print(f"rank: {torch.distributed.get_rank()} Using flash attn with B={B}, N={N}")
                 # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
                 q = q.permute(0, 2, 1, 3)
                 k = k.permute(0, 2, 1, 3)
@@ -94,14 +95,9 @@ class OpenSoraAttention(nn.Module):
                     softmax_scale=self.scale,
                 )
             elif not use_flash_attn:
-                dtype = q.dtype
-                q = q * self.scale
-                attn = q @ k.transpose(-2, -1)  # translate attn to float32
-                attn = attn.to(torch.float32)
-                attn = attn.softmax(dim=-1)
-                attn = attn.to(dtype)  # cast back attn to original dtype
-                attn = self.attn_drop(attn)
-                x = attn @ v
+                # print(f"rank: {torch.distributed.get_rank()} Using torch attn with B={B}, N={N}")
+                # x = self.native_attention(q, k, v)
+                x = checkpoint(self.native_attention, q, k, v, use_reentrant=False)
             else:
                 x = F.scaled_dot_product_attention(q, k, v)
 
@@ -112,6 +108,17 @@ class OpenSoraAttention(nn.Module):
         x = x.reshape(x_output_shape)
         x = self.proj(x)
         x = self.proj_drop(x)
+        return x
+
+    def native_attention(self, q, k, v):
+        dtype = q.dtype
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)  # translate attn to float32
+        attn = attn.to(torch.float32)
+        attn = attn.softmax(dim=-1)
+        attn = attn.to(dtype)  # cast back attn to original dtype
+        attn = self.attn_drop(attn)
+        x = attn @ v
         return x
 
 

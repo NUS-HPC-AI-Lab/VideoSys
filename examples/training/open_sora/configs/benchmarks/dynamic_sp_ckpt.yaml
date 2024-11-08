@@ -1,7 +1,8 @@
 zipf_offset: 15
-outputs: exp/dynamic_sp
-profile_path: exp/profile/dynamic_sp
+outputs: exp/dynamic_sp_ckpt
+profile_path: exp/profile/dynamic_sp_ckpt
 dynamic_sp: true
+dynamic_recompute: true
 dummy_dataset: true
 dummy_data_size: 4000
 
@@ -38,16 +39,6 @@ bucket_config:
   "360p": {1: [1.0, 64], 51: [1.0, 7], 102: [1.0, 4], 204: [1.0, 2], 408: [1.0, 1]}
   "480p": {1: [1.0, 32], 51: [1.0, 4], 102: [1.0, 2], 204: [1.0, 1], 408: [1.0, 1]}
   "720p": {1: [1.0, 14], 51: [1.0, 1], 102: [1.0, 1], 204: [1.0, 1], 408: [1.0, 1]}
-
-# override default common ar
-# for benchmark, we use single ar for all resolutions
-# otherwise the data will be too sparse
-common_ar:
-  "144p": {"0.56": [144, 256]}
-  "240p": {"0.56": [240, 426]}
-  "360p": {"0.56": [360, 640]}
-  "480p": {"0.56": [480, 854]}
-  "720p": {"0.56": [720, 1280]}
 
 # mask
 mask_ratios: {

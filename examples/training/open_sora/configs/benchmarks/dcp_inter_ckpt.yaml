@@ -1,4 +1,3 @@
-image_mixing_frac: 5
 zipf_offset: 15
 outputs: exp/dynamic_ckpt_ga
 profile_path: exp/profile/dynamic_ckpt_ga
