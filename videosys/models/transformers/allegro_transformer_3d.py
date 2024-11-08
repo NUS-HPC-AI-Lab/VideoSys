@@ -63,7 +63,6 @@ from videosys.core.pab_mgr import (
 from videosys.core.parallel_mgr import ParallelManager
 from videosys.utils.logging import logger
 from videosys.utils.utils import batch_func
-from videosys.models.transformers.rsora.rope import PositionGetter3D, RoPE3D
 
 if is_xformers_available():
     import xformers
