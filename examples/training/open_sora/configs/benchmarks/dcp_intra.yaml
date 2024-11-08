@@ -1,7 +1,8 @@
 zipf_offset: 15
-outputs: exp/dynamic_sp
-profile_path: exp/profile/dynamic_sp
+outputs: exp/dcp_intra
+profile_path: exp/profile/dcp_intra
 dynamic_sp: true
+dynamic_recompute: false
 dummy_dataset: true
 dummy_data_size: 4000
 

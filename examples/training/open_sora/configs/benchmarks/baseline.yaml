@@ -4,7 +4,6 @@ profile_path: exp/profile/baseline
 sp_size: 4
 dummy_dataset: true
 dummy_data_size: 4000
-dummy_data_size: 4000
 
 
 # ==== training config ====
