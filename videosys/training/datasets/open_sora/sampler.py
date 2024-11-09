@@ -85,6 +85,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         auto_grad_accumulation: bool = False,
         max_grad_accumulation_steps: int = 2,
         parallel_mgr=None,
+        calculate_imbalance: bool = False,
     ) -> None:
         super().__init__(
             dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last
@@ -95,7 +96,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.last_micro_batch_access_index = 0
         self.approximate_num_batch = None
         self.keep_last = not drop_last
-
         self._get_num_batch_cached_bucket_sample_dict = None
         self.num_bucket_build_workers = num_bucket_build_workers
 
@@ -111,6 +111,8 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.cached_bucket_id_access_order = None
         self.effective_samples = 0
         self.parallel_mgr = parallel_mgr
+        self.calculate_imbalance = calculate_imbalance
+        self.imbalance_list = []
 
     def __iter__(self) -> Iterator[List[int]]:
         if self._get_num_batch_cached_bucket_sample_dict is not None:
@@ -260,17 +262,24 @@ class VariableVideoBatchSampler(DistributedSampler):
                 else:
                     bucket_last_consumed[bucket_id] = bucket_bs
 
+            if self.calculate_imbalance:
+                total_time = []
+                for bucket_id in bucket_access_list:
+                    cur_time = self.profiler.get_execution_time(bucket_id[0], bucket_id[1])
+                    total_time.append(cur_time)
+                max_time = max(total_time)
+                imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
+                imbalance = imbalance / max_time
+                self.imbalance_list.append(imbalance)
+                logging.info(
+                    f"iter {i}, cur imbalance: {imbalance:.4f}, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}"
+                )
+
             # compute the range of data accessed by each GPU
             bucket_id = bucket_access_list[self.rank]
             boundary = bucket_access_boundaries[self.rank]
             cur_micro_batch = bucket_sample_dict[bucket_id][boundary[0] : boundary[1]]
 
-            # DEBUG purpose
-            # print(f"rank: {self.rank}, iter {i} bucket_id: {bucket_id}, len: {len(cur_micro_batch)}, expect bs: {self.get_batch_size(bucket_id)}, consumed: {boundary}, len: {len(bucket_sample_dict[bucket_id])}")
-            # acc_num_samples += len(cur_micro_batch)
-            # assert len(cur_micro_batch) == self.get_batch_size(
-            #     bucket_id
-            # ), f"rank: {self.rank}, iter {i} bucket_id: {bucket_id}, len: {len(cur_micro_batch)}, expect bs: {self.get_batch_size(bucket_id)}, consumed: {boundary}, len: {len(bucket_sample_dict[bucket_id])}"
             # encode t, h, w into the sample index
             real_t, real_h, real_w = self.bucket.get_thw(bucket_id)
             cur_micro_batch = [
@@ -278,7 +287,10 @@ class VariableVideoBatchSampler(DistributedSampler):
             ]
             yield cur_micro_batch
 
-        # print(f"rank: {self.rank}, acc_num_samples: {acc_num_samples}")
+        if self.calculate_imbalance:
+            logging.info(f"Mean imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
+            self.imbalance_list = []
+
         self.reset()
 
     def get_batch_size(self, bucket_id):
@@ -375,14 +387,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                 if max_sp_idx == 0:
                     # if false, cur_first_batch_bucket_id_list will be discarded
                     has_one_more_batch = False
-
-                    # if self.rank == 0:
-                    #     log_str = f"exit batch scheduling, cur_first_batch_bucket_id_list: {pformat(cur_first_batch_bucket_id_list, sort_dicts=False)}\n"
-                    #     log_str += f"remain_gpus: {remain_gpus}, sp_size_list: {pformat(sp_size_list, sort_dicts=False)}\n"
-                    #     log_str += f"sp_bucket_map: {pformat(sp_bucket_map, sort_dicts=False)}\nbucket access:\n"
-                    #     for bucket_id in bucket_sample_dict_last_access:
-                    #         log_str += f"{bucket_id}: {bucket_sample_dict_last_access[bucket_id]}/{len(bucket_sample_dict[bucket_id])}\n"
-                    #     print(f"{log_str}")
                     break
 
                 # select sp size
@@ -397,7 +401,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                             idx = k
                             break
                     idx = sp_size_list.index(idx)
-                    # idx = torch.randint(low=0, high=max_sp_idx, size=(1,), generator=self.generator).item()
                 else:
                     idx = max_sp_idx - 1
                 sp = sp_size_list[idx]
@@ -673,10 +676,12 @@ class VariableVideoBatchSampler(DistributedSampler):
             this_bucket_acc_list = []
             for bucket_plan in cur_batch_bucket_id_list:
                 self.effective_samples += bucket_plan.batch_size
-                this_bucket_acc_list.append([(bucket_plan.bucket_id, bucket_plan.batch_size, bucket_plan.sp_size)])
+                this_bucket_acc_list.append(
+                    [(bucket_plan.bucket_id, bucket_plan.batch_size, bucket_plan.sp_size, bucket_plan.exec_time)]
+                )
             bucket_id_access_order.append(this_bucket_acc_list)
             logging.info(
-                f"iter {len(bucket_id_access_order)}: buckets: {[(each.bucket_id, each.batch_size, each.sp_size) for each in cur_batch_bucket_id_list]}"
+                f"iter {len(bucket_id_access_order)}: buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
             )
 
         return bucket_id_access_order
@@ -737,6 +742,25 @@ class VariableVideoBatchSampler(DistributedSampler):
                 bucket_id_map_list.extend([bucket_list] * sp_size)
                 bucket_access_boundaries.extend([boundary_gas_list] * sp_size)
 
+            if self.calculate_imbalance:
+                total_time = []
+                for bucket_list in bucket_id_map_list:
+                    gas = len(bucket_list)
+                    bucket_id = bucket_list[0][0]
+                    if is_sp_balance_iter:
+                        cur_time = bucket_list[0][3]
+                    else:
+                        cur_time = self.profiler.get_execution_time(bucket_id[0], bucket_id[1])
+                    cur_time = cur_time * gas
+                    total_time.append(cur_time)
+                max_time = max(total_time)
+                imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
+                imbalance = imbalance / max_time
+                self.imbalance_list.append(imbalance)
+                logging.info(
+                    f"iter {i}, cur imbalance: {imbalance:.4f}, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}"
+                )
+
             assert len(sp_size_map_list) == wsize
             sp_size = sp_size_map_list[rank]
             bucket_list = bucket_id_map_list[rank]
@@ -760,6 +784,10 @@ class VariableVideoBatchSampler(DistributedSampler):
                 len(cur_micro_batches) > 0
             ), f"rank: {rank} iter: {i}, bucket_id_map_list: {bucket_id_map_list}, bucket_access_boundaries: {bucket_access_boundaries}"
             yield cur_micro_batches
+
+        if self.calculate_imbalance:
+            logging.info(f"Mean imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
+            self.imbalance_list = []
 
         self.reset()
 
