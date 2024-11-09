@@ -58,52 +58,52 @@ VideoSys supports many diffusion models with our various acceleration techniques
         <th rowspan="2">Model</th>
         <th rowspan="2">Train</th>
         <th rowspan="2">Infer</th>
-        <th colspan="2">Acceleration Techniques</th>
-        <th rowspan="2">Usage</th>
+        <th colspan="3">Acceleration Techniques</th>
     </tr>
     <tr>
         <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#dyanmic-sequence-parallelism-dsp-paperdoc">DSP</a></th>
         <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc">PAB</a></th>
+        <th><a href="https://github.com/NUS-HPC-AI-Lab/VideoSys?tab=readme-ov-file#pyramid-attention-broadcast-pab-blogdoc">DCP</a></th>
     </tr>
     <tr>
         <td>Vchitect [<a href="https://github.com/Vchitect/Vchitect-2.0">source</a>]</td>
         <td align="center">/</td>
+        <td align="center"><a href="./examples/inference/vchitect/sample.py">Code</a></td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center">✅</td>
-        <td align="center"><a href="./examples/vchitect/sample.py">Code</a></td>
+        <td align="center">/</td>
     </tr>
     <tr>
         <td>CogVideoX [<a href="https://github.com/THUDM/CogVideo">source</a>]</td>
+        <td align="center">🟡</td>
+        <td align="center"><a href="./examples/inference/cogvideox/sample.py">Code</a></td>
         <td align="center">/</td>
         <td align="center">✅</td>
-        <td align="center">/</td>
-        <td align="center">✅</td>
-        <td align="center"><a href="./examples/cogvideox/sample.py">Code</a></td>
+        <td align="center">🟡</td>
     </tr>
     <tr>
         <td>Latte [<a href="https://github.com/Vchitect/Latte">source</a>]</td>
         <td align="center">/</td>
+        <td align="center"><a href="./examples/inference/latte/sample.py">Code</a></td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center">✅</td>
-        <td align="center"><a href="./examples/latte/sample.py">Code</a></td>
+        <td align="center">/</td>
     </tr>
     <tr>
         <td>Open-Sora-Plan [<a href="https://github.com/PKU-YuanGroup/Open-Sora-Plan">source</a>]</td>
         <td align="center">/</td>
+        <td align="center"><a href="./examples/inference/open_sora_plan/sample.py">Code</a></td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center">✅</td>
-        <td align="center"><a href="./examples/open_sora_plan/sample.py">Code</a></td>
+        <td align="center">/</td>
     </tr>
     <tr>
         <td>Open-Sora [<a href="https://github.com/hpcaitech/Open-Sora">source</a>]</td>
-        <td align="center">🟡</td>
+        <td align="center"><a href="./examples/training/open_sora">Code</a></td>
+        <td align="center"><a href="./examples/inference/open_sora/sample.py">Code</a></td>
         <td align="center">✅</td>
         <td align="center">✅</td>
         <td align="center">✅</td>
-        <td align="center"><a href="./examples/open_sora/sample.py">Code</a></td>
     </tr>
 </table>
 
