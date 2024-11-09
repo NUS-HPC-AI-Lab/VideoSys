@@ -7,17 +7,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch.utils.checkpoint import checkpoint
 from diffusers.models.attention import Attention
 from diffusers.models.attention_processor import AttnProcessor
 from einops import rearrange
 from torch import nn
 from torch.amp import autocast
-from apex.normalization.fused_layer_norm import FusedRMSNorm
+from torch.utils.checkpoint import checkpoint
 
 from videosys.core.distributed.comm import all_to_all_with_pad, get_pad, set_pad
 from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
-from videosys.models.modules.normalization import LlamaRMSNorm, VchitectSpatialNorm
+from videosys.models.modules.normalization import VchitectSpatialNorm, get_rms_norm
 
 
 class OpenSoraAttention(nn.Module):
@@ -29,7 +28,7 @@ class OpenSoraAttention(nn.Module):
         qk_norm: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        norm_layer: nn.Module = FusedRMSNorm,
+        norm_layer: nn.Module = get_rms_norm(),
         enable_flash_attn: bool = False,
         rope=None,
         qk_norm_legacy: bool = False,
@@ -79,9 +78,10 @@ class OpenSoraAttention(nn.Module):
                 if self.rope:
                     q = self.rotary_emb(q)
                     k = self.rotary_emb(k)
-                    
+
             if self.enable_flash_attn and use_flash_attn:
                 from flash_attn import flash_attn_func
+
                 # print(f"rank: {torch.distributed.get_rank()} Using flash attn with B={B}, N={N}")
                 # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
                 q = q.permute(0, 2, 1, 3)

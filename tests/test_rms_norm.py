@@ -1,8 +1,7 @@
 import torch
-# from torch.nn import RMSNorm
+from apex.normalization.fused_layer_norm import FusedRMSNorm
 
 from videosys.models.modules.normalization import LlamaRMSNorm
-from apex.normalization.fused_layer_norm import FusedRMSNorm
 
 device = torch.device(0)
 dtype = torch.float

@@ -512,7 +512,7 @@ class Profiler:
                 submodule_memory=self.profile_ctx.get_submodule_memory(),
             )
 
-        except torch.cuda.OutOfMemoryError as err_oom:
+        except (torch.cuda.OutOfMemoryError, torch.OutOfMemoryError) as err_oom:
             if plan_idx == 0:
                 print(f"unable to run the smallest video bucket in this hardware")
                 raise err_oom

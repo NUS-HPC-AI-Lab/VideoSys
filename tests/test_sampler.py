@@ -18,9 +18,7 @@ from videosys.training.ckpt_io import save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
 from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
 from videosys.utils.logging import init_logger
-from videosys.utils.training import (
-    define_experiment_workspace,
-)
+from videosys.utils.training import define_experiment_workspace
 from videosys.utils.utils import merge_args, set_seed, str_to_dtype
 
 
@@ -31,7 +29,7 @@ def main(args):
     # == device and dtype ==
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
     assert args.dtype in ["fp16", "bf16"], f"Unknown mixed precision {args.dtype}"
-    dtype = str_to_dtype(args.dtype)
+    str_to_dtype(args.dtype)
 
     # == init distributed training ==
     # NOTE: A very large timeout is set to avoid some processes exit early
@@ -202,7 +200,7 @@ def main(args):
         ) as pbar:
             for step, batch in pbar:
                 iter_samples = run_iteration(batch)
-                
+
                 dist.all_reduce(iter_samples)
                 acc_samples += iter_samples
                 global_step = epoch * num_steps_per_epoch + step
