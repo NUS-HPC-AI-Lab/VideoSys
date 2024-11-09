@@ -143,6 +143,7 @@ def main(args):
         bucket_config=args.bucket_config,
         num_bucket_build_workers=args.num_bucket_build_workers,
         parallel_mgr=parallel_mgr,
+        calculate_imbalance=args.calculate_imbalance,
     )
 
     # == global variables ==
@@ -156,7 +157,9 @@ def main(args):
     dist.barrier()
 
     def run_iteration(batch):
-        parallel_mgr.set_sp_size(batch["sp_size"])
+        sp_size = batch["sp_size"]
+        if isinstance(parallel_mgr, DynamicParallelManager):
+            parallel_mgr.set_sp_size(sp_size)
         assert batch["sp_size"] == parallel_mgr.sp_size
 
         total_gas = batch["gas"]
@@ -274,7 +277,7 @@ if __name__ == "__main__":
     parser.add_argument("--common-ar", type=dict, default=None)
     parser.add_argument("--preprocessed-data", action="store_true")
     parser.add_argument("--image-mixing-type", default="exclusive", type=str, choices=["inclusive", "exclusive"])
-    parser.add_argument("--image-mixing-frac", default=-1.0, type=float)
+    parser.add_argument("--image-mixing-frac", default=1, type=float)
     parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
     parser.add_argument("--dynamic-sp", action="store_true")
@@ -288,6 +291,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")
+    parser.add_argument("--calculate-imbalance", action="store_true")
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

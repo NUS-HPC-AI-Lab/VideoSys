@@ -154,6 +154,7 @@ def main(args):
         bucket_config=args.bucket_config,
         num_bucket_build_workers=args.num_bucket_build_workers,
         parallel_mgr=parallel_mgr,
+        calculate_imbalance=args.calculate_imbalance,
     )
 
     # ======================================================
@@ -493,6 +494,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")
+    parser.add_argument("--calculate-imbalance", action="store_true")
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)
