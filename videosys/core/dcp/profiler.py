@@ -495,6 +495,11 @@ class Profiler:
             )
 
         pass_depth_loop = True
+        oom_error_types = (
+            (torch.cuda.OutOfMemoryError, torch.OutOfMemoryError)
+            if hasattr(torch, "OutOfMemoryError")
+            else torch.cuda.OutOfMemoryError
+        )
         try:
             with self.timeit("iteration"):
                 yield (self.total_layers if self.profile_depth is None else self.profile_depth)
@@ -512,7 +517,7 @@ class Profiler:
                 submodule_memory=self.profile_ctx.get_submodule_memory(),
             )
 
-        except (torch.cuda.OutOfMemoryError, torch.OutOfMemoryError) as err_oom:
+        except oom_error_types as err_oom:
             if plan_idx == 0:
                 print(f"unable to run the smallest video bucket in this hardware")
                 raise err_oom
