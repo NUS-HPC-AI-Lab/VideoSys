@@ -656,7 +656,7 @@ class Profiler:
 
                     if self.dynamic_recompute:
                         self.profile_results[ar_name][num_frame]["recompute_cfg"] = {
-                            k: best[i + 8] for i, k in enumerate(row.submodule_fields)
+                            k: best[i + 8] for i, k in enumerate(list(self.module_dict.keys()))
                         }
 
                     self.dp_results = []
