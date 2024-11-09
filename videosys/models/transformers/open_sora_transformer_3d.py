@@ -194,9 +194,10 @@ class STDiT3Block(nn.Module):
             x_m_s = self.last_attn
         else:
             # modulate (attention)
-            x_m = t2i_modulate(self.norm1(x), shift_msa, scale_msa)
+            normed1_x = self.norm1(x)
+            x_m = t2i_modulate(normed1_x, shift_msa, scale_msa)
             if x_mask is not None:
-                x_m_zero = t2i_modulate(self.norm1(x), shift_msa_zero, scale_msa_zero)
+                x_m_zero = t2i_modulate(normed1_x, shift_msa_zero, scale_msa_zero)
                 x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
             # attention
@@ -255,9 +256,10 @@ class STDiT3Block(nn.Module):
             )
         else:
             # modulate (MLP)
-            x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
+            normed2_x = self.norm2(x)
+            x_m = t2i_modulate(normed2_x, shift_mlp, scale_mlp)
             if x_mask is not None:
-                x_m_zero = t2i_modulate(self.norm2(x), shift_mlp_zero, scale_mlp_zero)
+                x_m_zero = t2i_modulate(normed2_x, shift_mlp_zero, scale_mlp_zero)
                 x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
             # MLP

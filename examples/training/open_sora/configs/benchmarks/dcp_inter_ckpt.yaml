@@ -1,7 +1,6 @@
-image_mixing_frac: 5
 zipf_offset: 15
-outputs: exp/dynamic_ckpt_ga
-profile_path: exp/profile/dynamic_ckpt_ga
+outputs: exp/dcp_inter_ckpt
+profile_path: exp/profile/dcp_inter_ckpt
 dynamic_sp: true
 dynamic_recompute: true
 auto_grad_accumulation: true

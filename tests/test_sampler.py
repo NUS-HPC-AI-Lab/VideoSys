@@ -18,9 +18,7 @@ from videosys.training.ckpt_io import save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
 from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
 from videosys.utils.logging import init_logger
-from videosys.utils.training import (
-    define_experiment_workspace,
-)
+from videosys.utils.training import define_experiment_workspace
 from videosys.utils.utils import merge_args, set_seed, str_to_dtype
 
 
@@ -31,7 +29,7 @@ def main(args):
     # == device and dtype ==
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
     assert args.dtype in ["fp16", "bf16"], f"Unknown mixed precision {args.dtype}"
-    dtype = str_to_dtype(args.dtype)
+    str_to_dtype(args.dtype)
 
     # == init distributed training ==
     # NOTE: A very large timeout is set to avoid some processes exit early
@@ -143,6 +141,7 @@ def main(args):
         bucket_config=args.bucket_config,
         num_bucket_build_workers=args.num_bucket_build_workers,
         parallel_mgr=parallel_mgr,
+        calculate_imbalance=args.calculate_imbalance,
     )
 
     # == global variables ==
@@ -156,7 +155,9 @@ def main(args):
     dist.barrier()
 
     def run_iteration(batch):
-        parallel_mgr.set_sp_size(batch["sp_size"])
+        sp_size = batch["sp_size"]
+        if isinstance(parallel_mgr, DynamicParallelManager):
+            parallel_mgr.set_sp_size(sp_size)
         assert batch["sp_size"] == parallel_mgr.sp_size
 
         total_gas = batch["gas"]
@@ -199,7 +200,7 @@ def main(args):
         ) as pbar:
             for step, batch in pbar:
                 iter_samples = run_iteration(batch)
-                
+
                 dist.all_reduce(iter_samples)
                 acc_samples += iter_samples
                 global_step = epoch * num_steps_per_epoch + step
@@ -274,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument("--common-ar", type=dict, default=None)
     parser.add_argument("--preprocessed-data", action="store_true")
     parser.add_argument("--image-mixing-type", default="exclusive", type=str, choices=["inclusive", "exclusive"])
-    parser.add_argument("--image-mixing-frac", default=-1.0, type=float)
+    parser.add_argument("--image-mixing-frac", default=1, type=float)
     parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
     parser.add_argument("--dynamic-sp", action="store_true")
@@ -288,6 +289,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")
+    parser.add_argument("--calculate-imbalance", action="store_true")
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

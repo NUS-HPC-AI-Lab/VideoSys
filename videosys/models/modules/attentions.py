@@ -12,10 +12,11 @@ from diffusers.models.attention_processor import AttnProcessor
 from einops import rearrange
 from torch import nn
 from torch.amp import autocast
+from torch.utils.checkpoint import checkpoint
 
 from videosys.core.distributed.comm import all_to_all_with_pad, get_pad, set_pad
 from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
-from videosys.models.modules.normalization import LlamaRMSNorm, VchitectSpatialNorm
+from videosys.models.modules.normalization import VchitectSpatialNorm, get_rms_norm
 
 
 class OpenSoraAttention(nn.Module):
@@ -27,7 +28,7 @@ class OpenSoraAttention(nn.Module):
         qk_norm: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        norm_layer: nn.Module = LlamaRMSNorm,
+        norm_layer: nn.Module = get_rms_norm(),
         enable_flash_attn: bool = False,
         rope=None,
         qk_norm_legacy: bool = False,
@@ -56,7 +57,7 @@ class OpenSoraAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         # flash attn is not memory efficient for small sequences, this is empirical
-        use_flash_attn = N > B
+        use_flash_attn = N >= 30
         qkv = self.qkv(x)
         qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
 
@@ -81,6 +82,7 @@ class OpenSoraAttention(nn.Module):
             if self.enable_flash_attn and use_flash_attn:
                 from flash_attn import flash_attn_func
 
+                # print(f"rank: {torch.distributed.get_rank()} Using flash attn with B={B}, N={N}")
                 # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
                 q = q.permute(0, 2, 1, 3)
                 k = k.permute(0, 2, 1, 3)
@@ -93,14 +95,9 @@ class OpenSoraAttention(nn.Module):
                     softmax_scale=self.scale,
                 )
             elif not use_flash_attn:
-                dtype = q.dtype
-                q = q * self.scale
-                attn = q @ k.transpose(-2, -1)  # translate attn to float32
-                attn = attn.to(torch.float32)
-                attn = attn.softmax(dim=-1)
-                attn = attn.to(dtype)  # cast back attn to original dtype
-                attn = self.attn_drop(attn)
-                x = attn @ v
+                # print(f"rank: {torch.distributed.get_rank()} Using torch attn with B={B}, N={N}")
+                # x = self.native_attention(q, k, v)
+                x = checkpoint(self.native_attention, q, k, v, use_reentrant=False)
             else:
                 x = F.scaled_dot_product_attention(q, k, v)
 
@@ -111,6 +108,17 @@ class OpenSoraAttention(nn.Module):
         x = x.reshape(x_output_shape)
         x = self.proj(x)
         x = self.proj_drop(x)
+        return x
+
+    def native_attention(self, q, k, v):
+        dtype = q.dtype
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)  # translate attn to float32
+        attn = attn.to(torch.float32)
+        attn = attn.softmax(dim=-1)
+        attn = attn.to(dtype)  # cast back attn to original dtype
+        attn = self.attn_drop(attn)
+        x = attn @ v
         return x
 
 

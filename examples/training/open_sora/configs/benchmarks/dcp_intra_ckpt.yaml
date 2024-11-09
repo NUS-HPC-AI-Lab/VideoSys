@@ -1,8 +1,8 @@
 zipf_offset: 15
-outputs: exp/dcp_intra
-profile_path: exp/profile/dcp_intra
+outputs: exp/dcp_intra_ckpt
+profile_path: exp/profile/dcp_intra_ckpt
 dynamic_sp: true
-dynamic_recompute: false
+dynamic_recompute: true
 dummy_dataset: true
 dummy_data_size: 4000
 
@@ -26,7 +26,7 @@ log_every: 1e10
 
 # optimization
 grad_clip: 1.0
-lr: 1e-8
+lr: 1e-4
 ema_decay: 0.99
 adam_eps: 1e-15
 warmup_steps: 10

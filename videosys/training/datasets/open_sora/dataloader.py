@@ -38,6 +38,7 @@ def prepare_dataloader(
     auto_grad_accumulation: bool = False,
     max_grad_accumulation_steps: int = 2,
     parallel_mgr=None,
+    calculate_imbalance: bool = False,
     **kwargs,
 ):
     _kwargs = kwargs.copy()
@@ -56,6 +57,7 @@ def prepare_dataloader(
             auto_grad_accumulation=auto_grad_accumulation,
             max_grad_accumulation_steps=max_grad_accumulation_steps,
             parallel_mgr=parallel_mgr,
+            calculate_imbalance=calculate_imbalance,
         )
         return (
             DataLoader(

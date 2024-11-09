@@ -512,7 +512,7 @@ class Profiler:
                 submodule_memory=self.profile_ctx.get_submodule_memory(),
             )
 
-        except torch.cuda.OutOfMemoryError as err_oom:
+        except (torch.cuda.OutOfMemoryError, torch.OutOfMemoryError) as err_oom:
             if plan_idx == 0:
                 print(f"unable to run the smallest video bucket in this hardware")
                 raise err_oom
@@ -551,7 +551,7 @@ class Profiler:
                 self.next_warmup_iter = False
             return
 
-        if self.dynamic_recompute or self.dynamic_sp:
+        if self.dynamic_sp:
             if is_success:
                 self.raw_results.append(row)
 
@@ -624,6 +624,8 @@ class Profiler:
                     self.next_sp_size = sp_size * 2
                     if num_frame == 1:
                         self.next_bs = self.next_sp_size
+                    else:
+                        self.next_bs = 1
                     self.next_warmup_iter = not self.auto_grad_acc
                 elif len(self.dp_results) == 0:
                     if self.logger:
