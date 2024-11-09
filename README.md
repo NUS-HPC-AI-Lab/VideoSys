@@ -8,7 +8,7 @@ An easy and efficient system for video generation
 </p>
 
 ### Latest News 🔥
-- [2024/11] 🔥 Propose Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)], a simple and efficient method for any-size videos training.
+- [2024/11] 🔥 <b>Propose Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)], a simple and efficient method for any-size videos training</b>.
 - [2024/09] Support [CogVideoX](https://github.com/THUDM/CogVideo), [Vchitect-2.0](https://github.com/Vchitect/Vchitect-2.0) and [Open-Sora-Plan v1.2.0](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
 - [2024/08] 🔥 Evole from [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0) to <b>VideoSys: An easy and efficient system for video generation</b>.
 - [2024/08] 🔥 Release PAB paper: <b>[Real-Time Video Generation with Pyramid Attention Broadcast](https://arxiv.org/abs/2408.12588)</b>.
