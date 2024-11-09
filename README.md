@@ -114,15 +114,15 @@ You can also find easy demo with HuggingFace Space <a href="https://huggingface.
 
 ### Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)]
 
-![method](./assets/figures/pab_method.png)
+![method](./assets/figures/dcp_overview.png)
 
-PAB is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>. By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including [Open-Sora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
+Data-Centric Parallel (DCP) is a simple but effective approach to accelerate distributed training of any-size videos. Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime. This method significantly reduces communication overhead and computational inefficiencies, achieving up to 2.1x speedup. As a ease-of-use method, DCP can enpower any video models and parallel methods with minimal code changes.
 
 See its details [here](./docs/pab.md).
 
 ----
 
-`### Pyramid Attention Broadcast (PAB) [[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)]
+### Pyramid Attention Broadcast (PAB) [[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)]
 
 ![method](./assets/figures/pab_method.png)
 
