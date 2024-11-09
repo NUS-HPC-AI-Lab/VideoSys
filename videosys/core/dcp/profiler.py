@@ -497,7 +497,7 @@ class Profiler:
         pass_depth_loop = True
         try:
             with self.timeit("iteration"):
-                yield (model.module.config.depth if self.profile_depth is None else self.profile_depth)
+                yield (self.total_layers if self.profile_depth is None else self.profile_depth)
             row = ProfileResult(
                 ar_name,
                 num_frame,
@@ -570,7 +570,7 @@ class Profiler:
                         temp_dp = dp.clone()
                         temp_trace = trace.clone()
 
-                        for cnt in range(1, self.model_config.depth + 1):
+                        for cnt in range(1, self.total_layers + 1):
                             time_cost = module_time_cost * cnt
                             mem_cost = int(np.ceil(module_mem_cost_in_bytes * cnt / GB))
 
@@ -730,15 +730,9 @@ class Profiler:
         layer_time = fwd_time * 2 + bwd_time
         layer_memory = sum(profile_result.input_memory)
 
-        # missing_gradient_per_layer = 0
-        # if self.auto_grad_acc:
-        #     # TODO: support other model
-        #     # STDiT block * (spatial + temporal) * 2 bytes
-        #     missing_gradient_per_layer = 21255696 * 2 * 2
-
-        pred_full_time = profile_result.execution_time + layer_time * (self.model_config.depth - self.profile_depth)
+        pred_full_time = profile_result.execution_time + layer_time * (self.total_layers - self.profile_depth)
         pred_full_mem = profile_result.max_alloc_memory + (layer_memory + self.profile_unit_grad_in_bytes) * (
-            self.model_config.depth - self.profile_depth
+            self.total_layers - self.profile_depth
         )
 
         return pred_full_time, pred_full_mem
