@@ -8,10 +8,11 @@ An easy and efficient system for video generation
 </p>
 
 ### Latest News 🔥
+- [2024/11] 🔥 Propose Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)], a simple and efficient method for any-size videos training.
 - [2024/09] Support [CogVideoX](https://github.com/THUDM/CogVideo), [Vchitect-2.0](https://github.com/Vchitect/Vchitect-2.0) and [Open-Sora-Plan v1.2.0](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
 - [2024/08] 🔥 Evole from [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0) to <b>VideoSys: An easy and efficient system for video generation</b>.
 - [2024/08] 🔥 Release PAB paper: <b>[Real-Time Video Generation with Pyramid Attention Broadcast](https://arxiv.org/abs/2408.12588)</b>.
-- [2024/06] 🔥 Propose Pyramid Attention Broadcast (PAB)[[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.
+- [2024/06] 🔥 Propose Pyramid Attention Broadcast (PAB) [[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)], the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>negligible quality loss</b> without <b>requiring any training</b>.
 - [2024/06] Support [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan) and [Latte](https://github.com/Vchitect/Latte).
 - [2024/03] 🔥 Propose Dynamic Sequence Parallel (DSP)[[paper](https://arxiv.org/abs/2403.10266)][[doc](./docs/dsp.md)], achieves **3x** speed for training and **2x** speed for inference in Open-Sora compared with sota sequence parallelism.
 - [2024/03] Support [Open-Sora](https://github.com/hpcaitech/Open-Sora).
@@ -111,13 +112,17 @@ You can also find easy demo with HuggingFace Space <a href="https://huggingface.
 
 ## Acceleration Techniques
 
-### Pyramid Attention Broadcast (PAB) [[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)]
+### Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)]
 
-Real-Time Video Generation with Pyramid Attention Broadcast
+![method](./assets/figures/pab_method.png)
 
-Authors: [Xuanlei Zhao](https://oahzxl.github.io/)<sup>1*</sup>,  [Xiaolong Jin]()<sup>2*</sup>,  [Kai Wang](https://kaiwang960112.github.io/)<sup>1*</sup>, and [Yang You](https://www.comp.nus.edu.sg/~youy/)<sup>1</sup> (* indicates equal contribution)
+PAB is the first approach to achieve <b>real-time</b> DiT-based video generation, delivering <b>lossless quality</b> without <b>requiring any training</b>. By mitigating redundant attention computation, PAB achieves up to 21.6 FPS with 10.6x acceleration, without sacrificing quality across popular DiT-based video generation models including [Open-Sora](https://github.com/hpcaitech/Open-Sora), [Latte](https://github.com/Vchitect/Latte) and [Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
 
-<sup>1</sup>National University of Singapore, <sup>2</sup>Purdue University
+See its details [here](./docs/pab.md).
+
+----
+
+`### Pyramid Attention Broadcast (PAB) [[paper](https://arxiv.org/abs/2408.12588)][[blog](https://oahzxl.github.io/PAB/)][[doc](./docs/pab.md)]
 
 ![method](./assets/figures/pab_method.png)
 
