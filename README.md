@@ -107,7 +107,7 @@ VideoSys supports many diffusion models with our various acceleration techniques
     </tr>
 </table>
 
-You can also find easy demo with HuggingFace Space <a href="https://huggingface.co/VideoSys">[link]</a> and Gradio <a href="./gradio">[link]</a>.
+You can also find easy demo with HuggingFace Space <a href="https://huggingface.co/VideoSys">[link]</a> and Gradio <a href="./gradio">[link]</a>. 🟡 means work in progress.
 
 ## Acceleration Techniques
 
