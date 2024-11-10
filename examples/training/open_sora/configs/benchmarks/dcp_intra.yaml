@@ -5,6 +5,8 @@ dynamic_sp: true
 dynamic_recompute: false
 dummy_dataset: true
 dummy_data_size: 4000
+verbose: true
+calculate_imbalance: true
 
 
 # ==== training config ====
