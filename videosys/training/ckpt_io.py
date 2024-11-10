@@ -19,6 +19,7 @@ def save_json(data, file_path: str):
 
 def save(
     save_dir: str,
+    save_optimizer: bool = False,
     model: nn.Module = None,
     ema: nn.Module = None,
     sampler=None,
@@ -30,7 +31,9 @@ def save(
     save_dir = os.path.join(save_dir, f"epoch{epoch}-global_step{global_step}")
     os.makedirs(save_dir, exist_ok=True)
 
-    model.save_checkpoint(save_dir, tag=f"deepspeed_checkpint")
+    if save_optimizer:
+        # can only use deepspeed to load this checkpoint
+        model.save_checkpoint(save_dir, tag=f"deepspeed_checkpint")
 
     if dist.get_rank() == 0:
         running_states = {

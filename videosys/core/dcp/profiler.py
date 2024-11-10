@@ -158,7 +158,6 @@ class ProfileDataIter:
 class Profiler:
     def __init__(
         self,
-        model_config,
         total_layers,
         bucket_config,
         text_max_seq_len,
@@ -177,7 +176,6 @@ class Profiler:
         profile_depth=2,
         parallel_mgr=None,
     ):
-        self.model_config = model_config
         self.total_layers = total_layers
 
         # [(ar_name, num_frame)]
@@ -800,7 +798,6 @@ class Profiler:
 
 
 def set_profiler(
-    model_config,
     total_layers,
     bucket_config,
     text_max_seq_len,
@@ -819,7 +816,6 @@ def set_profiler(
 ) -> Profiler:
     global PROFILER
     PROFILER = Profiler(
-        model_config=model_config,
         total_layers=total_layers,
         bucket_config=bucket_config,
         text_max_seq_len=text_max_seq_len,

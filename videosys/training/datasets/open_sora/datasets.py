@@ -139,6 +139,14 @@ class VariableVideoTextDataset(VideoTextDataset):
         preprocessed_data=False,
     ):
         super().__init__(data_path, num_frames, frame_interval, image_size, transform_name=None)
+
+        # repeat data if it is the example data
+        if "/assets/example_data/demo" in data_path:
+            logging.info(
+                f"Repeat example data {data_path} 50 times (size: {len(self.data)} -> {len(self.data) * 50}) for easy training."
+            )
+            self.data = pd.concat([self.data] * 50, ignore_index=True)
+
         self.transform_name = transform_name
         self.data["id"] = np.arange(len(self.data))
         self.preprocessed_data = preprocessed_data

@@ -39,6 +39,7 @@ def prepare_dataloader(
     max_grad_accumulation_steps: int = 2,
     parallel_mgr=None,
     calculate_imbalance: bool = False,
+    verbose: bool = False,
     **kwargs,
 ):
     _kwargs = kwargs.copy()
@@ -51,7 +52,7 @@ def prepare_dataloader(
             shuffle=shuffle,
             seed=seed,
             drop_last=drop_last,
-            verbose=True,
+            verbose=verbose,
             num_bucket_build_workers=num_bucket_build_workers,
             sp_balance_scope=sp_balance_scope,
             auto_grad_accumulation=auto_grad_accumulation,

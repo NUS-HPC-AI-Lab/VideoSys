@@ -144,7 +144,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         # process the samples
         for bucket_id, data_list in bucket_sample_dict.items():
             ar_name, num_frame = bucket_id[:2]
-            if not self.profiler.is_valid_bucket(ar_name, num_frame):
+            if self.verbose and not self.profiler.is_valid_bucket(ar_name, num_frame):
                 logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
                 continue
             # handle droplast
@@ -215,9 +215,10 @@ class VariableVideoBatchSampler(DistributedSampler):
                 left_samples = left_batchs * self.get_batch_size(bucket_id)
                 self.effective_samples -= total_samples - left_samples
 
-        for i in range(len(bucket_id_access_order)):
-            logging.info(f"iter {i}, bucket_id: {bucket_id_access_order[i]}")
-        logging.info(f"dropped: {pformat(bucket_num_batch_to_deduct, sort_dicts=False)}")
+        if self.verbose:
+            for i in range(len(bucket_id_access_order)):
+                logging.info(f"iter {i}, bucket_id: {bucket_id_access_order[i]}")
+            logging.info(f"dropped: {pformat(bucket_num_batch_to_deduct, sort_dicts=False)}")
         return bucket_id_access_order
 
     def _bucketized_iter(self, bucket_sample_dict):
@@ -311,8 +312,9 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         from pandarallel import pandarallel
 
-        pandarallel.initialize(nb_workers=self.num_bucket_build_workers, progress_bar=False)
-        logging.info(f"Building buckets...")
+        pandarallel.initialize(nb_workers=self.num_bucket_build_workers, progress_bar=False, verbose=self.verbose)
+        if self.verbose:
+            logging.info(f"Building buckets...")
         bucket_ids = self.dataset.data.parallel_apply(
             apply,
             axis=1,

@@ -16,7 +16,7 @@ from transformers import AutoTokenizer, T5EncoderModel
 from videosys.core.dcp.profiler import Profiler, set_profiler
 from videosys.core.distributed.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
-from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2, STDiT3Config
+from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
 from videosys.training.ckpt_io import load, save, save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
@@ -45,13 +45,12 @@ def main(args):
     dtype = str_to_dtype(args.dtype)
 
     # == init distributed training ==
-    # NOTE: A very large timeout is set to avoid some processes exit early
     rank, world_size, node_rank, node_size = set_distributed_state(args.distributed_profile)
     dist.init_process_group(
         rank=rank,
         world_size=world_size,
         backend="nccl",
-        timeout=timedelta(hours=24),
+        timeout=timedelta(minutes=2),
     )
     deepspeed.init_distributed(timeout=timedelta(seconds=10))
     torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
@@ -75,18 +74,12 @@ def main(args):
             wandb.init(project="Open-Sora", name=exp_name, config=vars(args), dir="./outputs/wandb")
 
     # == init parallel manager ==
+    torch.set_num_threads(1)
     if args.dynamic_sp:
         parallel_mgr = DynamicParallelManager()
     else:
         parallel_mgr = ParallelManager(dist.get_world_size() // args.sp_size, 1, args.sp_size)
-
-    torch.set_num_threads(1)
-
-    # =======================================================
-    # bonus: profile for better batching
-    # =======================================================
     preprocessed_data = args.preprocessed_data
-    model_config = STDiT3Config.from_pretrained(args.ckpt_path)
     if args.profile_path is None or not os.path.exists(args.profile_path):
         do_profile = True
         preprocessed_data = True
@@ -95,70 +88,9 @@ def main(args):
         )
     else:
         do_profile = False
-    # TODO: scheduler is a better name?
-    profiler: Profiler = set_profiler(
-        model_config=model_config,
-        total_layers=model_config.depth,
-        bucket_config=args.bucket_config,
-        text_max_seq_len=model_config.model_max_length,
-        text_hidden_size=model_config.caption_channels,
-        dynamic_sp=args.dynamic_sp,
-        dynamic_recompute=args.dynamic_recompute,
-        auto_grad_acc=args.auto_grad_accumulation,
-        do_profile=do_profile,
-        distributed_profile=args.distributed_profile,
-        node_rank=node_rank,
-        node_size=node_size,
-        alloc_fraction=args.alloc_memory_fraction,
-        profile_path=args.profile_path,
-        parallel_mgr=parallel_mgr,
-        verbose=args.verbose,
-    )
 
     # ======================================================
-    # 2. build dataset and dataloader
-    # ======================================================
-    logging.info("Building dataset...")
-    # == build dataset ==
-    if args.dummy_dataset:
-        dataset = DummyVariableVideoTextDataset(
-            data_size=args.dummy_data_size,
-            seed=args.seed,
-            data_path=args.data_path,
-            transform_name="resize_crop",
-            preprocessed_data=preprocessed_data,
-            bucket_config=args.bucket_config,
-            common_ar=args.common_ar,
-            distribution=args.distribution,
-            zipf_offset=args.zipf_offset,
-            image_mixing_type=args.image_mixing_type,
-            image_mixing_frac=args.image_mixing_frac,
-        )
-    else:
-        dataset = VariableVideoTextDataset(
-            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=preprocessed_data
-        )
-    logging.info(f"Dataset contains {len(dataset)} samples.")
-
-    # == build dataloader ==
-    dataloader, sampler = prepare_dataloader(
-        dataset=dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        seed=args.seed,
-        shuffle=True,
-        drop_last=args.drop_last,
-        process_group=parallel_mgr.dp_group,
-        prefetch_factor=args.prefetch_factor,
-        auto_grad_accumulation=args.auto_grad_accumulation,
-        bucket_config=args.bucket_config,
-        num_bucket_build_workers=args.num_bucket_build_workers,
-        parallel_mgr=parallel_mgr,
-        calculate_imbalance=args.calculate_imbalance,
-    )
-
-    # ======================================================
-    # 3. build model
+    # 2. build model
     # ======================================================
     logging.info("Building models...")
 
@@ -218,6 +150,69 @@ def main(args):
     if args.mask_ratios is not None:
         mask_generator = MaskGenerator(args.mask_ratios)
 
+    # ======================================================
+    # 3. build dataset and dataloader
+    # ======================================================
+    logging.info("Building dataset...")
+    # create dcp profiler
+    # TODO: scheduler is a better name?
+    profiler: Profiler = set_profiler(
+        total_layers=model.config.depth,
+        bucket_config=args.bucket_config,
+        text_max_seq_len=model.config.model_max_length,
+        text_hidden_size=model.config.caption_channels,
+        dynamic_sp=args.dynamic_sp,
+        dynamic_recompute=args.dynamic_recompute,
+        auto_grad_acc=args.auto_grad_accumulation,
+        do_profile=do_profile,
+        distributed_profile=args.distributed_profile,
+        node_rank=node_rank,
+        node_size=node_size,
+        alloc_fraction=args.alloc_memory_fraction,
+        profile_path=args.profile_path,
+        parallel_mgr=parallel_mgr,
+        verbose=args.verbose,
+    )
+
+    # == build dataset ==
+    if args.dummy_dataset:
+        dataset = DummyVariableVideoTextDataset(
+            data_size=args.dummy_data_size,
+            seed=args.seed,
+            data_path=args.data_path,
+            transform_name="resize_crop",
+            preprocessed_data=preprocessed_data,
+            bucket_config=args.bucket_config,
+            common_ar=args.common_ar,
+            distribution=args.distribution,
+            zipf_offset=args.zipf_offset,
+            image_mixing_type=args.image_mixing_type,
+            image_mixing_frac=args.image_mixing_frac,
+        )
+    else:
+        dataset = VariableVideoTextDataset(
+            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=preprocessed_data
+        )
+    logging.info(f"Dataset contains {len(dataset)} samples.")
+
+    # == build dataloader ==
+    dataloader, sampler = prepare_dataloader(
+        dataset=dataset,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        seed=args.seed,
+        shuffle=True,
+        drop_last=args.drop_last,
+        process_group=parallel_mgr.dp_group,
+        prefetch_factor=args.prefetch_factor,
+        auto_grad_accumulation=args.auto_grad_accumulation,
+        bucket_config=args.bucket_config,
+        num_bucket_build_workers=args.num_bucket_build_workers,
+        parallel_mgr=parallel_mgr,
+        calculate_imbalance=args.calculate_imbalance,
+        verbose=args.verbose,
+    )
+
     # =======================================================
     # 4. distributed training preparation
     # =======================================================
@@ -246,14 +241,14 @@ def main(args):
         optimizer=optimizer,
         config=ds_config,
     )
+    torch.set_default_dtype(torch.float)
+    logging.info("Boosting model for distributed training")
     profiler.register_modules(
         {
             "spatial": model.module.spatial_blocks,
             "temporal": model.module.temporal_blocks,
         }
     )
-    torch.set_default_dtype(torch.float)
-    logging.info("Boosting model for distributed training")
 
     start_epoch = start_step = log_step = acc_step = 0
     # TODO: resume functionality should consider the profiler status
@@ -404,7 +399,8 @@ def main(args):
             if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
                 ema_gathering(model.module, ema)
                 save_dir = save(
-                    exp_dir,
+                    save_dir=exp_dir,
+                    save_optimizer=args.save_optimizer,
                     model=model,
                     ema=ema,
                     sampler=sampler,
@@ -472,6 +468,7 @@ if __name__ == "__main__":
     parser.add_argument("--start-from-scratch", action="store_true", help="start training from scratch")
     parser.add_argument("--warmup-steps", default=None, type=int, help="warmup steps")
     parser.add_argument("--verbose", action="store_true", help="verbose")
+    parser.add_argument("--save-optimizer", action="store_true", help="save optimizer")
 
     # experimental features
     parser.add_argument("--drop-last", action="store_true")
