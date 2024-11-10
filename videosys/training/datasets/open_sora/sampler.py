@@ -83,7 +83,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         num_bucket_build_workers: int = 1,
         sp_balance_scope: str = "iter",
         auto_grad_accumulation: bool = False,
-        max_grad_accumulation_steps: int = 4,
+        max_grad_accumulation_steps: int = 2,
         parallel_mgr=None,
         calculate_imbalance: bool = False,
     ) -> None:
@@ -269,11 +269,10 @@ class VariableVideoBatchSampler(DistributedSampler):
                     cur_time = self.profiler.get_execution_time(bucket_id[0], bucket_id[1])
                     total_time.append(cur_time)
                 max_time = max(total_time)
-                imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
-                imbalance = imbalance / max_time
+                imbalance = sum([(max_time - t) for t in total_time])
                 self.imbalance_list.append(imbalance)
                 logging.info(
-                    f"iter {i}, cur imbalance: {imbalance:.4f}, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}"
+                    f"iter {i}, cur imbalance: {imbalance:.4f}s, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}s"
                 )
 
             # compute the range of data accessed by each GPU
@@ -752,11 +751,10 @@ class VariableVideoBatchSampler(DistributedSampler):
                     cur_time = cur_time * gas
                     total_time.append(cur_time)
                 max_time = max(total_time)
-                imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
-                imbalance = imbalance / max_time
+                imbalance = sum([(max_time - t) for t in total_time])
                 self.imbalance_list.append(imbalance)
                 logging.info(
-                    f"iter {i}, cur imbalance: {imbalance:.4f}, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}"
+                    f"iter {i}, cur imbalance: {imbalance:.4f}s, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}s"
                 )
 
             assert len(sp_size_map_list) == wsize
