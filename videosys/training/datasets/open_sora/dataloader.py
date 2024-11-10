@@ -36,7 +36,7 @@ def prepare_dataloader(
     prefetch_factor: Optional[int] = None,
     sp_balance_scope: str = "iter",
     auto_grad_accumulation: bool = False,
-    max_grad_accumulation_steps: int = 2,
+    max_grad_accumulation_steps: int = 4,
     parallel_mgr=None,
     calculate_imbalance: bool = False,
     verbose: bool = False,

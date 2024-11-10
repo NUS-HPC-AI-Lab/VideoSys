@@ -83,7 +83,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         num_bucket_build_workers: int = 1,
         sp_balance_scope: str = "iter",
         auto_grad_accumulation: bool = False,
-        max_grad_accumulation_steps: int = 2,
+        max_grad_accumulation_steps: int = 4,
         parallel_mgr=None,
         calculate_imbalance: bool = False,
     ) -> None:
@@ -287,10 +287,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                 (idx, real_t, real_h, real_w, bucket_id[0], self.parallel_mgr.sp_size, 1) for idx in cur_micro_batch
             ]
             yield cur_micro_batch
-
-        if self.calculate_imbalance:
-            logging.info(f"Mean imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
-            self.imbalance_list = []
 
         self.reset()
 
@@ -787,10 +783,6 @@ class VariableVideoBatchSampler(DistributedSampler):
             ), f"rank: {rank} iter: {i}, bucket_id_map_list: {bucket_id_map_list}, bucket_access_boundaries: {bucket_access_boundaries}"
             yield cur_micro_batches
 
-        if self.calculate_imbalance:
-            logging.info(f"Mean imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
-            self.imbalance_list = []
-
         self.reset()
 
     def get_num_batch_with_optimized_schedule(self, bucket_sample_dict) -> int:
@@ -883,6 +875,9 @@ class VariableVideoBatchSampler(DistributedSampler):
         return self.approximate_num_batch
 
     def reset(self):
+        if self.calculate_imbalance and len(self.imbalance_list) > 0:
+            logging.info(f"Mean imbalance for this epoch: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
+            self.imbalance_list = []
         self.last_micro_batch_access_index = 0
 
     def state_dict(self, num_steps: int) -> dict:

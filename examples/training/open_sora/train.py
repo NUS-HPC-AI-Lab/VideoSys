@@ -50,7 +50,7 @@ def main(args):
         rank=rank,
         world_size=world_size,
         backend="nccl",
-        timeout=timedelta(minutes=2),
+        timeout=timedelta(minutes=10),
     )
     deepspeed.init_distributed(timeout=timedelta(seconds=10))
     torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
