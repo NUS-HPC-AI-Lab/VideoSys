@@ -147,7 +147,18 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
         k, v = kv.unbind(2)
 
         if self.enable_flash_attn:
-            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
+            if B * N > 50000:
+                # too large for flash attn kernel
+                out = []
+                for i in range(B):
+                    out.append(
+                        self.flash_attn_impl(
+                            q[i].unsqueeze(0), k[i].unsqueeze(0), v[i].unsqueeze(0), mask[i].unsqueeze(0), 1, N, C
+                        )
+                    )
+                x = torch.cat(out, dim=0)
+            else:
+                x = self.flash_attn_impl(q, k, v, mask, B, N, C)
         else:
             x = self.torch_impl(q, k, v, mask, B, N, C)
 
