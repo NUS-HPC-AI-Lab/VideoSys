@@ -269,10 +269,10 @@ class VariableVideoBatchSampler(DistributedSampler):
                     cur_time = self.profiler.get_execution_time(bucket_id[0], bucket_id[1])
                     total_time.append(cur_time)
                 max_time = max(total_time)
-                imbalance = sum([(max_time - t) for t in total_time])
+                imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
                 self.imbalance_list.append(imbalance)
                 logging.info(
-                    f"iter {i}, cur imbalance: {imbalance:.4f}s, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}s"
+                    f"iter {i}, \nbucket_access_list: {bucket_access_list}, \ntotal time: {total_time}, \ncur imbalance: {imbalance:.4f}s, \nestimate total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list) * num_iters:.4f}s"
                 )
 
             # compute the range of data accessed by each GPU
@@ -751,10 +751,10 @@ class VariableVideoBatchSampler(DistributedSampler):
                     cur_time = cur_time * gas
                     total_time.append(cur_time)
                 max_time = max(total_time)
-                imbalance = sum([(max_time - t) for t in total_time])
+                imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
                 self.imbalance_list.append(imbalance)
                 logging.info(
-                    f"iter {i}, cur imbalance: {imbalance:.4f}s, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}s"
+                    f"iter {i}, \nbucket_id_map_list: {bucket_id_map_list}, \ntotal time: {total_time}, \ncur imbalance: {imbalance:.4f}s, \nestimate total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list) * num_iter:.4f}s"
                 )
 
             assert len(sp_size_map_list) == wsize
@@ -874,7 +874,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
     def reset(self):
         if self.calculate_imbalance and len(self.imbalance_list) > 0:
-            logging.info(f"Mean imbalance for this epoch: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
+            logging.info(f"Total imbalance for this epoch: {sum(self.imbalance_list):.4f}s")
             self.imbalance_list = []
         self.last_micro_batch_access_index = 0
 
