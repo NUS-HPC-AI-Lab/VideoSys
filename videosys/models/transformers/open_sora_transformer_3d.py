@@ -173,9 +173,6 @@ class STDiT3Block(nn.Module):
             self.scale_shift_table[None] + t.reshape(B, 6, -1)
         ).chunk(6, dim=1)
 
-        # TODO: remove this
-        x_mask = None
-
         if x_mask is not None:
             shift_msa_zero, scale_msa_zero, gate_msa_zero, shift_mlp_zero, scale_mlp_zero, gate_mlp_zero = (
                 self.scale_shift_table[None] + t0.reshape(B, 6, -1)

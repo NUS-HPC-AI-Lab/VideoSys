@@ -147,7 +147,7 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
         k, v = kv.unbind(2)
 
         if self.enable_flash_attn:
-            if B * N > 50000:
+            if B * N > 200000 and self.training:
                 # too large for flash attn kernel
                 out = []
                 seq_len = int(k.shape[1] // B)
