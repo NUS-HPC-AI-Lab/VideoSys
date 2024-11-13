@@ -352,8 +352,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 max_grad_acc = left_samples / bs / num_occur
                 max_grad_acc_dict[bucket_id] = max(math.ceil(max_grad_acc), 1)
         # then decide the real number of grad acc for each bucket
-        max_grad_accumulation_steps = 5
-        max_time = max(exec_time_list) * max_grad_accumulation_steps
+        max_time = max(exec_time_list) * self.max_grad_accumulation_steps
         min_diff = float("inf")
         num_gas = None
         for exec_time_out, bucket_id_out in zip(exec_time_list, bucket_id_list):
