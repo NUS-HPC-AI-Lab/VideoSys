@@ -96,8 +96,8 @@ class OpenSoraAttention(nn.Module):
                 )
             elif not use_flash_attn:
                 # print(f"rank: {torch.distributed.get_rank()} Using torch attn with B={B}, N={N}")
-                # x = self.native_attention(q, k, v)
-                x = checkpoint(self.native_attention, q, k, v, use_reentrant=False)
+                x = self.native_attention(q, k, v)
+                # x = checkpoint(self.native_attention, q, k, v, use_reentrant=False)
             else:
                 x = F.scaled_dot_product_attention(q, k, v)
 

@@ -612,7 +612,8 @@ class Profiler:
             else:
                 if sp_size < self.max_sp:
                     self.next_sp_size = sp_size * 2
-                    self.next_bs = 1
+                    # bs // 2 is the previous successful bs
+                    self.next_bs = 1 if self.auto_grad_acc else min(1, bs//4)
                     self.next_warmup_iter = not self.auto_grad_acc
                 elif len(self.dp_results) == 0:
                     if self.logger:
