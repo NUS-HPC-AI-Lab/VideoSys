@@ -441,45 +441,45 @@ class VariableVideoBatchSampler(DistributedSampler):
                         return (median_time - new_time) * 1
 
                 if self.auto_grad_accumulation:
-                    exec_time_list = []
-                    bucket_id_list = []
-                    left_samples_dict = {}
+                    # first record the max grad acc for each bucket
+                    max_grad_acc_dict = {}
+                    bucket_id_list = [i[0] for i in cur_first_batch_bucket_id_list]
+                    exec_time_list = [
+                        self.profiler.get_execution_time(*i[0][:2]) for i in cur_first_batch_bucket_id_list
+                    ]
                     for bucket_id, bs in cur_first_batch_bucket_id_list:
-                        ar_name, num_frame = bucket_id[:2]
-                        exec_time_list.append(self.profiler.get_execution_time(ar_name, num_frame))
-                        bucket_id_list.append(bucket_id)
                         offset = bucket_sample_dict_last_access[bucket_id]
                         left_samples = len(bucket_sample_dict[bucket_id]) - offset
-                        if bucket_id not in left_samples_dict:
-                            left_samples_dict[bucket_id] = left_samples
-                    for k, v in left_samples_dict.items():
-                        num_occur = bucket_id_list.count(k)
-                        bs = self.profiler.get_batch_size(k[0], k[1])
-                        max_grad_acc = v / bs / num_occur
-                        left_samples_dict[k] = math.ceil(max_grad_acc)
-
-                    max_grad_accumulation_steps = 20
+                        if bucket_id not in max_grad_acc_dict:
+                            num_occur = bucket_id_list.count(bucket_id)
+                            max_grad_acc = left_samples / bs / num_occur
+                            max_grad_acc_dict[bucket_id] = max(math.ceil(max_grad_acc), 1)
+                    # then decide the real number of grad acc for each bucket
+                    max_grad_accumulation_steps = 5
+                    max_time = max(exec_time_list) * max_grad_accumulation_steps
                     min_diff = float("inf")
                     num_gas = None
-                    for exec_time, bucket_id in zip(exec_time_list, bucket_id_list):
-                        for mult in range(1, min(max_grad_accumulation_steps + 1, left_samples_dict[bucket_id] + 1)):
-                            cur_time = exec_time * mult
-                            cur_gas, cur_diff = [], 0
+                    for exec_time_out, bucket_id_out in zip(exec_time_list, bucket_id_list):
+                        for mult in range(1, max_grad_acc_dict[bucket_id_out] + 1):
+                            time_out = exec_time_out * mult
+                            if time_out > max_time:
+                                break
+                            gas_out, diff_out = [], 0
                             for exec_time_in, bucket_id_in in zip(exec_time_list, bucket_id_list):
-                                best_gas, best_diff = None, float("inf")
-                                for gas_val in range(
-                                    1, min(max_grad_accumulation_steps + 1, left_samples_dict[bucket_id_in] + 1)
-                                ):
+                                gas_in, diff_in = None, float("inf")
+                                for gas_val in range(1, max_grad_acc_dict[bucket_id_in] + 1):
                                     lcm = exec_time_in * gas_val
-                                    now_diff = score_func(lcm, cur_time)
-                                    if now_diff < best_diff:
-                                        best_diff = now_diff
-                                        best_gas = gas_val
-                                cur_diff += best_diff
-                                cur_gas.append(best_gas)
-                            if cur_diff < min_diff:
-                                min_diff = cur_diff
-                                num_gas = cur_gas
+                                    if lcm > time_out:
+                                        break
+                                    now_diff = score_func(lcm, time_out)
+                                    if now_diff < diff_in:
+                                        diff_in = now_diff
+                                        gas_in = gas_val
+                                diff_out += diff_in
+                                gas_out.append(gas_in)
+                            if diff_out < min_diff:
+                                min_diff = diff_out
+                                num_gas = gas_out
                 else:
                     num_gas = [1 for _ in cur_first_batch_bucket_id_list]
 
