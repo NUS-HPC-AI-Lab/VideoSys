@@ -14,7 +14,6 @@ import torch.distributed as dist
 from tqdm import tqdm
 
 from videosys.core.dcp.recompute import disable_profile, enable_profile, get_profile_context
-from videosys.core.distributed.comm import _switch_sp_cp_bwd
 from videosys.core.distributed.parallel_mgr import DynamicParallelManager
 from videosys.training.datasets.open_sora.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
 from videosys.utils.training import GroupTimer, set_grad_accumulation_steps
@@ -386,11 +385,6 @@ class Profiler:
         if self.dynamic_sp:
             self.next_sp_size = 1
 
-        if self.has_next_data_plan():
-            num_frame = self.bucket_config[self.next_bucket_idx][1]
-            if num_frame == 1:
-                self.next_bs = self.next_sp_size
-
     def finalize_profile(self):
         assert self._need_profile
         self._need_profile = False
@@ -526,13 +520,6 @@ class Profiler:
                     f">>> [Profiling] Bucket {ar_name} {num_frame} at {bs} sp {sp_size} doesn't pass profile, OOM!"
                 )
 
-            # we will switch sp and cp only work for frame = 1
-            # if oom, set it back to the original value
-            # only for parallel when frame = 1 (sp cannot handle)
-            # this usually happens only in bucket parallel
-            if self.parallel_mgr.switch_sp_cp:
-                _switch_sp_cp_bwd(self.parallel_mgr)
-
         # warmup for lazy initialized optimizers like Adam(W)
         if plan_idx == 0:
             return
@@ -625,10 +612,7 @@ class Profiler:
             else:
                 if sp_size < self.max_sp:
                     self.next_sp_size = sp_size * 2
-                    if num_frame == 1:
-                        self.next_bs = self.next_sp_size
-                    else:
-                        self.next_bs = 1
+                    self.next_bs = 1
                     self.next_warmup_iter = not self.auto_grad_acc
                 elif len(self.dp_results) == 0:
                     if self.logger:

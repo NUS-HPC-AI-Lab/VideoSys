@@ -270,10 +270,9 @@ class VariableVideoBatchSampler(DistributedSampler):
                     total_time.append(cur_time)
                 max_time = max(total_time)
                 imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
-                imbalance = imbalance / max_time
                 self.imbalance_list.append(imbalance)
                 logging.info(
-                    f"iter {i}, cur imbalance: {imbalance:.4f}, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}"
+                    f"iter {i}, \nbucket_access_list: {bucket_access_list}, \ntotal time: {total_time}, \ncur imbalance: {imbalance:.4f}s, \nestimate total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list) * num_iters:.4f}s"
                 )
 
             # compute the range of data accessed by each GPU
@@ -287,10 +286,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                 (idx, real_t, real_h, real_w, bucket_id[0], self.parallel_mgr.sp_size, 1) for idx in cur_micro_batch
             ]
             yield cur_micro_batch
-
-        if self.calculate_imbalance:
-            logging.info(f"Mean imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
-            self.imbalance_list = []
 
         self.reset()
 
@@ -757,10 +752,9 @@ class VariableVideoBatchSampler(DistributedSampler):
                     total_time.append(cur_time)
                 max_time = max(total_time)
                 imbalance = sum([(max_time - t) for t in total_time]) / len(total_time)
-                imbalance = imbalance / max_time
                 self.imbalance_list.append(imbalance)
                 logging.info(
-                    f"iter {i}, cur imbalance: {imbalance:.4f}, total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}"
+                    f"iter {i}, \nbucket_id_map_list: {bucket_id_map_list}, \ntotal time: {total_time}, \ncur imbalance: {imbalance:.4f}s, \nestimate total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list) * num_iter:.4f}s"
                 )
 
             assert len(sp_size_map_list) == wsize
@@ -786,10 +780,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                 len(cur_micro_batches) > 0
             ), f"rank: {rank} iter: {i}, bucket_id_map_list: {bucket_id_map_list}, bucket_access_boundaries: {bucket_access_boundaries}"
             yield cur_micro_batches
-
-        if self.calculate_imbalance:
-            logging.info(f"Mean imbalance: {sum(self.imbalance_list) / len(self.imbalance_list):.4f}")
-            self.imbalance_list = []
 
         self.reset()
 
@@ -883,6 +873,9 @@ class VariableVideoBatchSampler(DistributedSampler):
         return self.approximate_num_batch
 
     def reset(self):
+        if self.calculate_imbalance and len(self.imbalance_list) > 0:
+            logging.info(f"Total imbalance for this epoch: {sum(self.imbalance_list):.4f}s")
+            self.imbalance_list = []
         self.last_micro_batch_access_index = 0
 
     def state_dict(self, num_steps: int) -> dict:

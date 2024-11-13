@@ -1,22 +1,10 @@
 import logging
 import time
-from enum import Enum, auto
 
 import torch
 from torch.utils.checkpoint import checkpoint
 
 PROFILE_CONTEXT = None
-
-
-class STDiT3BlockRecomputeConfig(Enum):
-    NONE = auto()
-    BLOCK = auto()
-    SELF_ATTN = auto()
-    CROSS_ATTN = auto()
-    MLP = auto()
-    SELF_AND_CROSS_ATTN = auto()
-    CROSS_ATTN_AND_MLP = auto()
-    SELF_ATTN_AND_MLP = auto()
 
 
 class ProfileContext:

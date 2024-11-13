@@ -15,7 +15,6 @@ class ParallelManager(ProcessGroupMesh):
     def __init__(self, dp_size, cp_size, sp_size):
         super().__init__(dp_size, cp_size, sp_size)
         dp_axis, cp_axis, sp_axis = 0, 1, 2
-        self.switch_sp_cp = False
 
         self.dp_size = dp_size
         self.dp_group: ProcessGroup = self.get_group_along_axis(dp_axis)
@@ -52,7 +51,6 @@ class DynamicParallelManager:
         self.gloo_sp_group = None
         self.enable_sp = False
         self.cp_size = 1
-        self.switch_sp_cp = False
 
         # {sp_size: sp_group}
         self.sp_clusters = {}
@@ -75,7 +73,6 @@ class DynamicParallelManager:
                 gpu_group = dist.new_group(group_ranks, use_local_synchronization=True, timeout=timedelta(seconds=60))
                 cpu_group = dist.new_group(group_ranks, backend="gloo", use_local_synchronization=True)
                 if self._rank in group_ranks:
-                    # dist.distributed_c10d._world.pg_default_device[gpu_group] = torch.device(f'cuda:{torch.cuda.current_device()}')
                     self.sp_clusters[_s] = gpu_group
                     self.gloo_sp_clusters[_s] = cpu_group
             _s *= 2

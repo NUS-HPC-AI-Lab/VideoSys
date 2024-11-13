@@ -50,7 +50,7 @@ def main(args):
         rank=rank,
         world_size=world_size,
         backend="nccl",
-        timeout=timedelta(minutes=2),
+        timeout=timedelta(minutes=10),
     )
     deepspeed.init_distributed(timeout=timedelta(seconds=10))
     torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
@@ -211,6 +211,7 @@ def main(args):
         parallel_mgr=parallel_mgr,
         calculate_imbalance=args.calculate_imbalance,
         verbose=args.verbose,
+        max_grad_accumulation_steps=args.max_grad_accumulation_steps,
     )
 
     # =======================================================
@@ -492,6 +493,7 @@ if __name__ == "__main__":
     parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")
     parser.add_argument("--calculate-imbalance", action="store_true")
+    parser.add_argument("--max-grad-accumulation-steps", default=2, type=int)
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

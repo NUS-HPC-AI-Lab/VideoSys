@@ -147,7 +147,25 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
         k, v = kv.unbind(2)
 
         if self.enable_flash_attn:
-            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
+            if B * N > 200000 and self.training:
+                # too large for flash attn kernel
+                out = []
+                seq_len = int(k.shape[1] // B)
+                for i in range(B):
+                    out.append(
+                        self.flash_attn_impl(
+                            q[:, i * N : (i + 1) * N],
+                            k[:, i * seq_len : (i + 1) * seq_len],
+                            v[:, i * seq_len : (i + 1) * seq_len],
+                            [mask[i]],
+                            1,
+                            N,
+                            C,
+                        )
+                    )
+                x = torch.cat(out, dim=0)
+            else:
+                x = self.flash_attn_impl(q, k, v, mask, B, N, C)
         else:
             x = self.torch_impl(q, k, v, mask, B, N, C)
 
@@ -162,9 +180,9 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
         k_seqinfo = _SeqLenInfo.from_seqlens(mask)
 
         x = flash_attn_varlen_func(
-            q.view(-1, self.num_heads, self.head_dim),
-            k.view(-1, self.num_heads, self.head_dim),
-            v.view(-1, self.num_heads, self.head_dim),
+            q.reshape(-1, self.num_heads, self.head_dim),
+            k.reshape(-1, self.num_heads, self.head_dim),
+            v.reshape(-1, self.num_heads, self.head_dim),
             cu_seqlens_q=q_seqinfo.seqstart.cuda(),
             cu_seqlens_k=k_seqinfo.seqstart.cuda(),
             max_seqlen_q=q_seqinfo.max_seqlen,

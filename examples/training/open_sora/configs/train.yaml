@@ -25,7 +25,7 @@ seed: 42
 wandb: true
 epochs: 100
 log_every: 1
-ckpt_every: 200
+ckpt_every: 1000
 
 # optimization
 grad_clip: 1.0
