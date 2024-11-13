@@ -39,6 +39,7 @@ def prepare_dataloader(
     max_grad_accumulation_steps: int = 2,
     parallel_mgr=None,
     calculate_imbalance: bool = False,
+    simple_balance: bool = False,
     verbose: bool = False,
     **kwargs,
 ):
@@ -59,6 +60,7 @@ def prepare_dataloader(
             max_grad_accumulation_steps=max_grad_accumulation_steps,
             parallel_mgr=parallel_mgr,
             calculate_imbalance=calculate_imbalance,
+            simple_balance=simple_balance,
         )
         return (
             DataLoader(

@@ -244,9 +244,9 @@ class Profiler:
             for ar_name in self.profile_results:
                 self.profile_results[ar_name] = {int(k): v for k, v in self.profile_results[ar_name].items()}
 
-            if not self.dynamic_recompute and not self.auto_grad_acc:
-                if not self.dynamic_sp or self.sp_balance_scope == "epoch":
-                    self.interpolate_profile_results()
+            # if not self.dynamic_recompute and not self.auto_grad_acc:
+            #     if not self.dynamic_sp or self.sp_balance_scope == "epoch":
+            #         self.interpolate_profile_results()
 
             self.next_bucket_idx = None
             self.next_sp_size = None

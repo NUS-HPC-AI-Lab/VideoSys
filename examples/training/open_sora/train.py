@@ -210,6 +210,7 @@ def main(args):
         num_bucket_build_workers=args.num_bucket_build_workers,
         parallel_mgr=parallel_mgr,
         calculate_imbalance=args.calculate_imbalance,
+        simple_balance=args.simple_balance,
         verbose=args.verbose,
     )
 
@@ -483,6 +484,7 @@ if __name__ == "__main__":
     parser.add_argument("--dynamic-sp", action="store_true")
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")
+    parser.add_argument("--simple-balance", action="store_true")
     parser.add_argument(
         "--alloc-memory-fraction",
         default=0.70,

@@ -86,6 +86,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         max_grad_accumulation_steps: int = 2,
         parallel_mgr=None,
         calculate_imbalance: bool = False,
+        simple_balance: bool = False,
     ) -> None:
         super().__init__(
             dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last
@@ -113,6 +114,8 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.parallel_mgr = parallel_mgr
         self.calculate_imbalance = calculate_imbalance
         self.imbalance_list = []
+
+        self.simple_balance = simple_balance
 
     def __iter__(self) -> Iterator[List[int]]:
         if self._get_num_batch_cached_bucket_sample_dict is not None:
@@ -144,8 +147,9 @@ class VariableVideoBatchSampler(DistributedSampler):
         # process the samples
         for bucket_id, data_list in bucket_sample_dict.items():
             ar_name, num_frame = bucket_id[:2]
-            if self.verbose and not self.profiler.is_valid_bucket(ar_name, num_frame):
-                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+            if not self.profiler.is_valid_bucket(ar_name, num_frame):
+                if self.verbose:
+                    logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
                 continue
             # handle droplast
             bs_per_gpu = self.get_batch_size(bucket_id)
@@ -688,6 +692,71 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         return bucket_id_access_order
 
+    def _build_local_bucket_id_access_order_simple_balance(self, bucket_sample_dict):
+        wsize = dist.get_world_size()
+        bucket_id_access_order = []
+        self.effective_samples = 0
+
+        bucket_sample_dict_last_access = {}
+        for bucket_id, data_list in bucket_sample_dict.items():
+            ar_name, num_frame = bucket_id[:2]
+            if not self.profiler.is_valid_bucket(ar_name, num_frame):
+                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+                continue
+
+            batch_size = self.get_batch_size(bucket_id)
+            sp_size = self.profiler.get_sp_size(ar_name, num_frame)
+            num_concurrent_batch = wsize // sp_size
+
+            org_num_samples = len(data_list)
+            remainder = org_num_samples % num_concurrent_batch
+
+            if remainder > 0:
+                data_list = data_list[:-remainder]
+
+            if self.shuffle is not None:
+                data_indices = torch.randperm(len(data_list), generator=self.generator).tolist()
+                data_list = [data_list[i] for i in data_indices]
+            bucket_sample_dict[bucket_id] = data_list
+            
+            if len(data_list) > 0:
+                self.effective_samples += len(data_list)
+                bucket_sample_dict_last_access[bucket_id] = 0
+            logging.info(f"bucket {bucket_id} discard remainder: {remainder} with num_concurrent_batch: {num_concurrent_batch}")
+
+        while len(bucket_sample_dict_last_access) > 0:
+            # sample a bucket according to the number of samples left
+            bucket_prob = [len(bucket_sample_dict[k])-bucket_sample_dict_last_access[k] for k in bucket_sample_dict_last_access]
+            total = sum(bucket_prob)
+            bucket_prob = torch.tensor([p/total for p in bucket_prob], dtype=torch.float)
+            bucket_idx = torch.multinomial(bucket_prob, 1, generator=self.generator).item()
+
+            bucket_id = list(bucket_sample_dict_last_access.keys())[bucket_idx]
+
+            batch_size = self.get_batch_size(bucket_id)
+            sp_size = self.profiler.get_sp_size(bucket_id[0], bucket_id[1])
+            num_concurrent_batch = wsize // sp_size
+
+            offset = bucket_sample_dict_last_access[bucket_id]
+            consumed = min(num_concurrent_batch*batch_size, len(bucket_sample_dict[bucket_id])-offset)
+
+            true_bs = consumed // num_concurrent_batch
+            bucket_id_access_order.append([
+                [
+                    (bucket_id, true_bs, sp_size,
+                    self.profiler.get_execution_time(bucket_id[0], bucket_id[1]),)
+                ] for _ in range(num_concurrent_batch)
+            ])
+            logging.info(
+                f"iter {len(bucket_id_access_order)}, num concurrent: {num_concurrent_batch} bucket_id: {bucket_id}, bs: {true_bs}, sp_size: {sp_size}, exec_time: {self.profiler.get_execution_time(bucket_id[0], bucket_id[1])}"
+            )
+
+            bucket_sample_dict_last_access[bucket_id] += consumed
+            if bucket_sample_dict_last_access[bucket_id] == len(bucket_sample_dict[bucket_id]):
+                bucket_sample_dict_last_access.pop(bucket_id)
+        
+        return bucket_id_access_order
+
     def _optimized_schedule_iter(self, bucket_sample_dict):
         rank, wsize = dist.get_rank(), dist.get_world_size()
         is_sp_balance_iter = (
@@ -701,6 +770,8 @@ class VariableVideoBatchSampler(DistributedSampler):
         if self.cached_bucket_id_access_order is not None:
             bucket_id_access_order = self.cached_bucket_id_access_order
             self.cached_bucket_id_access_order = None
+        elif self.simple_balance:
+            bucket_id_access_order = self._build_local_bucket_id_access_order_simple_balance(bucket_sample_dict)
         elif is_sp_balance_iter:
             bucket_id_access_order = self._build_local_bucket_id_access_order_sp_balance(bucket_sample_dict)
         else:
@@ -794,7 +865,9 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.reset()
 
     def get_num_batch_with_optimized_schedule(self, bucket_sample_dict) -> int:
-        if (
+        if self.simple_balance:
+            bucket_id_access_order = self._build_local_bucket_id_access_order_simple_balance(bucket_sample_dict)
+        elif (
             self.profiler.dynamic_sp
             and self.sp_balance_scope == "iter"
             and self.keep_last
@@ -802,10 +875,9 @@ class VariableVideoBatchSampler(DistributedSampler):
             and not self.auto_grad_accumulation
         ):
             bucket_id_access_order = self._build_local_bucket_id_access_order_sp_balance(bucket_sample_dict)
-            self.cached_bucket_id_access_order = bucket_id_access_order
         else:
             bucket_id_access_order = self._build_local_bucket_id_access_order_acc(bucket_sample_dict)
-            self.cached_bucket_id_access_order = bucket_id_access_order
+        self.cached_bucket_id_access_order = bucket_id_access_order
         self.approximate_num_batch = len(bucket_id_access_order)
 
         # collect statistics
