@@ -493,7 +493,7 @@ if __name__ == "__main__":
     parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")
     parser.add_argument("--calculate-imbalance", action="store_true")
-    parser.add_argument("--max-grad-accumulation-steps", default=2, type=int)
+    parser.add_argument("--max-grad-accumulation-steps", default=3, type=int)
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

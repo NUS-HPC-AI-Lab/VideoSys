@@ -1,4 +1,5 @@
 import logging
+import math
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from pprint import pformat
@@ -330,6 +331,53 @@ class VariableVideoBatchSampler(DistributedSampler):
             bucket_sample_dict[bucket_id].append(i)
         return bucket_sample_dict
 
+    def _calculate_grad_accumulation_num(
+        self, cur_first_batch_bucket_id_list, bucket_sample_dict, bucket_sample_dict_last_access
+    ):
+        def score_func(new_time, median_time):
+            if new_time > median_time:
+                return (new_time - median_time) * 1.5
+            else:
+                return (median_time - new_time) * 1
+
+        # first record the max grad acc for each bucket
+        max_grad_acc_dict = {}
+        bucket_id_list = [i[0] for i in cur_first_batch_bucket_id_list]
+        exec_time_list = [self.profiler.get_execution_time(*i[0][:2]) for i in cur_first_batch_bucket_id_list]
+        for bucket_id, bs in cur_first_batch_bucket_id_list:
+            offset = bucket_sample_dict_last_access[bucket_id]
+            left_samples = len(bucket_sample_dict[bucket_id]) - offset
+            if bucket_id not in max_grad_acc_dict:
+                num_occur = bucket_id_list.count(bucket_id)
+                max_grad_acc = left_samples / bs / num_occur
+                max_grad_acc_dict[bucket_id] = max(math.ceil(max_grad_acc), 1)
+        # then decide the real number of grad acc for each bucket
+        max_time = max(exec_time_list) * self.max_grad_accumulation_steps
+        min_diff = float("inf")
+        num_gas = None
+        for exec_time_out, bucket_id_out in zip(exec_time_list, bucket_id_list):
+            for mult in range(1, max_grad_acc_dict[bucket_id_out] + 1):
+                time_out = exec_time_out * mult
+                if time_out > max_time:
+                    break
+                gas_out, diff_out = [], 0
+                for exec_time_in, bucket_id_in in zip(exec_time_list, bucket_id_list):
+                    gas_in, diff_in = None, float("inf")
+                    for gas_val in range(1, max_grad_acc_dict[bucket_id_in] + 1):
+                        lcm = exec_time_in * gas_val
+                        if lcm > time_out:
+                            break
+                        now_diff = score_func(lcm, time_out)
+                        if now_diff < diff_in:
+                            diff_in = now_diff
+                            gas_in = gas_val
+                    diff_out += diff_in
+                    gas_out.append(gas_in)
+                if diff_out < min_diff:
+                    min_diff = diff_out
+                    num_gas = gas_out
+        return num_gas
+
     def _build_local_bucket_id_access_order_acc(self, bucket_sample_dict):
         wsize = dist.get_world_size()
         bucket_id_access_order = []
@@ -434,25 +482,9 @@ class VariableVideoBatchSampler(DistributedSampler):
                 )
 
                 if self.auto_grad_accumulation:
-                    exec_time_list = []
-                    for bucket_id, bs in cur_first_batch_bucket_id_list:
-                        ar_name, num_frame = bucket_id[:2]
-                        exec_time_list.append(self.profiler.get_execution_time(ar_name, num_frame))
-                    max_time = max(exec_time_list)
-
-                    min_diff = float("inf")
-                    num_gas = None
-                    for mult in range(1, self.max_grad_accumulation_steps + 1):
-                        lcm = max_time * mult
-
-                        cur_gas, cur_diff = [], 0
-                        for exec_time in exec_time_list:
-                            gas_val = np.round(lcm / exec_time).astype(int).item()
-                            cur_diff += abs(gas_val * exec_time - lcm)
-                            cur_gas.append(gas_val)
-                        if cur_diff < min_diff:
-                            min_diff = cur_diff
-                            num_gas = cur_gas
+                    num_gas = self._calculate_grad_accumulation_num(
+                        cur_first_batch_bucket_id_list, bucket_sample_dict, bucket_sample_dict_last_access
+                    )
                 else:
                     num_gas = [1 for _ in cur_first_batch_bucket_id_list]
 
