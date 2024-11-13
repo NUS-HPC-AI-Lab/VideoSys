@@ -146,8 +146,9 @@ class VariableVideoBatchSampler(DistributedSampler):
         # process the samples
         for bucket_id, data_list in bucket_sample_dict.items():
             ar_name, num_frame = bucket_id[:2]
-            if self.verbose and not self.profiler.is_valid_bucket(ar_name, num_frame):
-                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+            if not self.profiler.is_valid_bucket(ar_name, num_frame):
+                if self.verbose:
+                    logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
                 continue
             # handle droplast
             bs_per_gpu = self.get_batch_size(bucket_id)
@@ -391,7 +392,8 @@ class VariableVideoBatchSampler(DistributedSampler):
         for bucket_id, data_list in bucket_sample_dict.items():
             ar_name, num_frame = bucket_id[:2]
             if not self.profiler.is_valid_bucket(ar_name, num_frame):
-                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+                if self.verbose:
+                    logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
                 continue
 
             # collect bucket_sp_map, sp_bucket_map
@@ -561,7 +563,8 @@ class VariableVideoBatchSampler(DistributedSampler):
         for bucket_id, data_list in bucket_sample_dict.items():
             ar_name, num_frame = bucket_id[:2]
             if not self.profiler.is_valid_bucket(ar_name, num_frame):
-                logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
+                if self.verbose:
+                    logging.info(f"skip building batches for bucket {bucket_id} because it's invalid")
                 continue
 
             # shuffle
