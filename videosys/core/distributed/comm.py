@@ -2,116 +2,12 @@ from typing import Any, Optional, Tuple
 
 import torch
 import torch.distributed as dist
-import torch.nn.functional as F
-from einops import rearrange
 from torch import Tensor
 from torch.distributed import ProcessGroup
 
 # ======================================================
-# Model
-# ======================================================
-
-
-def model_sharding(model: torch.nn.Module):
-    global_rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    for _, param in model.named_parameters():
-        padding_size = (world_size - param.numel() % world_size) % world_size
-        if padding_size > 0:
-            padding_param = torch.nn.functional.pad(param.data.view(-1), [0, padding_size])
-        else:
-            padding_param = param.data.view(-1)
-        splited_params = padding_param.split(padding_param.numel() // world_size)
-        splited_params = splited_params[global_rank]
-        param.data = splited_params
-
-
-# ======================================================
 # AllGather & ReduceScatter
 # ======================================================
-
-
-class AsyncAllGatherForTwo(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx: Any,
-        inputs: Tensor,
-        weight: Tensor,
-        bias: Tensor,
-        sp_rank: int,
-        sp_size: int,
-        group: Optional[ProcessGroup] = None,
-    ) -> Tuple[Tensor, Any]:
-        """
-        Returns:
-            outputs: Tensor
-            handle: Optional[Work], if overlap is True
-        """
-        from torch.distributed._functional_collectives import all_gather_tensor
-
-        ctx.group = group
-        ctx.sp_rank = sp_rank
-        ctx.sp_size = sp_size
-
-        # all gather inputs
-        all_inputs = all_gather_tensor(inputs.unsqueeze(0), 0, group)
-        # compute local qkv
-        local_qkv = F.linear(inputs, weight, bias).unsqueeze(0)
-
-        # remote compute
-        remote_inputs = all_inputs[1 - sp_rank].view(list(local_qkv.shape[:-1]) + [-1])
-        # compute remote qkv
-        remote_qkv = F.linear(remote_inputs, weight, bias)
-
-        # concat local and remote qkv
-        if sp_rank == 0:
-            qkv = torch.cat([local_qkv, remote_qkv], dim=0)
-        else:
-            qkv = torch.cat([remote_qkv, local_qkv], dim=0)
-        qkv = rearrange(qkv, "sp b n c -> b (sp n) c")
-
-        ctx.save_for_backward(inputs, weight, remote_inputs)
-        return qkv
-
-    @staticmethod
-    def backward(ctx: Any, *grad_outputs) -> Tuple[Tensor, None, None]:
-        from torch.distributed._functional_collectives import reduce_scatter_tensor
-
-        group = ctx.group
-        sp_rank = ctx.sp_rank
-        sp_size = ctx.sp_size
-        inputs, weight, remote_inputs = ctx.saved_tensors
-
-        # split qkv_grad
-        qkv_grad = grad_outputs[0]
-        qkv_grad = rearrange(qkv_grad, "b (sp n) c -> sp b n c", sp=sp_size)
-        qkv_grad = torch.chunk(qkv_grad, 2, dim=0)
-        if sp_rank == 0:
-            local_qkv_grad, remote_qkv_grad = qkv_grad
-        else:
-            remote_qkv_grad, local_qkv_grad = qkv_grad
-
-        # compute remote grad
-        remote_inputs_grad = torch.matmul(remote_qkv_grad, weight).squeeze(0)
-        weight_grad = torch.matmul(remote_qkv_grad.transpose(-1, -2), remote_inputs).squeeze(0).sum(0)
-        bias_grad = remote_qkv_grad.squeeze(0).sum(0).sum(0)
-
-        # launch async reduce scatter
-        remote_inputs_grad_zero = torch.zeros_like(remote_inputs_grad)
-        if sp_rank == 0:
-            remote_inputs_grad = torch.cat([remote_inputs_grad_zero, remote_inputs_grad], dim=0)
-        else:
-            remote_inputs_grad = torch.cat([remote_inputs_grad, remote_inputs_grad_zero], dim=0)
-        remote_inputs_grad = reduce_scatter_tensor(remote_inputs_grad, "sum", 0, group)
-
-        # compute local grad and wait for reduce scatter
-        local_input_grad = torch.matmul(local_qkv_grad, weight).squeeze(0)
-        weight_grad += torch.matmul(local_qkv_grad.transpose(-1, -2), inputs).squeeze(0).sum(0)
-        bias_grad += local_qkv_grad.squeeze(0).sum(0).sum(0)
-
-        # sum remote and local grad
-        inputs_grad = remote_inputs_grad + local_input_grad
-        return inputs_grad, weight_grad, bias_grad, None, None, None
 
 
 class AllGather(torch.autograd.Function):
@@ -249,7 +145,7 @@ def all_to_all_comm(input_, process_group=None, scatter_dim=2, gather_dim=1):
 # ======================================================
 
 
-def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
+def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int, pad_val: int = 0):
     # skip if only one rank involved
     world_size = dist.get_world_size(pg)
     rank = dist.get_rank(pg)
@@ -259,7 +155,9 @@ def _split_sequence_func(input_, pg: dist.ProcessGroup, dim: int, pad: int):
     if pad > 0:
         pad_size = list(input_.shape)
         pad_size[dim] = pad
-        input_ = torch.cat([input_, torch.zeros(pad_size, dtype=input_.dtype, device=input_.device)], dim=dim)
+        input_ = torch.cat(
+            [input_, torch.empty(pad_size, dtype=input_.dtype, device=input_.device).fill_(pad_val)], dim=dim
+        )
 
     dim_size = input_.size(dim)
     assert dim_size % world_size == 0, f"dim_size ({dim_size}) is not divisible by world_size ({world_size})"
@@ -339,12 +237,12 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
         return _split_sequence_func(input_)
 
     @staticmethod
-    def forward(ctx, input_, process_group, dim, grad_scale, pad):
+    def forward(ctx, input_, process_group, dim, grad_scale, pad, pad_val):
         ctx.process_group = process_group
         ctx.dim = dim
         ctx.grad_scale = grad_scale
         ctx.pad = pad
-        return _split_sequence_func(input_, process_group, dim, pad)
+        return _split_sequence_func(input_, process_group, dim, pad, pad_val)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -352,11 +250,11 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
             grad_output = grad_output * dist.get_world_size(ctx.process_group)
         elif ctx.grad_scale == "down":
             grad_output = grad_output / dist.get_world_size(ctx.process_group)
-        return _gather_sequence_func(grad_output, ctx.process_group, ctx.pad), None, None, None, None
+        return _gather_sequence_func(grad_output, ctx.process_group, ctx.dim, ctx.pad), None, None, None, None, None
 
 
-def split_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):
-    return _SplitForwardGatherBackward.apply(input_, process_group, dim, grad_scale, pad)
+def split_sequence(input_, process_group, dim, grad_scale=1.0, pad=0, pad_val=0):
+    return _SplitForwardGatherBackward.apply(input_, process_group, dim, grad_scale, pad, pad_val)
 
 
 def gather_sequence(input_, process_group, dim, grad_scale=1.0, pad=0):

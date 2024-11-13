@@ -51,7 +51,7 @@ def batch_func(func, *args):
     """
     batch = []
     for arg in args:
-        if isinstance(arg, torch.Tensor) and arg.shape[0] == 2:
+        if isinstance(arg, torch.Tensor):
             batch.append(func(arg))
         else:
             batch.append(arg)

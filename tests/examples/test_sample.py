@@ -7,11 +7,11 @@ import inspect
 
 import pytest
 
-import examples.cogvideox.sample as cogvideox
-import examples.latte.sample as latte
-import examples.open_sora.sample as open_sora
-import examples.open_sora_plan.sample as open_sora_plan
-import examples.vchitect.sample as vchitect
+import examples.inference.cogvideox.sample as cogvideox
+import examples.inference.latte.sample as latte
+import examples.inference.open_sora.sample as open_sora
+import examples.inference.open_sora_plan.sample as open_sora_plan
+import examples.inference.vchitect.sample as vchitect
 
 files = [cogvideox, latte, open_sora, open_sora_plan, vchitect]
 members = []

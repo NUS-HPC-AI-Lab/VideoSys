@@ -26,10 +26,10 @@ from einops import rearrange, repeat
 from torch import nn
 from torch.nn import functional as F
 
-from videosys.core.comm import all_to_all_comm, gather_sequence, split_sequence
-from videosys.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial
-from videosys.core.parallel_mgr import ParallelManager
-from videosys.core.pipeline import VideoSysPipelineOutput
+from videosys.core.distributed.comm import all_to_all_comm, gather_sequence, split_sequence
+from videosys.core.distributed.parallel_mgr import ParallelManager
+from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial
+from videosys.core.pipeline.pipeline import VideoSysPipelineOutput
 
 torch_npu = None
 npu_config = None

@@ -1,0 +1,9 @@
+data_path: "assets/example_data/demo.csv"
+output_emb_path: "assets/example_data/embs"
+output_csv_path: "assets/example_data/demo_preprocess.csv"
+
+seed: 1024
+batch_size: 8
+dtype: "bf16"
+num_workers: 4
+prefetch_factor: 2

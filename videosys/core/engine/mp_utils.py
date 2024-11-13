@@ -14,7 +14,7 @@ from multiprocessing import Queue
 from multiprocessing.connection import wait
 from typing import Any, Callable, Dict, Generic, List, Optional, TextIO, TypeVar, Union
 
-from videosys.utils.logging import create_logger
+from videosys.utils.logging import init_logger
 
 T = TypeVar("T")
 _TERMINATE = "TERMINATE"  # sentinel
@@ -26,7 +26,7 @@ JOIN_TIMEOUT_S = 2
 mp_method = "spawn"  # fork cann't work
 mp = multiprocessing.get_context(mp_method)
 
-logger = create_logger()
+logger = init_logger()
 
 
 def get_distributed_init_method(ip: str, port: int) -> str:

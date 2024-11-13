@@ -24,3 +24,5 @@ timm
 torch>=1.13
 tqdm
 transformers==4.39.3
+huggingface_hub<0.26.0
+deepspeed

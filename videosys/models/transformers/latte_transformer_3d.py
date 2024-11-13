@@ -33,8 +33,9 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import nn
 
-from videosys.core.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
-from videosys.core.pab_mgr import (
+from videosys.core.distributed.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
+from videosys.core.distributed.parallel_mgr import ParallelManager
+from videosys.core.pab.pab_mgr import (
     enable_pab,
     get_mlp_output,
     if_broadcast_cross,
@@ -43,7 +44,6 @@ from videosys.core.pab_mgr import (
     if_broadcast_temporal,
     save_mlp_output,
 )
-from videosys.core.parallel_mgr import ParallelManager
 from videosys.utils.utils import batch_func
 
 

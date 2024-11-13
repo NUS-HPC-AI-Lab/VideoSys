@@ -9,6 +9,7 @@
 
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from functools import partial
@@ -46,8 +47,9 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import nn
 
-from videosys.core.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
-from videosys.core.pab_mgr import (
+from videosys.core.distributed.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
+from videosys.core.distributed.parallel_mgr import ParallelManager
+from videosys.core.pab.pab_mgr import (
     enable_pab,
     get_mlp_output,
     if_broadcast_cross,
@@ -56,8 +58,6 @@ from videosys.core.pab_mgr import (
     if_broadcast_temporal,
     save_mlp_output,
 )
-from videosys.core.parallel_mgr import ParallelManager
-from videosys.utils.logging import logger
 from videosys.utils.utils import batch_func
 
 if is_xformers_available():
@@ -702,7 +702,7 @@ class Attention(nn.Module):
                 # which uses this type of cross attention ONLY because the attention mask of format
                 # [0, ..., -10.000, ..., 0, ...,] is not supported
                 # throw warning
-                logger.info(
+                logging.info(
                     "Memory efficient attention with `xformers` might currently not work correctly if an attention mask is required for the attention operation."
                 )
                 processor = XFormersAttnAddedKVProcessor(attention_op=attention_op)
@@ -806,7 +806,7 @@ class Attention(nn.Module):
             and isinstance(self.processor, torch.nn.Module)
             and not isinstance(processor, torch.nn.Module)
         ):
-            logger.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
+            logging.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
             self._modules.pop("processor")
 
         self.processor = processor

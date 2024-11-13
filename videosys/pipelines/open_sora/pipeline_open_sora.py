@@ -12,8 +12,8 @@ from bs4 import BeautifulSoup
 from diffusers.models import AutoencoderKL
 from transformers import AutoTokenizer, T5EncoderModel
 
-from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
-from videosys.core.pipeline import VideoSysPipeline, VideoSysPipelineOutput
+from videosys.core.pab.pab_mgr import PABConfig, set_pab_manager, update_steps
+from videosys.core.pipeline.pipeline import VideoSysPipeline, VideoSysPipelineOutput
 from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
 from videosys.models.transformers.open_sora_transformer_3d import STDiT3
 from videosys.schedulers.scheduling_rflow_open_sora import RFLOW

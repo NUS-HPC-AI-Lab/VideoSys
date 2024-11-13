@@ -1,8 +1,19 @@
+import logging
 from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+def get_rms_norm():
+    try:
+        from apex.normalization.fused_layer_norm import FusedRMSNorm
+
+        return FusedRMSNorm
+    except ImportError:
+        logging.info("Apex FusedRMSNorm is not installed, using LlamaRMSNorm as fallback")
+        return LlamaRMSNorm
 
 
 class LlamaRMSNorm(nn.Module):

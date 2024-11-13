@@ -220,6 +220,7 @@ class RFLOW:
 
         dtype = model.x_embedder.proj.weight.dtype
         all_timesteps = [int(t.to(dtype).item()) for t in timesteps]
+        model_args["all_timesteps"] = all_timesteps
         for i, t in progress_wrap(list(enumerate(timesteps))):
             # mask for adding noise
             if mask is not None:
@@ -239,7 +240,7 @@ class RFLOW:
             t = torch.cat([t, t], 0)
 
             # pred = model(z_in, t, **model_args).chunk(2, dim=1)[0]
-            output = model(z_in, t, all_timesteps, **model_args)
+            output = model(z_in, t, **model_args)
 
             pred = output.chunk(2, dim=1)[0]
             pred_cond, pred_uncond = pred.chunk(2, dim=0)
