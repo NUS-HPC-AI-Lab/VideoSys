@@ -924,7 +924,7 @@ class VariableVideoBatchSampler(DistributedSampler):
     def reset(self):
         if self.calculate_imbalance and len(self.imbalance_list) > 0:
             total_imbalance_time = sum(self.imbalance_list)
-            logging.info(f"Total imbalance for this epoch: {total_imbalance_time:.2f}s ({total_imbalance_time/self.est_total_execution_time*100:.2f}%)")
+            logging.info(f"Total imbalance for this epoch: {total_imbalance_time:.2f}/{self.est_total_execution_time:.2f} ({total_imbalance_time/self.est_total_execution_time*100:.2f}%)")
             self.imbalance_list = []
             self.est_total_execution_time = 0.0
         self.last_micro_batch_access_index = 0
