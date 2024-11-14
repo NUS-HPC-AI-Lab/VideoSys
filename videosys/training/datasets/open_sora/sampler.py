@@ -621,12 +621,13 @@ class VariableVideoBatchSampler(DistributedSampler):
                 bs = self.profiler.get_batch_size(ar_name, num_frame)
 
                 num_samples = min(bs, bucket_sample_counts[bucket_id])
+                exec_time = self.profiler.get_execution_time(ar_name, num_frame)/bs*num_samples
                 cur_batch_bucket_id_list.append(
                     BucketPlan(
                         bucket_id=bucket_id,
                         batch_size=num_samples,
                         sp_size=sp,
-                        exec_time=self.profiler.get_execution_time(ar_name, num_frame),
+                        exec_time=exec_time,
                     )
                 )
 
@@ -640,52 +641,49 @@ class VariableVideoBatchSampler(DistributedSampler):
             if not has_one_more_batch:
                 continue
 
-            median_time = np.median([each.exec_time for each in cur_batch_bucket_id_list])
+            min_time = min([each.exec_time for each in cur_batch_bucket_id_list])
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                ar_name, num_frame = bucket_plan.bucket_id[:2]
-                sp = self.profiler.get_sp_size(ar_name, num_frame)
-                # bs of the last batch might be smaller than the original bs
-                bs = self.profiler.get_batch_size(ar_name, num_frame)
-                exec_time = self.profiler.get_execution_time(ar_name, num_frame)
+                original_exec_time = bucket_plan.exec_time
+                num_samples = bucket_plan.batch_size
+                unit_time = original_exec_time / num_samples
 
-                diff = score_func(exec_time, median_time)
-                if exec_time > median_time:
-                    if bs == 1:
-                        new_sp = sp
-                        new_time = exec_time
-                        while new_time > median_time and sp < self.profiler.max_sp:
-                            new_sp *= 2
-                            new_time /= 2
-                        new_diff = score_func(new_time, median_time)
-                        if new_diff < diff:
-                            sp = new_sp
-                            exec_time = new_time
+                # diff_time = (original_exec_time - min_time)*1.2
+                diff_time = score_func(original_exec_time, min_time)
+                # try to reduce batch size first
+                diff_bs = diff_time // unit_time
+                bs = max(1, int(num_samples - diff_bs))
+                
+                # try to double the sp size then
+                exec_time = unit_time * bs
+                diff_time = score_func(exec_time, min_time)
+                cur_sp = bucket_plan.sp_size
+                best_exec_time, best_diff, best_sp = exec_time, diff_time, cur_sp
+                
+                while cur_sp < self.profiler.max_sp and exec_time > min_time:
+                    cur_sp *= 2
+                    exec_time /= 2
+                    diff_time = score_func(exec_time, min_time)
+                    if diff_time < best_diff:
+                        best_exec_time, best_diff, best_sp = exec_time, diff_time, cur_sp
+                
+                # return left samples back to record
+                if bs < cur_batch_bucket_id_list[i].batch_size:
+                    bucket_id = cur_batch_bucket_id_list[i].bucket_id
+                    org_sp = bucket_plan.sp_size
+                    left_bs = cur_batch_bucket_id_list[i].batch_size - bs
+
+                    bucket_sample_counts[bucket_id] += left_bs
+                    if org_sp not in sp_bucket_map:
+                        sp_bucket_map[org_sp] = []
+                        sp_bucket_map[org_sp].append(bucket_id)
+                        sp_size_list.append(org_sp)
                     else:
-                        new_bs = max(1, int(bs * median_time / exec_time))
-                        new_time = exec_time * new_bs / bs
-                        new_diff = score_func(new_time, median_time)
-                        if new_diff < diff:
-                            bs = new_bs
-                            exec_time = new_time
-
-                    if bs < cur_batch_bucket_id_list[i].batch_size:
-                        bucket_id = cur_batch_bucket_id_list[i].bucket_id
-                        org_sp = self.profiler.get_sp_size(bucket_id[0], bucket_id[1])
-                        left_bs = cur_batch_bucket_id_list[i].batch_size - bs
-
-                        bucket_sample_counts[bucket_id] += left_bs
-                        if org_sp not in sp_bucket_map:
-                            sp_bucket_map[org_sp] = []
+                        if sp_bucket_map[org_sp].count(bucket_id) == 0:
                             sp_bucket_map[org_sp].append(bucket_id)
-                            sp_size_list.append(org_sp)
-                        else:
-                            if sp_bucket_map[org_sp].count(bucket_id) == 0:
-                                sp_bucket_map[org_sp].append(bucket_id)
 
-                        cur_batch_bucket_id_list[i].batch_size = bs
-
-                    cur_batch_bucket_id_list[i].sp_size = sp
-                    cur_batch_bucket_id_list[i].exec_time = exec_time
+                cur_batch_bucket_id_list[i].batch_size = bs
+                cur_batch_bucket_id_list[i].exec_time = best_exec_time
+                cur_batch_bucket_id_list[i].sp_size = best_sp
 
             # pop and recover buckets out of limit
             cur_batch_bucket_id_list = sorted(cur_batch_bucket_id_list, key=lambda x: x.sp_size, reverse=True)
