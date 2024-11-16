@@ -277,7 +277,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 self.imbalance_list.append(imbalance)
                 self.est_total_execution_time += max_time
                 logging.info(
-                    f"iter {i}, bucket_access_list: {bucket_access_list}\ntotal time: {total_time}"
+                    f"iter {i}, \nbucket_access_list: {bucket_access_list}\ntotal time: {total_time}"
                     f"\ncur imbalance: {imbalance/max_time*100:.4f} %, \nestimate total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list) * num_iters:.4f}s"
                 )
 
@@ -634,9 +634,34 @@ class VariableVideoBatchSampler(DistributedSampler):
 
             if not has_one_more_batch:
                 continue
+            logging.info(
+                f"iter {len(bucket_id_access_order)}\noriginal buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
+            )
 
-            min_time = min([each.exec_time for each in cur_batch_bucket_id_list])
+            time_no_last_batch, time_last_batch = [], []
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                cur_time = bucket_plan.exec_time
+                if bucket_sample_counts[bucket_plan.bucket_id] > 0:
+                    time_no_last_batch.append(cur_time)
+                else:
+                    time_last_batch.append(cur_time)
+            
+            if not time_no_last_batch:
+                assert len(time_last_batch) == len(cur_batch_bucket_id_list)
+                skip_bucket_idx = list(range(len(cur_batch_bucket_id_list)))
+                min_time = 0
+            else:
+                min_time = min(time_no_last_batch)
+                skip_bucket_idx = []
+                if time_last_batch:
+                    for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                        if bucket_plan.exec_time < min_time:
+                            skip_bucket_idx.append(i)
+
+            for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                if i in skip_bucket_idx:
+                    continue
+
                 original_exec_time = bucket_plan.exec_time
                 num_samples = bucket_plan.batch_size
                 unit_time = original_exec_time / num_samples
@@ -644,7 +669,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 diff_time = original_exec_time - min_time
                 # try to reduce batch size first
                 diff_bs = round(diff_time / unit_time)
-                bs = max(1, int(num_samples - diff_bs))
+                bs = max(1, num_samples - diff_bs)
                 
                 # try to double the sp size then
                 exec_time = unit_time * bs
@@ -681,6 +706,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             # pop and recover buckets out of limit
             cur_batch_bucket_id_list = sorted(cur_batch_bucket_id_list, key=lambda x: x.sp_size, reverse=True)
             total_gpus = sum([each.sp_size for each in cur_batch_bucket_id_list])
+            poped = []
             while total_gpus > wsize:
                 bucket_plan = cur_batch_bucket_id_list.pop()
                 bucket_id = bucket_plan.bucket_id
@@ -698,6 +724,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                     sp_bucket_map[org_sp].append(bucket_id)
 
                 total_gpus -= sp
+                poped.append(bucket_plan)
             assert total_gpus == wsize
 
             # rebalance bs only
@@ -738,7 +765,9 @@ class VariableVideoBatchSampler(DistributedSampler):
                 )
             bucket_id_access_order.append(this_bucket_acc_list)
             logging.info(
-                f"iter {len(bucket_id_access_order)}: buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
+                f"iter {len(bucket_id_access_order)}\nbuckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
+                f"\npoped: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in poped]}"
+                f"\nmin time: {min_time:.2f}, max time: {max_time:.2f}"
             )
 
         return bucket_id_access_order
@@ -826,7 +855,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 self.imbalance_list.append(imbalance)
                 self.est_total_execution_time += max_time
                 logging.info(
-                    f"iter {i}, bucket_id_map_list: {log_bucket_list}\ntotal time: {log_time_list}"
+                    f"iter {i}, \nbucket_id_map_list: {log_bucket_list}\ntotal time: {log_time_list}"
                     f"\ncur imbalance: {imbalance/max_time*100:.4f} %, \nestimate total imbalance: {sum(self.imbalance_list) / len(self.imbalance_list) * num_iter:.4f}s"
                 )
 
