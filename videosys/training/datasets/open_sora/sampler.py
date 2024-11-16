@@ -635,7 +635,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             if not has_one_more_batch:
                 continue
             logging.info(
-                f"iter {len(bucket_id_access_order)}: original buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
+                f"iter {len(bucket_id_access_order)}\noriginal buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
             )
 
             time_no_last_batch, time_last_batch = [], []
@@ -650,29 +650,13 @@ class VariableVideoBatchSampler(DistributedSampler):
                 assert len(time_last_batch) == len(cur_batch_bucket_id_list)
                 skip_bucket_idx = list(range(len(cur_batch_bucket_id_list)))
                 min_time = 0
-            elif not time_last_batch:
+            else:
                 min_time = min(time_no_last_batch)
                 skip_bucket_idx = []
-            else:
-                max_time_no_last_batch = max(time_no_last_batch)
-                max_time_last_batch = max(time_last_batch)
-                if max_time_no_last_batch > max_time_last_batch:
-                    min_time_no_last_batch = min(time_no_last_batch)
-
-                    if min_time_no_last_batch >= max_time_last_batch:
-                        min_time = min_time_no_last_batch
-                        # mask out all last batch
-                        for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                            if bucket_sample_counts[bucket_plan.bucket_id] == 0:
-                                skip_bucket_idx.append(i)
-                    else:
-                        min_time = max_time_last_batch
-                        for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                            if bucket_plan.exec_time < min_time:
-                                skip_bucket_idx.append(i)
-                else:
-                    min_time = 0
-                    skip_bucket_idx = list(range(len(cur_batch_bucket_id_list)))
+                if time_last_batch:
+                    for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                        if bucket_plan.exec_time < min_time:
+                            skip_bucket_idx.append(i)
 
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                 if i in skip_bucket_idx:
@@ -781,7 +765,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 )
             bucket_id_access_order.append(this_bucket_acc_list)
             logging.info(
-                f"iter {len(bucket_id_access_order)}: buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
+                f"iter {len(bucket_id_access_order)}\nbuckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
                 f"\npoped: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in poped]}"
                 f"\nmin time: {min_time:.2f}, max time: {max_time:.2f}"
             )
