@@ -285,7 +285,7 @@ def main(args):
     token_counter = torch.zeros((1,), dtype=torch.double, device=device)
 
     for epoch in range(start_epoch, cfg_epochs):
-        token_counter.zero_()
+        acc_token = 0
         if profiler.need_profile():
             # TODO: add timer for profile
             disable = True
@@ -335,7 +335,7 @@ def main(args):
                             # Prepare text inputs
                             model_args = encode_prompt(text_encoder, tokenizer, y)
 
-                    token_counter += x.shape[0] * x.shape[2] * x.shape[3] * x.shape[4]
+                    acc_token += x.shape[0] * x.shape[2] * x.shape[3] * x.shape[4]
 
                     for k, v in batch_data.items():
                         if isinstance(v, torch.Tensor):
@@ -420,7 +420,7 @@ def main(args):
                 )
 
         if rank == 0 and not disable:
-            token_counter /= parallel_mgr.sp_size
+            token_counter += acc_token / parallel_mgr.sp_size
             dist.all_reduce(token_counter)
             elapsed_time = pbar.format_dict['elapsed']
             logging.info(
