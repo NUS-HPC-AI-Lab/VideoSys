@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from pprint import pformat
@@ -156,36 +157,24 @@ class VariableVideoBatchSampler(DistributedSampler):
             remainder = org_num_samples % bs_per_gpu
 
             if (not self.keep_last) and remainder > 0:
-                if not self.drop_last:
-                    # if there is remainder, we pad to make it divisible
-                    pad = bs_per_gpu - remainder
-                    if pad > org_num_samples:
-                        data_list = data_list * ((pad + org_num_samples - 1) // org_num_samples + 1)
-                        data_list = data_list[: pad + org_num_samples]
-                    else:
-                        data_list += data_list[:pad]
-                else:
-                    # we just drop the remainder to make it divisible
-                    data_list = data_list[:-remainder]
-            bucket_sample_dict[bucket_id] = data_list
+                # we just drop the remainder to make it divisible
+                data_list = data_list[:-remainder]
 
             # handle shuffle
             if self.shuffle:
                 data_indices = torch.randperm(len(data_list), generator=g).tolist()
                 data_list = [data_list[i] for i in data_indices]
-                bucket_sample_dict[bucket_id] = data_list
+            bucket_sample_dict[bucket_id] = data_list
 
             # compute how many micro-batches each bucket has
             effect_size = len(data_list)
-            if self.keep_last or (not self.drop_last):
+            if self.keep_last:
                 num_micro_batches = (effect_size + bs_per_gpu - 1) // bs_per_gpu
+                self.effective_samples += effect_size
             else:
                 num_micro_batches = effect_size // bs_per_gpu
-            bucket_micro_batch_count[bucket_id] = num_micro_batches
-            if not self.keep_last:
                 self.effective_samples += bs_per_gpu * num_micro_batches
-            else:
-                self.effective_samples += effect_size
+            bucket_micro_batch_count[bucket_id] = num_micro_batches
 
         # compute the bucket access order
         # each bucket may have more than one batch of data
@@ -204,7 +193,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         remainder = original_batches % self.num_replicas
         bucket_num_batch_to_deduct = defaultdict(int)
         if remainder > 0:
-            # bucket_num_samples_to_deduct = defaultdict(int)
             for i in range(original_batches - remainder, original_batches):
                 bucket_num_batch_to_deduct[bucket_id_access_order[i]] += 1
 
@@ -480,6 +468,21 @@ class VariableVideoBatchSampler(DistributedSampler):
                     if not sp_bucket_map[sp]:
                         sp_size_list.remove(sp)
                         sp_bucket_map.pop(sp)
+                
+                if not self.keep_last:
+                    max_time = max([self.profiler.get_execution_time(each[0][:2]) for each in cur_first_batch_bucket_id_list])
+                    for i, (bucket_id, bs) in enumerate(cur_batch_bucket_id_list):
+                        ar_name, num_frame = bucket_id[:2]
+                        exec_time = self.profiler.get_execution_time(ar_name, num_frame)
+                        bs = self.profiler.get_batch_size(ar_name, num_frame)
+                        sp_size = self.profiler.get_sp_size(ar_name, num_frame)
+
+                        required_gas = max_time // exec_time - 1
+                        remain_batches = len(bucket_sample_dict[bucket_id]) // bs
+
+                        if remain_batches < required_gas:
+                            cur_batch_bucket_id_list.pop(i)
+                            remain_gpus += sp_size
 
             if has_one_more_batch:
                 # sort to make sure fitting
@@ -603,7 +606,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                 else:
                     idx = max_sp_idx - 1
                 sp = sp_size_list[idx]
-                remain_gpus -= sp
 
                 # select bucket
                 if self.generator is not None:
@@ -615,6 +617,13 @@ class VariableVideoBatchSampler(DistributedSampler):
                 bs = self.profiler.get_batch_size(ar_name, num_frame)
 
                 num_samples = min(bs, bucket_sample_counts[bucket_id])
+                bucket_sample_counts[bucket_id] -= num_samples
+                if bucket_sample_counts[bucket_id] == 0:
+                    sp_bucket_map[sp].remove(bucket_id)
+                    if not sp_bucket_map[sp]:
+                        sp_size_list.remove(sp)
+                        sp_bucket_map.pop(sp)
+
                 exec_time = self.profiler.get_execution_time(ar_name, num_frame)/bs*num_samples
                 cur_batch_bucket_id_list.append(
                     BucketPlan(
@@ -625,39 +634,51 @@ class VariableVideoBatchSampler(DistributedSampler):
                     )
                 )
 
-                bucket_sample_counts[bucket_id] -= num_samples
-                if bucket_sample_counts[bucket_id] == 0:
-                    sp_bucket_map[sp].remove(bucket_id)
-                    if not sp_bucket_map[sp]:
-                        sp_size_list.remove(sp)
-                        sp_bucket_map.pop(sp)
+                remain_gpus -= sp
+
+                if not self.keep_last:
+                    min_time_idx, min_time = -1, float("inf")
+                    for i, each in enumerate(cur_batch_bucket_id_list):
+                        max_bs = self.profiler.get_batch_size(each.bucket_id[:2])
+                        if each.exec_time < min_time and max_bs > each.batch_size:
+                            min_time = each.exec_time
+                            min_time_idx = i
+                    if min_time_idx > -1:
+                        # drop last batch for this bucket if it is the shortest time
+                        pop_plan = cur_batch_bucket_id_list.pop(min_time_idx)
+                        remain_gpus += pop_plan.sp_size
 
             if not has_one_more_batch:
                 continue
+
             logging.info(
                 f"iter {len(bucket_id_access_order)}\noriginal buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
             )
 
-            time_no_last_batch, time_last_batch = [], []
-            for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                cur_time = bucket_plan.exec_time
-                if bucket_sample_counts[bucket_plan.bucket_id] > 0:
-                    time_no_last_batch.append(cur_time)
+            if self.keep_last:
+                time_no_last_batch, time_last_batch = [], []
+                for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                    cur_time = bucket_plan.exec_time
+                    if bucket_sample_counts[bucket_plan.bucket_id] > 0:
+                        time_no_last_batch.append(cur_time)
+                    else:
+                        time_last_batch.append(cur_time)
+                
+                if not time_no_last_batch:
+                    assert len(time_last_batch) == len(cur_batch_bucket_id_list)
+                    skip_bucket_idx = list(range(len(cur_batch_bucket_id_list)))
+                    min_time = 0
                 else:
-                    time_last_batch.append(cur_time)
-            
-            if not time_no_last_batch:
-                assert len(time_last_batch) == len(cur_batch_bucket_id_list)
-                skip_bucket_idx = list(range(len(cur_batch_bucket_id_list)))
-                min_time = 0
+                    min_time = min(time_no_last_batch)
+                    skip_bucket_idx = []
+                    if time_last_batch:
+                        for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                            if bucket_plan.exec_time < min_time:
+                                skip_bucket_idx.append(i)
             else:
-                min_time = min(time_no_last_batch)
+                min_time = min([each.exec_time for each in cur_batch_bucket_id_list])
                 skip_bucket_idx = []
-                if time_last_batch:
-                    for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                        if bucket_plan.exec_time < min_time:
-                            skip_bucket_idx.append(i)
-
+            
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                 if i in skip_bucket_idx:
                     continue
@@ -886,6 +907,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.reset()
 
     def get_num_batch_with_optimized_schedule(self, bucket_sample_dict) -> int:
+        time = time.time()
         if (
             self.profiler.dynamic_sp
             and self.sp_balance_scope == "iter"
@@ -899,6 +921,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             bucket_id_access_order = self._build_local_bucket_id_access_order_acc(bucket_sample_dict)
             self.cached_bucket_id_access_order = bucket_id_access_order
         self.approximate_num_batch = len(bucket_id_access_order)
+        elapsed = time.time()
 
         # collect statistics
         total_samples = 0
@@ -909,7 +932,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 continue
             size = len(v)
             max_bs = self.profiler.get_batch_size(ar_name, num_frame)
-            if self.keep_last or (not self.drop_last):
+            if self.keep_last:
                 effect_size = size + max_bs - 1
             else:
                 effect_size = size
@@ -923,6 +946,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         # log
         if dist.get_rank() == 0 and self.verbose:
+            logging.info(f"building index costs: {elapsed:.2f}s")
             logging.info(f"Bucket Info at epoch {self.epoch} with optimized schedule:")
             logging.info("Bucket [#sample, #batch]:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
             logging.info(
@@ -949,7 +973,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 continue
             size = len(v)
             bs = self.get_batch_size(k)
-            if self.keep_last or (not self.drop_last):
+            if self.keep_last:
                 effect_size = size + bs - 1
             else:
                 effect_size = size

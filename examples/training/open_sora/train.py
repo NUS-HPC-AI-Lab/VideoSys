@@ -282,8 +282,10 @@ def main(args):
     # 5. training loop
     # =======================================================
     dist.barrier()
+    token_counter = torch.zeros((1,), dtype=torch.double, device=device)
 
     for epoch in range(start_epoch, cfg_epochs):
+        token_counter.zero_()
         if profiler.need_profile():
             # TODO: add timer for profile
             disable = True
@@ -332,6 +334,8 @@ def main(args):
                             x = vae.encode(x)  # [B, C, T, H/P, W/P]
                             # Prepare text inputs
                             model_args = encode_prompt(text_encoder, tokenizer, y)
+
+                    token_counter += x.shape[0] * x.shape[2] * x.shape[3] * x.shape[4]
 
                     for k, v in batch_data.items():
                         if isinstance(v, torch.Tensor):
@@ -416,9 +420,14 @@ def main(args):
                 )
 
         if rank == 0 and not disable:
+            token_counter /= parallel_mgr.sp_size
+            dist.all_reduce(token_counter)
+            elapsed_time = pbar.format_dict['elapsed']
             logging.info(
-                f"Epoch {epoch}: steps: {num_steps_per_epoch} effective samples: {sampler.effective_samples}, "
-                f"throughput: {sampler.effective_samples / pbar.format_dict['elapsed']} samples/s"
+                f"Epoch {epoch}: steps: {num_steps_per_epoch} elapsed time: {elapsed_time:.2f} s"
+                f", effective samples: {sampler.effective_samples}"
+                f", sample throughput: {sampler.effective_samples / elapsed_time:.2f} samples/s"
+                f", token throughput: {token_counter.item()/elapsed_time:.2f} token/s"
             )
 
         sampler.reset()
