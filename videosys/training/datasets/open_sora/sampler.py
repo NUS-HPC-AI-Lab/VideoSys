@@ -474,15 +474,21 @@ class VariableVideoBatchSampler(DistributedSampler):
                     for i, (bucket_id, bs) in enumerate(cur_first_batch_bucket_id_list):
                         ar_name, num_frame = bucket_id[:2]
                         exec_time = self.profiler.get_execution_time(ar_name, num_frame)
-                        bs = self.profiler.get_batch_size(ar_name, num_frame)
+                        max_bs = self.profiler.get_batch_size(ar_name, num_frame)
                         sp_size = self.profiler.get_sp_size(ar_name, num_frame)
 
                         required_gas = max_time // exec_time - 1
-                        remain_batches = len(bucket_sample_dict[bucket_id]) // bs
+                        remain_batches = (len(bucket_sample_dict[bucket_id])-bucket_sample_dict_last_access[bucket_id]) // max_bs
 
-                        if remain_batches < required_gas:
+                        if remain_batches < required_gas and remain_batches > 0:
                             cur_first_batch_bucket_id_list.pop(i)
                             remain_gpus += sp_size
+
+                            bucket_sample_dict_last_access[bucket_id] = len(bucket_sample_dict[bucket_id])
+                            sp_bucket_map[sp_size].remove(bucket_id)
+                            if not sp_bucket_map[sp_size]:
+                                sp_size_list.remove(sp_size)
+                                sp_bucket_map.pop(sp_size)
 
             if has_one_more_batch:
                 # sort to make sure fitting
@@ -758,7 +764,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 unit_time = cur_exec_time / cur_bs
 
                 diff_time = max_time - cur_exec_time
-                increment_bs = round(diff_time / unit_time)
+                increment_bs = int(diff_time // unit_time)
                 if increment_bs+cur_bs > max_bs:
                     increment_bs = max_bs - cur_bs
                 increment_bs = min(increment_bs, bucket_sample_counts[bucket_id])
