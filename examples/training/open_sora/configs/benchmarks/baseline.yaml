@@ -13,6 +13,7 @@ calculate_imbalance: true
 # preprocess embedding
 data_path: "./assets/example_data/demo_preprocess.csv"
 preprocessed_data: true
+drop_last: true
 
 # train
 ckpt_path: "hpcai-tech/OpenSora-STDiT-v3"

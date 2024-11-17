@@ -212,48 +212,6 @@ def main(args):
         max_grad_accumulation_steps=args.max_grad_accumulation_steps,
     )
 
-    # ======================================================
-    # 2. build dataset and dataloader
-    # ======================================================
-    logging.info("Building dataset...")
-    # == build dataset ==
-    if args.dummy_dataset:
-        dataset = DummyVariableVideoTextDataset(
-            data_size=args.dummy_data_size,
-            seed=args.seed,
-            data_path=args.data_path,
-            transform_name="resize_crop",
-            preprocessed_data=preprocessed_data,
-            bucket_config=args.bucket_config,
-            common_ar=args.common_ar,
-            distribution=args.distribution,
-            zipf_offset=args.zipf_offset,
-            image_mixing_type=args.image_mixing_type,
-            image_mixing_frac=args.image_mixing_frac,
-        )
-    else:
-        dataset = VariableVideoTextDataset(
-            transform_name="resize_crop", data_path=args.data_path, preprocessed_data=preprocessed_data
-        )
-    logging.info(f"Dataset contains {len(dataset)} samples.")
-
-    # == build dataloader ==
-    dataloader, sampler = prepare_dataloader(
-        dataset=dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        seed=args.seed,
-        shuffle=True,
-        drop_last=args.drop_last,
-        process_group=parallel_mgr.dp_group,
-        prefetch_factor=args.prefetch_factor,
-        auto_grad_accumulation=args.auto_grad_accumulation,
-        bucket_config=args.bucket_config,
-        num_bucket_build_workers=args.num_bucket_build_workers,
-        parallel_mgr=parallel_mgr,
-        calculate_imbalance=args.calculate_imbalance,
-    )
-
     # == global variables ==
     start_epoch = 0
     start_step = 0

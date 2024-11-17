@@ -470,8 +470,8 @@ class VariableVideoBatchSampler(DistributedSampler):
                         sp_bucket_map.pop(sp)
                 
                 if not self.keep_last:
-                    max_time = max([self.profiler.get_execution_time(each[0][:2]) for each in cur_first_batch_bucket_id_list])
-                    for i, (bucket_id, bs) in enumerate(cur_batch_bucket_id_list):
+                    max_time = max([self.profiler.get_execution_time(*each[0][:2]) for each in cur_first_batch_bucket_id_list])
+                    for i, (bucket_id, bs) in enumerate(cur_first_batch_bucket_id_list):
                         ar_name, num_frame = bucket_id[:2]
                         exec_time = self.profiler.get_execution_time(ar_name, num_frame)
                         bs = self.profiler.get_batch_size(ar_name, num_frame)
@@ -481,7 +481,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         remain_batches = len(bucket_sample_dict[bucket_id]) // bs
 
                         if remain_batches < required_gas:
-                            cur_batch_bucket_id_list.pop(i)
+                            cur_first_batch_bucket_id_list.pop(i)
                             remain_gpus += sp_size
 
             if has_one_more_batch:
@@ -555,8 +555,6 @@ class VariableVideoBatchSampler(DistributedSampler):
         return bucket_id_access_order
 
     def _build_local_bucket_id_access_order_sp_balance(self, bucket_sample_dict):
-        assert self.keep_last
-
         wsize = dist.get_world_size()
         bucket_id_access_order = []
         self.effective_samples = 0
@@ -639,7 +637,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 if not self.keep_last:
                     min_time_idx, min_time = -1, float("inf")
                     for i, each in enumerate(cur_batch_bucket_id_list):
-                        max_bs = self.profiler.get_batch_size(each.bucket_id[:2])
+                        max_bs = self.profiler.get_batch_size(*each.bucket_id[:2])
                         if each.exec_time < min_time and max_bs > each.batch_size:
                             min_time = each.exec_time
                             min_time_idx = i
@@ -797,9 +795,9 @@ class VariableVideoBatchSampler(DistributedSampler):
         rank, wsize = dist.get_rank(), dist.get_world_size()
         is_sp_balance_iter = (
             self.profiler.dynamic_sp
-            and self.sp_balance_scope == "iter"
             and not self.profiler.dynamic_recompute
             and not self.auto_grad_accumulation
+            and self.sp_balance_scope == "iter"
         )
 
         # bucket_id_access_order: [[(bucket_id, bs)] * <num acc of this bucket>] * <num sp groups of this iter>
@@ -907,13 +905,12 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.reset()
 
     def get_num_batch_with_optimized_schedule(self, bucket_sample_dict) -> int:
-        time = time.time()
+        start_ = time.time()
         if (
             self.profiler.dynamic_sp
-            and self.sp_balance_scope == "iter"
-            and self.keep_last
             and not self.profiler.dynamic_recompute
             and not self.auto_grad_accumulation
+            and self.sp_balance_scope == "iter"
         ):
             bucket_id_access_order = self._build_local_bucket_id_access_order_sp_balance(bucket_sample_dict)
             self.cached_bucket_id_access_order = bucket_id_access_order
@@ -921,7 +918,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             bucket_id_access_order = self._build_local_bucket_id_access_order_acc(bucket_sample_dict)
             self.cached_bucket_id_access_order = bucket_id_access_order
         self.approximate_num_batch = len(bucket_id_access_order)
-        elapsed = time.time()
+        elapsed = time.time() - start_
 
         # collect statistics
         total_samples = 0
@@ -946,7 +943,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         # log
         if dist.get_rank() == 0 and self.verbose:
-            logging.info(f"building index costs: {elapsed:.2f}s")
+            logging.info(f"Building index costs: {elapsed:.2f}s")
             logging.info(f"Bucket Info at epoch {self.epoch} with optimized schedule:")
             logging.info("Bucket [#sample, #batch]:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
             logging.info(
@@ -959,9 +956,11 @@ class VariableVideoBatchSampler(DistributedSampler):
         return self.approximate_num_batch
 
     def get_num_batch(self, bucket_sample_dict) -> int:
+        start_ = time.time()
         bucket_id_access_order = self._build_bucketized_bucket_id_access_order(bucket_sample_dict)
         self.cached_bucket_id_access_order = bucket_id_access_order
         self.approximate_num_batch = len(bucket_id_access_order)
+        elapsed = time.time() - start_
 
         # collect statistics
         total_samples = 0
@@ -988,6 +987,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         # log
         if dist.get_rank() == 0 and self.verbose:
+            logging.info(f"Building index costs: {elapsed:.2f}s")
             logging.info(f"Bucket Info at epoch {self.epoch} with bucketized schedule:")
             logging.info("Bucket [#sample, #batch]:\n%s", pformat(bucket_stat_dict, sort_dicts=False))
             logging.info(
