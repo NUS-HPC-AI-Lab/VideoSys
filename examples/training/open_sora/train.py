@@ -282,6 +282,18 @@ def main(args):
     # 5. training loop
     # =======================================================
     dist.barrier()
+    warmup = 2
+    iters = 3
+    trace_path = exp_dir
+    profiler = torch.profiler.profile(
+            activities=[torch.profiler.ProfilerActivity.CPU,
+                        torch.profiler.ProfilerActivity.CUDA],
+            schedule=torch.profiler.schedule(
+                skip_first=0, wait=0, warmup=warmup, active=iters, repeat=1),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(trace_path),
+            profile_memory=True,
+        )
+    profiler.start()
     token_counter = torch.zeros((1,), dtype=torch.double, device=device)
 
     for epoch in range(start_epoch, cfg_epochs):
@@ -418,7 +430,10 @@ def main(args):
                 logging.info(
                     f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
-        
+
+            profiler.step()
+            if step == 6:
+                break
         token_counter.fill_(local_token_counter)
         dist.all_reduce(token_counter)
         if rank == 0 and not disable:
@@ -432,7 +447,7 @@ def main(args):
 
         sampler.reset()
         start_step = 0
-
+    profiler.stop()
     dist.barrier()
 
     if do_profile:
