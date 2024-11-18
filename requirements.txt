@@ -6,6 +6,7 @@ av==13.1.0
 bcrypt==4.2.0
 beartype==0.19.0
 beautifulsoup4==4.12.3
+torch==2.1.2
 certifi==2022.12.7
 cffi==1.17.1
 cfgv==3.4.0
@@ -24,7 +25,6 @@ docker-pycreds==0.4.0
 einops==0.8.0
 fabric==3.2.2
 filelock==3.13.1
-flash-attn==2.5.9.post1
 frozenlist==1.5.0
 fsspec==2024.2.0
 ftfy==6.3.1
@@ -88,9 +88,8 @@ soupsieve==2.6
 sympy==1.13.1
 timm==0.9.16
 tokenizers==0.15.2
-torch==2.1.2+cu121
-torchaudio==2.1.2+cu121
-torchvision==0.16.2+cu121
+torchaudio==2.1.2
+torchvision==0.16.2
 tqdm==4.66.6
 transformers==4.36.2
 triton==2.1.0
@@ -101,5 +100,5 @@ virtualenv==20.27.1
 wandb==0.18.5
 wcwidth==0.2.13
 wrapt==1.16.0
-xformers @ https://download.pytorch.org/whl/cu121/xformers-0.0.23.post1-cp39-cp39-manylinux2014_x86_64.whl#sha256=a117e4cc835d9a19c653d79b5c66e37c72f713241e2d85b6561a15006f84b6e6
+xformers==0.0.23.post1
 zipp==3.20.2
