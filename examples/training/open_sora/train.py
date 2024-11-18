@@ -418,10 +418,10 @@ def main(args):
                 logging.info(
                     f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
-
+        
+        token_counter.fill_(local_token_counter)
+        dist.all_reduce(token_counter)
         if rank == 0 and not disable:
-            token_counter.fill_(local_token_counter)
-            dist.all_reduce(token_counter)
             elapsed_time = pbar.format_dict['elapsed']
             logging.info(
                 f"Epoch {epoch}: steps: {num_steps_per_epoch} elapsed time: {elapsed_time:.2f} s"
