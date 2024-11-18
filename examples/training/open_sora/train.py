@@ -285,7 +285,7 @@ def main(args):
     warmup = 2
     iters = 3
     trace_path = exp_dir
-    profiler = torch.profiler.profile(
+    prof = torch.profiler.profile(
             activities=[torch.profiler.ProfilerActivity.CPU,
                         torch.profiler.ProfilerActivity.CUDA],
             schedule=torch.profiler.schedule(
@@ -293,7 +293,7 @@ def main(args):
             on_trace_ready=torch.profiler.tensorboard_trace_handler(trace_path),
             profile_memory=True,
         )
-    profiler.start()
+    prof.start()
     token_counter = torch.zeros((1,), dtype=torch.double, device=device)
 
     for epoch in range(start_epoch, cfg_epochs):
@@ -431,7 +431,7 @@ def main(args):
                     f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
 
-            profiler.step()
+            prof.step()
             if step == 6:
                 break
         token_counter.fill_(local_token_counter)
@@ -447,7 +447,7 @@ def main(args):
 
         sampler.reset()
         start_step = 0
-    profiler.stop()
+    prof.stop()
     dist.barrier()
 
     if do_profile:
