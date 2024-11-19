@@ -8,7 +8,6 @@
 # --------------------------------------------------------
 
 import inspect
-import os
 import re
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -164,7 +163,7 @@ class FluxPABConfig(PABConfig):
 class FluxConfig:
     def __init__(
         self,
-        model_path: str = "maxin-cn/Flux-1",
+        model_path: str = "black-forest-labs/FLUX.1-dev",
         # ======= distributed =======
         num_gpus: int = 1,
         # ======= vae ========
@@ -238,65 +237,65 @@ class FluxPipeline(VideoSysPipeline):
 
     def __init__(
         self,
-        # model
-        scheduler: FlowMatchEulerDiscreteScheduler = None,
-        vae: AutoencoderKL = None,
-        text_encoder: CLIPTextModel = None,
-        tokenizer: CLIPTokenizer = None,
-        text_encoder_2: T5EncoderModel = None,
-        tokenizer_2: T5TokenizerFast = None,
-        transformer: FluxTransformer2DModel = None,
+        # model components
+        scheduler: Optional[FlowMatchEulerDiscreteScheduler] = None,
+        vae: Optional[AutoencoderKL] = None,
+        text_encoder: Optional[CLIPTextModel] = None,
+        tokenizer: Optional[CLIPTokenizer] = None,
+        text_encoder_2: Optional[T5EncoderModel] = None,
+        tokenizer_2: Optional[T5TokenizerFast] = None,
+        transformer: Optional[FluxTransformer2DModel] = None,
         config: FluxConfig = FluxConfig(),
-        device: torch.device = torch.device("cuda"),
+        device: torch.device = torch.device("cuda:0"),
         dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
         self._config = config
+        self._device = device
         print("Loading FluxPipeline modules")
 
         # init
         if tokenizer is None:
-            tokenizer = CLIPTokenizer.from_pretrained(config.model, subfolder="tokenizer", torch_dtype=dtype)
+            tokenizer = CLIPTokenizer.from_pretrained(config.model_path, subfolder="tokenizer", torch_dtype=dtype)
 
         if tokenizer_2 is None:
-            tokenizer_2 = T5TokenizerFast.from_pretrained(config.model, subfolder="tokenizer_2", torch_dtype=dtype)
+            tokenizer_2 = T5TokenizerFast.from_pretrained(config.model_path, subfolder="tokenizer_2", torch_dtype=dtype)
 
         if text_encoder is None:
-            text_encoder = CLIPTextModel.from_pretrained(config.model, subfolder="text_encoder", torch_dtype=dtype)
+            text_encoder = CLIPTextModel.from_pretrained(config.model_path, subfolder="text_encoder", torch_dtype=dtype)
 
         if text_encoder_2 is None:
-            text_encoder_2 = T5EncoderModel.from_pretrained(config.model, subfolder="text_encoder_2", torch_dtype=dtype)
+            text_encoder_2 = T5EncoderModel.from_pretrained(
+                config.model_path, subfolder="text_encoder_2", torch_dtype=dtype
+            )
 
         if vae is None:
-            vae = AutoencoderKL.from_pretrained(config.model, subfolder="vae", torch_dtype=dtype)
+            vae = AutoencoderKL.from_pretrained(config.model_path, subfolder="vae", torch_dtype=dtype)
 
         if transformer is None:
             transformer = FluxTransformer2DModel.from_pretrained(
-                config.model, subfolder="transformer", torch_dtype=dtype
+                config.model_path, subfolder="transformer", torch_dtype=dtype
             )
 
         if scheduler is None:
-            scheduler = FlowMatchEulerDiscreteScheduler(
-                beta_start=config.beta_start,
-                beta_end=config.beta_end,
-                beta_schedule=config.beta_schedule,
-                variance_type=config.variance_type,
-            )
+            scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(config.model_path, subfolder="scheduler")
 
-        os.path.join(os.path.dirname(text_encoder.name_or_path), "transformer")
-        transformer = FluxTransformer2DModel.from_pretrained(
-            "black-forest-labs/FLUX.1-dev",
-            subfolder="transformer",
-            torch_dtype=torch.bfloat16,
-            low_cpu_mem_usage=True,
-            offload_state_dict=False,
-        ).to("cuda:1")
+        # os.path.join(os.path.dirname(text_encoder.name_or_path), "transformer")
+        # transformer = FluxTransformer2DModel.from_pretrained(
+        #     "black-forest-labs/FLUX.1-dev",
+        #     subfolder="transformer",
+        #     torch_dtype=torch.bfloat16,
+        #     low_cpu_mem_usage=True,
+        #     offload_state_dict=False,
+        # ).to("cuda:1")
 
         # cpu offload
         if config.cpu_offload:
             self.enable_model_cpu_offload()
         else:
-            self.set_eval_and_device(self._device, vae, transformer, text_encoder)
+            self.set_eval_and_device(
+                self._device, vae, transformer, text_encoder, text_encoder_2, tokenizer, tokenizer_2
+            )
 
         # pab
         if config.enable_pab:
