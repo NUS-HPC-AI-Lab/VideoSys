@@ -239,34 +239,51 @@ class FluxPipeline(VideoSysPipeline):
     def __init__(
         self,
         # model
-        scheduler: FlowMatchEulerDiscreteScheduler,
-        vae: AutoencoderKL,
-        text_encoder: CLIPTextModel,
-        tokenizer: CLIPTokenizer,
-        text_encoder_2: T5EncoderModel,
-        tokenizer_2: T5TokenizerFast,
-        # transformer: FluxTransformer2DModel,
+        scheduler: FlowMatchEulerDiscreteScheduler = None,
+        vae: AutoencoderKL = None,
+        text_encoder: CLIPTextModel = None,
+        tokenizer: CLIPTokenizer = None,
+        text_encoder_2: T5EncoderModel = None,
+        tokenizer_2: T5TokenizerFast = None,
+        transformer: FluxTransformer2DModel = None,
         config: FluxConfig = FluxConfig(),
-        device: Optional[torch.device] = None,
+        device: torch.device = torch.device("cuda"),
         dtype: torch.dtype = torch.float16,
     ):
         super().__init__()
         self._config = config
         print("Loading FluxPipeline modules")
 
-        # set the components
-        # scheduler = FlowMatchEulerDiscreteScheduler(
-        #         num_train_timesteps= 1000,
-        #         shift= 3.0,
-        #         use_dynamic_shifting=True,
-        #         base_shift = 0.5,
-        #         max_shift = 1.15,
-        #         base_image_seq_len= 256,
-        #         max_image_seq_len = 4096,
-        # )
+        # init
+        if tokenizer is None:
+            tokenizer = CLIPTokenizer.from_pretrained(config.model, subfolder="tokenizer", torch_dtype=dtype)
+
+        if tokenizer_2 is None:
+            tokenizer_2 = T5TokenizerFast.from_pretrained(config.model, subfolder="tokenizer_2", torch_dtype=dtype)
+
+        if text_encoder is None:
+            text_encoder = CLIPTextModel.from_pretrained(config.model, subfolder="text_encoder", torch_dtype=dtype)
+
+        if text_encoder_2 is None:
+            text_encoder_2 = T5EncoderModel.from_pretrained(config.model, subfolder="text_encoder_2", torch_dtype=dtype)
+
+        if vae is None:
+            vae = AutoencoderKL.from_pretrained(config.model, subfolder="vae", torch_dtype=dtype)
+
+        if transformer is None:
+            transformer = FluxTransformer2DModel.from_pretrained(
+                config.model, subfolder="transformer", torch_dtype=dtype
+            )
+
+        if scheduler is None:
+            scheduler = FlowMatchEulerDiscreteScheduler(
+                beta_start=config.beta_start,
+                beta_end=config.beta_end,
+                beta_schedule=config.beta_schedule,
+                variance_type=config.variance_type,
+            )
 
         os.path.join(os.path.dirname(text_encoder.name_or_path), "transformer")
-
         transformer = FluxTransformer2DModel.from_pretrained(
             "black-forest-labs/FLUX.1-dev",
             subfolder="transformer",
@@ -274,6 +291,12 @@ class FluxPipeline(VideoSysPipeline):
             low_cpu_mem_usage=True,
             offload_state_dict=False,
         ).to("cuda:1")
+
+        # cpu offload
+        if config.cpu_offload:
+            self.enable_model_cpu_offload()
+        else:
+            self.set_eval_and_device(self._device, vae, transformer, text_encoder)
 
         # pab
         if config.enable_pab:
