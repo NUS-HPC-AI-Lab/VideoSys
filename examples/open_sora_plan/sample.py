@@ -15,7 +15,7 @@ def run_base():
         guidance_scale=7.5,
         num_inference_steps=100,
         seed=-1,
-    ).video[0]
+    ).images[0]
     engine.save_video(video, f"./outputs/{prompt}.mp4")
 
 
