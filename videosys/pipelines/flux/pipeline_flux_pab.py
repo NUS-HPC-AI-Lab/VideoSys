@@ -246,7 +246,7 @@ class FluxPipeline(VideoSysPipeline):
         super().__init__()
         self._config = config
         self._device = device
-        print("Loading FluxPipeline modules")
+        # print("Loading FluxPipeline modules")
 
         # init
         if tokenizer is None:
@@ -286,7 +286,7 @@ class FluxPipeline(VideoSysPipeline):
         if config.enable_pab:
             set_pab_manager(config.pab_config)
 
-        print("Registering FluxPipeline modules")
+        # print("Registering FluxPipeline modules")
         self.register_modules(
             vae=vae,
             text_encoder=text_encoder,
@@ -496,7 +496,7 @@ class FluxPipeline(VideoSysPipeline):
     ):
         if height % 8 != 0 or width % 8 != 0:
             raise ValueError(f"`height` and `width` have to be divisible by 8 but are {height} and {width}.")
-        print(f"Checking FluxPipeline inputs callback_on_step_end_tensor_inputs: {callback_on_step_end_tensor_inputs}")
+        # print(f"Checking FluxPipeline inputs callback_on_step_end_tensor_inputs: {callback_on_step_end_tensor_inputs}")
         if callback_on_step_end_tensor_inputs is not None and not all(
             k in self._callback_tensor_inputs for k in callback_on_step_end_tensor_inputs
         ):
@@ -737,7 +737,7 @@ class FluxPipeline(VideoSysPipeline):
             is True, otherwise a `tuple`. When returning a tuple, the first element is a list with the generated
             images.
         """
-        print("Running FluxPipeline Generation")
+        # print("Running FluxPipeline Generation")
         height = height or self.default_sample_size * self.vae_scale_factor
         width = width or self.default_sample_size * self.vae_scale_factor
 
@@ -827,7 +827,7 @@ class FluxPipeline(VideoSysPipeline):
             guidance = None
         
         # 6. Denoising loop
-        print(f'timesteps {timesteps}')
+        # print(f'timesteps {timesteps}')
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:

@@ -114,7 +114,7 @@ class FluxSingleTransformerBlock(nn.Module):
         
         if enable_pab() and broadcast_attn:
             attn_output = self.last_attn
-            print(f'SingleBlock | skip t={int(timestep[0])}')
+            # print(f'SingleBlock | skip t={int(timestep[0])}')
         else:
             attn_output = self.attn(
                 hidden_states=norm_hidden_states,
@@ -218,7 +218,7 @@ class FluxTransformerBlock(nn.Module):
         if enable_pab() and broadcast_cross:
             attn_output = self.last_cross
             context_attn_output = self.context_attn_output
-            print(f'FluxTransformerBlock | skip t={int(timestep[0])}')
+            # print(f'FluxTransformerBlock | skip t={int(timestep[0])}')
         else:
             attn_output, context_attn_output = self.attn(
                 hidden_states=norm_hidden_states,
