@@ -39,6 +39,15 @@ from diffusers.models.normalization import AdaLayerNormContinuous, AdaLayerNormZ
 from diffusers.utils import USE_PEFT_BACKEND, is_torch_version, logging, scale_lora_layers, unscale_lora_layers
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 
+from videosys.core.pab_mgr import (
+    enable_pab,
+    get_mlp_output,
+    if_broadcast_cross,
+    if_broadcast_mlp,
+    if_broadcast_spatial,
+    save_mlp_output,
+)
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -80,22 +89,37 @@ class FluxSingleTransformerBlock(nn.Module):
             pre_only=True,
         )
 
+        # pab
+        self.attn_count = 0
+        self.last_attn = None
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         temb: torch.FloatTensor,
         image_rotary_emb=None,
         joint_attention_kwargs=None,
+        timestep = None
     ):
         residual = hidden_states
         norm_hidden_states, gate = self.norm(hidden_states, emb=temb)
         mlp_hidden_states = self.act_mlp(self.proj_mlp(norm_hidden_states))
         joint_attention_kwargs = joint_attention_kwargs or {}
-        attn_output = self.attn(
-            hidden_states=norm_hidden_states,
-            image_rotary_emb=image_rotary_emb,
-            **joint_attention_kwargs,
-        )
+        
+        if enable_pab():
+            broadcast_attn, self.attn_count = if_broadcast_spatial(int(timestep[0]), self.attn_count)
+        
+        if enable_pab() and broadcast_attn:
+            attn_output = self.last_attn
+            print(f'SingleBlock | skip t={int(timestep[0])}')
+        else:
+            attn_output = self.attn(
+                hidden_states=norm_hidden_states,
+                image_rotary_emb=image_rotary_emb,
+                **joint_attention_kwargs,
+            )
+            if enable_pab():
+                self.last_attn = attn_output
 
         hidden_states = torch.cat([attn_output, mlp_hidden_states], dim=2)
         gate = gate.unsqueeze(1)
@@ -159,6 +183,11 @@ class FluxTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
+        # pab
+        self.cross_count = 0
+        self.last_cross = None
+        self.context_attn_output = None
+        
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -166,6 +195,7 @@ class FluxTransformerBlock(nn.Module):
         temb: torch.FloatTensor,
         image_rotary_emb=None,
         joint_attention_kwargs=None,
+        timestep = None
     ):
         norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=temb)
 
@@ -174,17 +204,30 @@ class FluxTransformerBlock(nn.Module):
         )
         joint_attention_kwargs = joint_attention_kwargs or {}
         # Attention. # TODO: Add support for `cross_attention_dim` in the future.
-        attn_output, context_attn_output = self.attn(
-            hidden_states=norm_hidden_states,
-            encoder_hidden_states=norm_encoder_hidden_states,
-            image_rotary_emb=image_rotary_emb,
-            **joint_attention_kwargs,
-        )
+        
+        # cross attention
+        if enable_pab():
+            broadcast_cross, self.cross_count = if_broadcast_cross(int(timestep[0]), self.cross_count)
 
+        if enable_pab() and broadcast_cross:
+            attn_output = self.last_cross
+            context_attn_output = self.context_attn_output
+            print(f'FluxTransformerBlock | skip t={int(timestep[0])}')
+        else:
+            attn_output, context_attn_output = self.attn(
+                hidden_states=norm_hidden_states,
+                encoder_hidden_states=norm_encoder_hidden_states,
+                image_rotary_emb=image_rotary_emb,
+                **joint_attention_kwargs,
+            )
+            if enable_pab():
+                self.last_cross = attn_output
+                self.context_attn_output = context_attn_output
+                
         # Process attention outputs for the `hidden_states`.
         attn_output = gate_msa.unsqueeze(1) * attn_output
         hidden_states = hidden_states + attn_output
-
+        
         norm_hidden_states = self.norm2(hidden_states)
         norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
 
@@ -505,6 +548,7 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
                     temb=temb,
                     image_rotary_emb=image_rotary_emb,
                     joint_attention_kwargs=joint_attention_kwargs,
+                    timestep = timestep
                 )
 
             # controlnet residual
@@ -548,6 +592,7 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
                     temb=temb,
                     image_rotary_emb=image_rotary_emb,
                     joint_attention_kwargs=joint_attention_kwargs,
+                    timestep = timestep
                 )
 
             # controlnet residual

@@ -6,11 +6,11 @@
 # References:
 # Flux:
 # --------------------------------------------------------
-
+import os
 import inspect
 import re
 from typing import Any, Callable, Dict, List, Optional, Union
-
+from PIL import Image
 import numpy as np
 import torch
 from diffusers.image_processor import VaeImageProcessor
@@ -19,12 +19,23 @@ from diffusers.models import AutoencoderKL
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
 from diffusers.utils import USE_PEFT_BACKEND, replace_example_docstring, scale_lora_layers, unscale_lora_layers
 from diffusers.utils.torch_utils import randn_tensor
+from diffusers.pipelines.flux.pipeline_output import FluxPipelineOutput
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
+from videosys.core.pab_mgr import PABConfig, set_pab_manager, update_steps
 
-from videosys.core.pab_mgr import PABConfig, set_pab_manager
 from videosys.core.pipeline import VideoSysPipeline
 from videosys.models.transformers.flux_transformer import FluxTransformer2DModel
 from videosys.utils.logging import logger
+from videosys.utils.utils import save_video, set_seed
+
+from diffusers.utils import (
+    USE_PEFT_BACKEND,
+    is_torch_xla_available,
+    logging,
+    replace_example_docstring,
+    scale_lora_layers,
+    unscale_lora_layers,
+)
 
 EXAMPLE_DOC_STRING = """
     Examples:
@@ -41,6 +52,13 @@ EXAMPLE_DOC_STRING = """
         >>> image.save("flux.png")
         ```
 """
+
+if is_torch_xla_available():
+    import torch_xla.core.xla_model as xm
+
+    XLA_AVAILABLE = True
+else:
+    XLA_AVAILABLE = False
 
 
 def calculate_shift(
@@ -121,42 +139,24 @@ class FluxPABConfig(PABConfig):
         self,
         spatial_broadcast: bool = True,
         spatial_threshold: list = [100, 800],
-        spatial_range: int = 2,
-        temporal_broadcast: bool = True,
-        temporal_threshold: list = [100, 800],
-        temporal_range: int = 3,
+        spatial_range: int = 20,
+        
+        temporal_broadcast: bool = False,
         cross_broadcast: bool = True,
+        
         cross_threshold: list = [100, 800],
-        cross_range: int = 6,
+        cross_range: int = 20,
         mlp_broadcast: bool = True,
-        mlp_spatial_broadcast_config: dict = {
-            720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            480: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            400: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-        },
-        mlp_temporal_broadcast_config: dict = {
-            720: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            640: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            560: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            480: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-            400: {"block": [0, 1, 2, 3, 4], "skip_count": 2},
-        },
     ):
         super().__init__(
             spatial_broadcast=spatial_broadcast,
             spatial_threshold=spatial_threshold,
             spatial_range=spatial_range,
             temporal_broadcast=temporal_broadcast,
-            temporal_threshold=temporal_threshold,
-            temporal_range=temporal_range,
             cross_broadcast=cross_broadcast,
             cross_threshold=cross_threshold,
             cross_range=cross_range,
             mlp_broadcast=mlp_broadcast,
-            mlp_spatial_broadcast_config=mlp_spatial_broadcast_config,
-            mlp_temporal_broadcast_config=mlp_temporal_broadcast_config,
         )
 
 
@@ -180,14 +180,8 @@ class FluxConfig:
         pab_config: PABConfig = FluxPABConfig(),
     ):
         self.model_path = model_path
-        # self.vae = vae
-
-        # vae = AutoencoderKL(config.vae)
-        # text_encoder = CLIPTextModel(config.text_encoder)
-        # tokenizer = CLIPTokenizer(config.tokenizer)
-        # text_encoder_2 = T5EncoderModel(config.text_encoder_2)
-        # tokenizer_2 = T5TokenizerFast(config.tokenizer_2)
-
+        self.steps = 50
+        
         # self.pipeline_cls = FluxPipeline
         # ======= distributed =======
         self.num_gpus = num_gpus
@@ -294,9 +288,11 @@ class FluxPipeline(VideoSysPipeline):
             self.enable_model_cpu_offload()
         else:
             self.set_eval_and_device(
-                self._device, vae, transformer, text_encoder, text_encoder_2, tokenizer, tokenizer_2
+                self._device, vae, transformer, text_encoder, text_encoder_2
             )
-
+            # tokenizer = tokenizer.to(device)
+            # text_encoder_2 = text_encoder_2.to(device)
+            
         # pab
         if config.enable_pab:
             set_pab_manager(config.pab_config)
@@ -339,7 +335,7 @@ class FluxPipeline(VideoSysPipeline):
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
-        device = device or self._execution_device
+        device = device or self._device
         dtype = dtype or self.text_encoder.dtype
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
@@ -386,7 +382,7 @@ class FluxPipeline(VideoSysPipeline):
         num_images_per_prompt: int = 1,
         device: Optional[torch.device] = None,
     ):
-        device = device or self._execution_device
+        device = device or self._device
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
         batch_size = len(prompt)
@@ -412,6 +408,7 @@ class FluxPipeline(VideoSysPipeline):
                 "The following part of your input was truncated because CLIP can only handle sequences up to"
                 f" {self.tokenizer_max_length} tokens: {removed_text}"
             )
+        
         prompt_embeds = self.text_encoder(text_input_ids.to(device), output_hidden_states=False)
 
         # Use pooled output of CLIPTextModel
@@ -456,7 +453,7 @@ class FluxPipeline(VideoSysPipeline):
             lora_scale (`float`, *optional*):
                 A lora scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
         """
-        device = device or self._execution_device
+        device = device or self._device
 
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
@@ -761,6 +758,8 @@ class FluxPipeline(VideoSysPipeline):
         height = height or self.default_sample_size * self.vae_scale_factor
         width = width or self.default_sample_size * self.vae_scale_factor
 
+        update_steps(num_inference_steps)
+
         # 1. Check inputs. Raise error if not correct
         self.check_inputs(
             prompt,
@@ -785,7 +784,7 @@ class FluxPipeline(VideoSysPipeline):
         else:
             batch_size = prompt_embeds.shape[0]
 
-        device = self._execution_device
+        device = self._device
 
         lora_scale = self.joint_attention_kwargs.get("scale", None) if self.joint_attention_kwargs is not None else None
         (
@@ -843,8 +842,9 @@ class FluxPipeline(VideoSysPipeline):
             guidance = guidance.expand(latents.shape[0])
         else:
             guidance = None
-
+        
         # 6. Denoising loop
+        print(f'timesteps {timesteps}')
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
@@ -906,3 +906,11 @@ class FluxPipeline(VideoSysPipeline):
             return (image,)
 
         return FluxPipelineOutput(images=image)
+
+
+    def save_image(self, image, output_path):
+        if isinstance(image, Image.Image):
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            image.save(output_path)
+        else:
+            raise ValueError("Image must be a PIL Image object.")
