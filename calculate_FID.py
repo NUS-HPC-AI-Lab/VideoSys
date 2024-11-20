@@ -78,4 +78,13 @@ if __name__ == "__main__":
         raise ValueError("Generated images directory does not exist. Add your images to 'generated_images/'.")
     
     print(f"Calculating FID for {GENERATED_IMAGES_DIR}...")
-    calculate_fid(preprocessed_coco_dir, GENERATED_IMAGES_DIR)
+    fid_value = calculate_fid(preprocessed_coco_dir, GENERATED_IMAGES_DIR)
+
+    fid_score_file = os.path.join(GENERATED_IMAGES_DIR, "fid_score.txt")
+    with open(fid_score_file, "w") as f:
+        f.write(f"FID Score: {fid_value}\\n")
+    print(f"FID score saved to {fid_score_file}")
+    
+    
+    
+# python calculate_FID.py --generated_images_dir outputs/flux-pab
