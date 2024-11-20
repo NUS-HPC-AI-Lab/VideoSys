@@ -274,15 +274,6 @@ class FluxPipeline(VideoSysPipeline):
         if scheduler is None:
             scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(config.model_path, subfolder="scheduler")
 
-        # os.path.join(os.path.dirname(text_encoder.name_or_path), "transformer")
-        # transformer = FluxTransformer2DModel.from_pretrained(
-        #     "black-forest-labs/FLUX.1-dev",
-        #     subfolder="transformer",
-        #     torch_dtype=torch.bfloat16,
-        #     low_cpu_mem_usage=True,
-        #     offload_state_dict=False,
-        # ).to("cuda:1")
-
         # cpu offload
         if config.cpu_offload:
             self.enable_model_cpu_offload()
@@ -290,8 +281,6 @@ class FluxPipeline(VideoSysPipeline):
             self.set_eval_and_device(
                 self._device, vae, transformer, text_encoder, text_encoder_2
             )
-            # tokenizer = tokenizer.to(device)
-            # text_encoder_2 = text_encoder_2.to(device)
             
         # pab
         if config.enable_pab:
@@ -308,12 +297,6 @@ class FluxPipeline(VideoSysPipeline):
             scheduler=scheduler,
         )
 
-        # cpu offload
-        # if config.cpu_offload:
-        #     self.enable_model_cpu_offload()
-        # else:
-        #     self.set_eval_and_device(device, text_encoder, vae, transformer)
-
         # model setting
         self.vae_scale_factor = (
             2 ** (len(self.vae.config.block_out_channels)) if hasattr(self, "vae") and self.vae is not None else 16
@@ -324,7 +307,7 @@ class FluxPipeline(VideoSysPipeline):
         )
         self.default_sample_size = 64
 
-        # parallel
+        # TODO parallel 
         # self._set_parallel()
 
     def _get_t5_prompt_embeds(

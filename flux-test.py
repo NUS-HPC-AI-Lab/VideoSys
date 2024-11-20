@@ -21,12 +21,12 @@ pipe = FluxPipeline(
 #     offload_state_dict=False,
 # ).to("cuda:1")
 
-# from diffusers import FluxPipeline
+from diffusers import FluxPipeline
 
-# pipe = FluxPipeline.from_pretrained(
-#     "black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16, device_map="balanced"  # 自动分配到多个 GPU
-# )
-# pipe.enable_model_cpu_offload()
+pipe = FluxPipeline.from_pretrained(
+    "black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16, device_map="balanced"  # 自动分配到多个 GPU
+)
+pipe.enable_model_cpu_offload()
 
 prompt = "A cat holding a sign that says hello world"
 

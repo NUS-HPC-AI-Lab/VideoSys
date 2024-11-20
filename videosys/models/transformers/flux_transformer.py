@@ -38,7 +38,7 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.normalization import AdaLayerNormContinuous, AdaLayerNormZero, AdaLayerNormZeroSingle
 from diffusers.utils import USE_PEFT_BACKEND, is_torch_version, logging, scale_lora_layers, unscale_lora_layers
 from diffusers.utils.torch_utils import maybe_allow_in_graph
-
+from videosys.core.parallel_mgr import ParallelManager
 from videosys.core.pab_mgr import (
     enable_pab,
     get_mlp_output,
@@ -92,6 +92,9 @@ class FluxSingleTransformerBlock(nn.Module):
         # pab
         self.attn_count = 0
         self.last_attn = None
+
+        # parallel
+        self.parallel_manager: ParallelManager = None
 
     def forward(
         self,
@@ -188,6 +191,9 @@ class FluxTransformerBlock(nn.Module):
         self.last_cross = None
         self.context_attn_output = None
         
+        # parallel
+        self.parallel_manager: ParallelManager = None
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -329,6 +335,24 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
         self.proj_out = nn.Linear(self.inner_dim, patch_size * patch_size * self.out_channels, bias=True)
 
         self.gradient_checkpointing = False
+
+        # parallel
+        self.parallel_manager: ParallelManager = None
+
+
+    def enable_parallel(self, dp_size, sp_size, enable_cp):
+        # update cfg parallel
+        if enable_cp and sp_size % 2 == 0:
+            sp_size = sp_size // 2
+            cp_size = 2
+        else:
+            cp_size = 1
+
+        self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
+
+        for _, module in self.named_modules():
+            if hasattr(module, "parallel_manager"):
+                module.parallel_manager = self.parallel_manager
 
     @property
     # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.attn_processors
@@ -519,6 +543,7 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
         ids = torch.cat((txt_ids, img_ids), dim=0)
         image_rotary_emb = self.pos_embed(ids)
 
+        # TODO parallel
         for index_block, block in enumerate(self.transformer_blocks):
             if self.training and self.gradient_checkpointing:
 
@@ -565,6 +590,7 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
 
         hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
 
+        # TODO parallel
         for index_block, block in enumerate(self.single_transformer_blocks):
             if self.training and self.gradient_checkpointing:
 
