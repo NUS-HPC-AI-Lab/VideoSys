@@ -69,19 +69,34 @@ def run_pab():
         "A man making a pizza in a kitchen."
     ]
 
-    for prompt in prompts:
-        image = pipe(
-            prompt,
-            height=1024,
-            width=1024,
-            guidance_scale=3.5,
-            num_inference_steps=50,
-            max_sequence_length=512,
-            generator=torch.Generator("cuda:0").manual_seed(0)
-        ).images[0]
-        pipe.save_image(image, f"./outputs/flux-pab/{prompt.replace(' ', '_')}.png")
+    # for prompt in prompts:
+    #     image = pipe(
+    #         prompt,
+    #         height=1024,
+    #         width=1024,
+    #         guidance_scale=3.5,
+    #         num_inference_steps=50,
+    #         max_sequence_length=512,
+    #         generator=torch.Generator("cuda:0").manual_seed(0)
+    #     ).images[0]
+    #     pipe.save_image(image, f"./outputs/flux-pab/{prompt.replace(' ', '_')}.png")
 
+    results = pipe(
+        prompts,
+        height=1024,
+        width=1024,
+        guidance_scale=3.5,
+        num_inference_steps=50,
+        max_sequence_length=512,
+        generator=torch.Generator("cuda:0").manual_seed(0)
+    )
+
+    for idx, image in enumerate(results.images):
+        safe_filename = f"./outputs/flux-pab-batch/image_{idx}.png"
+        pipe.save_image(image, safe_filename)
+        
+        
 if __name__ == "__main__":
-    run_base()
+    # run_base()
     # run_low_mem()
     run_pab()
