@@ -587,6 +587,8 @@ class Profiler:
                         reduced_time,
                         avail_mem,
                     ] + best_trace
+
+                    self.dp_results.append(result_row)
                 else:
                     result_row = [
                         row.ar_name,
@@ -599,7 +601,7 @@ class Profiler:
                         avail_mem,
                     ]
 
-                self.dp_results.append(result_row)
+                    self.latest_raw_result = result_row
                 self.detail_results.append(result_row)
 
                 if self.logger:
@@ -610,6 +612,16 @@ class Profiler:
                 self.next_bs = bs * 2
                 self.next_warmup_iter = not self.auto_grad_acc
             else:
+                if not self.dynamic_recompute:
+                    if bs == 1:
+                        if self.logger:
+                            self.logger.info(
+                                f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into sp: {sp_size}"
+                            )
+                    else:
+                        assert self.latest_raw_result is not None
+                        self.dp_results.append(self.latest_raw_result)
+                    
                 if sp_size < self.max_sp:
                     self.next_sp_size = sp_size * 2
                     # bs // 2 is the previous successful bs
