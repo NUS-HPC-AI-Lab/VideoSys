@@ -47,6 +47,189 @@ def t2i_modulate(x, shift, scale):
     return x * (1 + scale) + shift
 
 
+SPATIAL_LIST = []
+TEMPORAL_LIST = []
+CROSS_LIST = []
+TOTAL_SPATIAL = []
+TOTAL_TEMPORAL = []
+TOTAL_CROSS = []
+
+
+import numpy as np
+import torch
+
+
+def mutual_information(x1: torch.Tensor, x2: torch.Tensor, n_bins: int = 100) -> torch.Tensor:
+    """
+    计算两个向量之间的互信息
+    参数:
+        x1, x2: 形状为(n_samples,)的向量
+        n_bins: 用于计算直方图的箱数
+    返回:
+        互信息值
+    """
+    # 将数据离散化到箱中
+    x1_hist = torch.histc(x1, bins=n_bins)
+    x2_hist = torch.histc(x2, bins=n_bins)
+
+    # 计算联合分布
+    joint_hist = torch.histogramdd(torch.stack([x1, x2], dim=1), bins=[n_bins, n_bins])[0]
+
+    # 归一化得到概率分布
+    p_x1 = x1_hist / x1_hist.sum()
+    p_x2 = x2_hist / x2_hist.sum()
+    p_joint = joint_hist / joint_hist.sum()
+
+    # 计算互信息
+    epsilon = 1e-10  # 防止log(0)
+    mi = torch.sum(p_joint * torch.log(p_joint / (p_x1.unsqueeze(1) * p_x2.unsqueeze(0)) + epsilon))
+
+    return mi
+
+
+def correlation_ratio(x1: torch.Tensor, x2: torch.Tensor, n_bins: int = 100) -> torch.Tensor:
+    """
+    计算相关性比
+    参数:
+        x1, x2: 形状为(n_samples,)的向量
+        n_bins: 用于离散化的箱数
+    返回:
+        相关性比值
+    """
+    # 将x2离散化
+    x2_binned = torch.bucketize(x2, torch.linspace(x2.min(), x2.max(), n_bins))
+
+    # 计算总体方差
+    total_var = torch.var(x1)
+
+    # 计算条件期望
+    means = torch.zeros(n_bins)
+    counts = torch.zeros(n_bins)
+
+    for i in range(n_bins):
+        mask = x2_binned == i
+        if mask.sum() > 0:
+            means[i] = x1[mask].mean()
+            counts[i] = mask.sum()
+
+    # 计算加权方差
+    weighted_var = torch.sum(counts * (means - x1.mean()) ** 2) / x1.size(0)
+
+    return weighted_var / total_var
+
+
+def conditional_entropy(x1: torch.Tensor, x2: torch.Tensor, n_bins: int = 100) -> torch.Tensor:
+    """
+    计算条件熵 H(X1|X2)
+    参数:
+        x1, x2: 形状为(n_samples,)的向量
+        n_bins: 用于计算直方图的箱数
+    返回:
+        条件熵值
+    """
+    # 计算联合分布
+    joint_hist = torch.histogramdd(torch.stack([x1, x2], dim=1), bins=[n_bins, n_bins])[0]
+
+    # 归一化得到概率分布
+    p_joint = joint_hist / joint_hist.sum()
+    p_x2 = p_joint.sum(dim=0)
+
+    # 计算条件熵
+    epsilon = 1e-10
+    conditional_entropy = 0.0
+
+    for i in range(n_bins):
+        if p_x2[i] > epsilon:
+            p_x1_given_x2 = p_joint[:, i] / p_x2[i]
+            entropy_term = -torch.sum(p_x1_given_x2 * torch.log(p_x1_given_x2 + epsilon))
+            conditional_entropy += p_x2[i] * entropy_term
+
+    return conditional_entropy
+
+
+def mic(x1: torch.Tensor, x2: torch.Tensor, n_bins: int = 20) -> torch.Tensor:
+    """
+    计算最大信息系数 (MIC)
+    参数:
+        x1, x2: 形状为(n_samples,)的向量
+        n_bins: 最大分箱数
+    返回:
+        MIC值
+    """
+
+    def normalize(x):
+        return (x - x.min()) / (x.max() - x.min())
+
+    x1_norm = normalize(x1)
+    x2_norm = normalize(x2)
+
+    max_mi = 0
+    for i in range(2, n_bins + 1):
+        for j in range(2, n_bins + 1):
+            if i * j <= n_bins:
+                # 计算不同分箱数下的互信息
+                joint_hist = torch.histogramdd(torch.stack([x1_norm, x2_norm], dim=1), bins=[i, j])[0]
+
+                p_joint = joint_hist / joint_hist.sum()
+                p_x1 = p_joint.sum(dim=1)
+                p_x2 = p_joint.sum(dim=0)
+
+                epsilon = 1e-10
+                mi = torch.sum(p_joint * torch.log(p_joint / (p_x1.unsqueeze(1) * p_x2.unsqueeze(0)) + epsilon))
+
+                # 归一化互信息
+                h_x1 = -torch.sum(p_x1 * torch.log(p_x1 + epsilon))
+                h_x2 = -torch.sum(p_x2 * torch.log(p_x2 + epsilon))
+                normalized_mi = mi / min(h_x1, h_x2)
+
+                max_mi = max(max_mi, normalized_mi)
+
+    return max_mi
+
+
+# 使用示例
+def calculate_redundancy_metrics(x1: torch.Tensor, x2: torch.Tensor) -> dict:
+    """
+    计算所有冗余度指标
+    参数:
+        x1, x2: 形状为(n_samples,)的向量
+    返回:
+        包含所有指标的字典
+    """
+    metrics = {
+        "mutual_information": mutual_information(x1, x2).item(),
+        "correlation_ratio": correlation_ratio(x1, x2).item(),
+        "conditional_entropy": conditional_entropy(x1, x2).item(),
+        "mic": mic(x1, x2).item(),
+    }
+    return metrics
+
+
+def pearson_correlation(v1, v2):
+    return np.corrcoef(v1, v2)[0, 1]
+
+
+def mutual_information(v1, v2):
+    from sklearn.feature_selection import mutual_info_regression
+
+    v1 = v1.reshape(-1, 1)
+    return mutual_info_regression(v1, v2)[0]
+
+
+def eval_diff(x, y):
+    # diff = torch.nn.functional.l1_loss(x, y).item()
+
+    # diff = torch.cosine_similarity(x, y, dim=-1).mean().float().cpu()
+
+    x = x[0].view(-1, x.shape[-1])
+    y = y[0].view(-1, y.shape[-1])
+    total_diff = 0
+    # print(1)
+    for i in range(0, x.shape[0], 16):
+        total_diff += pearson_correlation(np.array(x[i].float().cpu()), np.array(y[i].float().cpu()))
+    return total_diff / x.shape[0]
+
+
 class T2IFinalLayer(nn.Module):
     """
     The final layer of PixArt.
@@ -209,6 +392,13 @@ class STDiT3Block(nn.Module):
                 x_m_s_zero = gate_msa_zero * x_m
                 x_m_s = self.t_mask_select(x_mask, x_m_s, x_m_s_zero, T, S)
 
+            if self.last_attn is not None:
+                diff = eval_diff(self.last_attn, x_m_s)
+                if self.temporal:
+                    TEMPORAL_LIST.append(diff)
+                else:
+                    SPATIAL_LIST.append(diff)
+            self.last_attn = x_m_s
             if enable_pab():
                 self.last_attn = x_m_s
 
@@ -225,6 +415,12 @@ class STDiT3Block(nn.Module):
             x_cross = self.cross_attn(x, y, mask)
             if enable_pab():
                 self.last_cross = x_cross
+
+            if self.last_cross is not None:
+                diff = eval_diff(self.last_cross, x_cross)
+                CROSS_LIST.append(diff)
+            self.last_cross = x_cross
+
             x = x + x_cross
 
         if enable_pab():
@@ -613,6 +809,16 @@ class STDiT3(PreTrainedModel):
 
         # cast to float32 for better accuracy
         x = x.to(torch.float32)
+
+        global SPATIAL_LIST, TEMPORAL_LIST, CROSS_LIST, TOTAL_SPATIAL, TOTAL_TEMPORAL, TOTAL_CROSS
+        print(
+            f"step {timestep[0]}: Spatial: {np.mean(SPATIAL_LIST)}, Temporal: {np.mean(TEMPORAL_LIST)}, Cross: {np.mean(CROSS_LIST)}"
+        )
+        if len(SPATIAL_LIST) > 0:
+            TOTAL_SPATIAL.append(np.mean(SPATIAL_LIST))
+            TOTAL_TEMPORAL.append(np.mean(TEMPORAL_LIST))
+            TOTAL_CROSS.append(np.mean(CROSS_LIST))
+        SPATIAL_LIST, TEMPORAL_LIST, CROSS_LIST = [], [], []
 
         # === Gather Output ===
         if self.parallel_manager.cp_size > 1:
