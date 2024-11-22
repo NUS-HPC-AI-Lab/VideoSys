@@ -1,12 +1,10 @@
 import logging
-import math
 import time
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from pprint import pformat
 from typing import Iterator, List, Optional, Union
 
-import numpy as np
 import torch
 import torch.distributed as dist
 from torch.utils.data import Dataset, DistributedSampler
@@ -324,51 +322,40 @@ class VariableVideoBatchSampler(DistributedSampler):
             bucket_sample_dict[bucket_id].append(i)
         return bucket_sample_dict
 
-    def _calculate_grad_accumulation_num(
-        self, cur_first_batch_bucket_id_list, bucket_sample_dict, bucket_sample_dict_last_access
-    ):
+    def _calculate_grad_accumulation_num(self, cur_first_batch_bucket_id_list):
         def score_func(new_time, median_time):
             if new_time > median_time:
-                return (new_time - median_time) * 1.5
+                return (new_time - median_time) * 1.2
             else:
                 return (median_time - new_time) * 1
 
-        # first record the max grad acc for each bucket
-        max_grad_acc_dict = {}
-        bucket_id_list = [i[0] for i in cur_first_batch_bucket_id_list]
         exec_time_list = [self.profiler.get_execution_time(*i[0][:2]) for i in cur_first_batch_bucket_id_list]
-        for bucket_id, bs in cur_first_batch_bucket_id_list:
-            offset = bucket_sample_dict_last_access[bucket_id]
-            left_samples = len(bucket_sample_dict[bucket_id]) - offset
-            if bucket_id not in max_grad_acc_dict:
-                num_occur = bucket_id_list.count(bucket_id)
-                max_grad_acc = left_samples / bs / num_occur
-                max_grad_acc_dict[bucket_id] = max(math.ceil(max_grad_acc), 1)
-        # then decide the real number of grad acc for each bucket
         max_time = max(exec_time_list) * self.max_grad_accumulation_steps
         min_diff = float("inf")
         num_gas = None
-        for exec_time_out, bucket_id_out in zip(exec_time_list, bucket_id_list):
-            for mult in range(1, max_grad_acc_dict[bucket_id_out] + 1):
-                time_out = exec_time_out * mult
-                if time_out > max_time:
+        for exec_time_outer in exec_time_list:
+            max_mult_outer = int(max_time / exec_time_outer)
+            for mult in range(1, max_mult_outer + 1):
+                time_outer = exec_time_outer * mult
+                if time_outer > max_time:
                     break
-                gas_out, diff_out = [], 0
-                for exec_time_in, bucket_id_in in zip(exec_time_list, bucket_id_list):
-                    gas_in, diff_in = None, float("inf")
-                    for gas_val in range(1, max_grad_acc_dict[bucket_id_in] + 1):
-                        lcm = exec_time_in * gas_val
-                        if lcm > time_out:
+                gas_outer, diff_outer = [], 0
+                for exec_time_inner in exec_time_list:
+                    gas_inner, diff_inner = None, float("inf")
+                    max_mult_inner = int(max_time / exec_time_inner)
+                    for gas_val in range(1, max_mult_inner + 1):
+                        time_inner = exec_time_inner * gas_val
+                        if time_inner > max_time:
                             break
-                        now_diff = score_func(lcm, time_out)
-                        if now_diff < diff_in:
-                            diff_in = now_diff
-                            gas_in = gas_val
-                    diff_out += diff_in
-                    gas_out.append(gas_in)
-                if diff_out < min_diff:
-                    min_diff = diff_out
-                    num_gas = gas_out
+                        now_diff = score_func(time_inner, time_outer)
+                        if now_diff < diff_inner:
+                            diff_inner = now_diff
+                            gas_inner = gas_val
+                    diff_outer += diff_inner
+                    gas_outer.append(gas_inner)
+                if diff_outer < min_diff:
+                    min_diff = diff_outer
+                    num_gas = gas_outer
         return num_gas
 
     def _build_local_bucket_id_access_order_acc(self, bucket_sample_dict):
@@ -468,27 +455,42 @@ class VariableVideoBatchSampler(DistributedSampler):
                     if not sp_bucket_map[sp]:
                         sp_size_list.remove(sp)
                         sp_bucket_map.pop(sp)
-                
+
                 if not self.keep_last:
-                    max_time = max([self.profiler.get_execution_time(*each[0][:2]) for each in cur_first_batch_bucket_id_list])
-                    for i, (bucket_id, bs) in enumerate(cur_first_batch_bucket_id_list):
+                    exec_time_list = [
+                        self.profiler.get_execution_time(*i[0][:2]) for i in cur_first_batch_bucket_id_list
+                    ]
+                    num_gas = self._calculate_grad_accumulation_num(cur_first_batch_bucket_id_list)
+                    max_time = max([exec_time * gas for exec_time, gas in zip(exec_time_list, num_gas)])
+                    index = 0
+                    while index < len(cur_first_batch_bucket_id_list):
+                        bucket_id, bs = cur_first_batch_bucket_id_list[index]
                         ar_name, num_frame = bucket_id[:2]
                         exec_time = self.profiler.get_execution_time(ar_name, num_frame)
                         max_bs = self.profiler.get_batch_size(ar_name, num_frame)
                         sp_size = self.profiler.get_sp_size(ar_name, num_frame)
 
                         required_gas = max_time // exec_time - 1
-                        remain_batches = (len(bucket_sample_dict[bucket_id])-bucket_sample_dict_last_access[bucket_id]) // max_bs
+                        remain_batches = (
+                            len(bucket_sample_dict[bucket_id]) - bucket_sample_dict_last_access[bucket_id]
+                        ) // max_bs
 
-                        if remain_batches < required_gas and remain_batches > 0:
-                            cur_first_batch_bucket_id_list.pop(i)
+                        bucket_id_list = [i[0] for i in cur_first_batch_bucket_id_list]
+                        occur_times = bucket_id_list.count(bucket_id)
+                        required_gas *= occur_times
+
+                        if remain_batches < required_gas:
+                            cur_first_batch_bucket_id_list.pop(index)
                             remain_gpus += sp_size
-
                             bucket_sample_dict_last_access[bucket_id] = len(bucket_sample_dict[bucket_id])
-                            sp_bucket_map[sp_size].remove(bucket_id)
-                            if not sp_bucket_map[sp_size]:
-                                sp_size_list.remove(sp_size)
-                                sp_bucket_map.pop(sp_size)
+                            if sp_size in sp_bucket_map:
+                                if bucket_id in sp_bucket_map[sp_size]:
+                                    sp_bucket_map[sp_size].remove(bucket_id)
+                                if not sp_bucket_map[sp_size]:
+                                    sp_size_list.remove(sp_size)
+                                    sp_bucket_map.pop(sp_size)
+                        else:
+                            index += 1
 
             if has_one_more_batch:
                 # sort to make sure fitting
@@ -497,9 +499,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 )
 
                 if self.auto_grad_accumulation:
-                    num_gas = self._calculate_grad_accumulation_num(
-                        cur_first_batch_bucket_id_list, bucket_sample_dict, bucket_sample_dict_last_access
-                    )
+                    num_gas = self._calculate_grad_accumulation_num(cur_first_batch_bucket_id_list)
                 else:
                     num_gas = [1 for _ in cur_first_batch_bucket_id_list]
 
@@ -628,7 +628,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         sp_size_list.remove(sp)
                         sp_bucket_map.pop(sp)
 
-                exec_time = self.profiler.get_execution_time(ar_name, num_frame)/bs*num_samples
+                exec_time = self.profiler.get_execution_time(ar_name, num_frame) / bs * num_samples
                 cur_batch_bucket_id_list.append(
                     BucketPlan(
                         bucket_id=bucket_id,
@@ -667,7 +667,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         time_no_last_batch.append(cur_time)
                     else:
                         time_last_batch.append(cur_time)
-                
+
                 if not time_no_last_batch:
                     assert len(time_last_batch) == len(cur_batch_bucket_id_list)
                     skip_bucket_idx = list(range(len(cur_batch_bucket_id_list)))
@@ -682,7 +682,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             else:
                 min_time = min([each.exec_time for each in cur_batch_bucket_id_list])
                 skip_bucket_idx = []
-            
+
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                 if i in skip_bucket_idx:
                     continue
@@ -695,20 +695,20 @@ class VariableVideoBatchSampler(DistributedSampler):
                 # try to reduce batch size first
                 diff_bs = round(diff_time / unit_time)
                 bs = max(1, num_samples - diff_bs)
-                
+
                 # try to double the sp size then
                 exec_time = unit_time * bs
                 diff_time = abs(exec_time - min_time)
                 cur_sp = bucket_plan.sp_size
                 best_exec_time, best_diff, best_sp = exec_time, diff_time, cur_sp
-                
+
                 while cur_sp < self.profiler.max_sp and exec_time > min_time:
                     cur_sp *= 2
                     exec_time /= 2
                     diff_time = abs(exec_time - min_time)
                     if diff_time < best_diff:
                         best_exec_time, best_diff, best_sp = exec_time, diff_time, cur_sp
-        
+
                 # return left samples back to record
                 if bs < cur_batch_bucket_id_list[i].batch_size:
                     bucket_id = cur_batch_bucket_id_list[i].bucket_id
@@ -765,7 +765,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
                 diff_time = max_time - cur_exec_time
                 increment_bs = int(diff_time // unit_time)
-                if increment_bs+cur_bs > max_bs:
+                if increment_bs + cur_bs > max_bs:
                     increment_bs = max_bs - cur_bs
                 increment_bs = min(increment_bs, bucket_sample_counts[bucket_id])
                 increment_time = unit_time * increment_bs
@@ -778,7 +778,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         if not sp_bucket_map[sp]:
                             sp_size_list.remove(sp)
                             sp_bucket_map.pop(sp)
-                
+
                 bucket_plan.batch_size += increment_bs
                 bucket_plan.exec_time += increment_time
 
@@ -857,7 +857,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 log_bucket_list, log_time_list = [], []
                 for bucket_list in bucket_id_access_list:
                     bucket_id = bucket_list[0][0]
-                    
+
                     log_bucket_list.append(bucket_id)
                     if is_sp_balance_iter:
                         cur_time = bucket_list[0][3]
@@ -1007,7 +1007,9 @@ class VariableVideoBatchSampler(DistributedSampler):
     def reset(self):
         if self.calculate_imbalance and len(self.imbalance_list) > 0:
             total_imbalance_time = sum(self.imbalance_list)
-            logging.info(f"Total imbalance for this epoch: {total_imbalance_time:.2f}/{self.est_total_execution_time:.2f} ({total_imbalance_time/self.est_total_execution_time*100:.2f}%)")
+            logging.info(
+                f"Total imbalance for this epoch: {total_imbalance_time:.2f}/{self.est_total_execution_time:.2f} ({total_imbalance_time/self.est_total_execution_time*100:.2f}%)"
+            )
             self.imbalance_list = []
             self.est_total_execution_time = 0.0
         self.last_micro_batch_access_index = 0
