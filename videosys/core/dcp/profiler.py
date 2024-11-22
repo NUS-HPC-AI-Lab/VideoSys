@@ -601,7 +601,11 @@ class Profiler:
                         avail_mem,
                     ]
 
-                    self.latest_raw_result = result_row
+                    if self.auto_grad_acc:
+                        self.dp_results.append(result_row)
+                    else:
+                        self.latest_raw_result = result_row
+                
                 self.detail_results.append(result_row)
 
                 if self.logger:
@@ -612,7 +616,7 @@ class Profiler:
                 self.next_bs = bs * 2
                 self.next_warmup_iter = not self.auto_grad_acc
             else:
-                if not self.dynamic_recompute:
+                if not self.dynamic_recompute and not self.auto_grad_acc:
                     if bs == 1:
                         if self.logger:
                             self.logger.info(
