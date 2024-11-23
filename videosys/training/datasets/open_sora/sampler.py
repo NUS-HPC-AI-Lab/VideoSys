@@ -640,7 +640,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
                 remain_gpus -= sp
 
-                if not self.keep_last:
+                if not self.keep_last and len(cur_batch_bucket_id_list) > 1:
                     min_time_idx, min_time = -1, float("inf")
                     for i, each in enumerate(cur_batch_bucket_id_list):
                         max_bs = self.profiler.get_batch_size(*each.bucket_id[:2])
@@ -659,61 +659,68 @@ class VariableVideoBatchSampler(DistributedSampler):
                 f"iter {len(bucket_id_access_order)}\noriginal buckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
             )
 
+            min_time, min_bucket = min([(each.exec_time, each.bucket_id) for each in cur_batch_bucket_id_list], key=lambda x: x[0])
+            skip_bucket_idx = []
             if self.keep_last:
-                time_no_last_batch, time_last_batch = [], []
+                no_last_batch, last_batch = [], []
                 for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                    cur_time = bucket_plan.exec_time
                     if bucket_sample_counts[bucket_plan.bucket_id] > 0:
-                        time_no_last_batch.append(cur_time)
+                        no_last_batch.append(bucket_plan)
                     else:
-                        time_last_batch.append(cur_time)
+                        last_batch.append(bucket_plan)
                 
-                if not time_no_last_batch:
-                    assert len(time_last_batch) == len(cur_batch_bucket_id_list)
+                if not no_last_batch:
+                    assert len(last_batch) == len(cur_batch_bucket_id_list)
                     skip_bucket_idx = list(range(len(cur_batch_bucket_id_list)))
                     min_time = 0
                 else:
-                    min_time = min(time_no_last_batch)
+                    min_time, min_bucket = min([(each.exec_time, each.bucket_id) for each in no_last_batch], key=lambda x: x[0])
                     skip_bucket_idx = []
-                    if time_last_batch:
+                    if last_batch:
                         for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                             if bucket_plan.exec_time < min_time:
                                 skip_bucket_idx.append(i)
-            else:
-                min_time = min([each.exec_time for each in cur_batch_bucket_id_list])
-                skip_bucket_idx = []
             
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                if i in skip_bucket_idx:
+                if i in skip_bucket_idx or bucket_plan.bucket_id == min_bucket:
                     continue
-
+                
                 original_exec_time = bucket_plan.exec_time
-                num_samples = bucket_plan.batch_size
-                unit_time = original_exec_time / num_samples
+                original_batch_size = bucket_plan.batch_size
+                original_sp_size = bucket_plan.sp_size
+                unit_time = original_exec_time / original_batch_size
 
-                diff_time = original_exec_time - min_time
-                # try to reduce batch size first
-                diff_bs = round(diff_time / unit_time)
-                bs = max(1, num_samples - diff_bs)
-                
-                # try to double the sp size then
-                exec_time = unit_time * bs
-                diff_time = abs(exec_time - min_time)
-                cur_sp = bucket_plan.sp_size
-                best_exec_time, best_diff, best_sp = exec_time, diff_time, cur_sp
-                
-                while cur_sp < self.profiler.max_sp and exec_time > min_time:
-                    cur_sp *= 2
-                    exec_time /= 2
-                    diff_time = abs(exec_time - min_time)
-                    if diff_time < best_diff:
-                        best_exec_time, best_diff, best_sp = exec_time, diff_time, cur_sp
+                original_remain_samples = bucket_sample_counts[bucket_plan.bucket_id]
+
+                best_diff = float('inf')
+                best_exec_time, best_bs, best_sp = original_exec_time, original_batch_size, original_sp_size
+                cur_sp_size = original_sp_size
+                while cur_sp_size <= self.profiler.max_sp:
+                    multiplier = 0.8 if cur_sp_size > original_sp_size else 1
+                    max_bs = int(original_batch_size * cur_sp_size / original_sp_size * multiplier)
+                    if max_bs - original_batch_size > original_remain_samples:
+                        max_bs = original_batch_size + original_remain_samples
+
+                    cur_unit_time = unit_time / (cur_sp_size / original_sp_size) 
+                    cur_bs = round(min_time / cur_unit_time)
+                    if cur_bs > max_bs:
+                        cur_bs = max_bs
+                    
+                    cur_exec_time = cur_unit_time * cur_bs
+                    cur_diff = abs(cur_exec_time - min_time)
+                    if cur_diff < best_diff:
+                        best_diff = cur_diff
+                        best_exec_time = cur_exec_time
+                        best_bs = cur_bs
+                        best_sp = cur_sp_size                        
+
+                    cur_sp_size *= 2
         
                 # return left samples back to record
-                if bs < cur_batch_bucket_id_list[i].batch_size:
+                if best_bs < cur_batch_bucket_id_list[i].batch_size:
                     bucket_id = cur_batch_bucket_id_list[i].bucket_id
                     org_sp = bucket_plan.sp_size
-                    left_bs = cur_batch_bucket_id_list[i].batch_size - bs
+                    left_bs = cur_batch_bucket_id_list[i].batch_size - best_bs
 
                     bucket_sample_counts[bucket_id] += left_bs
                     if org_sp not in sp_bucket_map:
@@ -723,8 +730,18 @@ class VariableVideoBatchSampler(DistributedSampler):
                     else:
                         if sp_bucket_map[org_sp].count(bucket_id) == 0:
                             sp_bucket_map[org_sp].append(bucket_id)
+                elif best_bs > cur_batch_bucket_id_list[i].batch_size:
+                    bucket_id = cur_batch_bucket_id_list[i].bucket_id
+                    org_sp = bucket_plan.sp_size
+                    
+                    bucket_sample_counts[bucket_id] -= best_bs - cur_batch_bucket_id_list[i].batch_size
+                    if bucket_sample_counts[bucket_id] == 0:
+                        sp_bucket_map[org_sp].remove(bucket_id)
+                        if not sp_bucket_map[org_sp]:
+                            sp_size_list.remove(org_sp)
+                            sp_bucket_map.pop(org_sp)
 
-                cur_batch_bucket_id_list[i].batch_size = bs
+                cur_batch_bucket_id_list[i].batch_size = best_bs
                 cur_batch_bucket_id_list[i].exec_time = best_exec_time
                 cur_batch_bucket_id_list[i].sp_size = best_sp
 
@@ -752,36 +769,6 @@ class VariableVideoBatchSampler(DistributedSampler):
                 poped.append(bucket_plan)
             assert total_gpus == wsize
 
-            # rebalance bs only
-            max_time = max([each.exec_time for each in cur_batch_bucket_id_list])
-            for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
-                bucket_id = bucket_plan.bucket_id
-                ar_name, num_frame = bucket_id[:2]
-                max_bs = self.profiler.get_batch_size(ar_name, num_frame)
-
-                cur_exec_time = bucket_plan.exec_time
-                cur_bs = bucket_plan.batch_size
-                unit_time = cur_exec_time / cur_bs
-
-                diff_time = max_time - cur_exec_time
-                increment_bs = int(diff_time // unit_time)
-                if increment_bs+cur_bs > max_bs:
-                    increment_bs = max_bs - cur_bs
-                increment_bs = min(increment_bs, bucket_sample_counts[bucket_id])
-                increment_time = unit_time * increment_bs
-
-                if increment_bs > 0:
-                    sp = self.profiler.get_sp_size(ar_name, num_frame)
-                    bucket_sample_counts[bucket_id] -= increment_bs
-                    if bucket_sample_counts[bucket_id] == 0:
-                        sp_bucket_map[sp].remove(bucket_id)
-                        if not sp_bucket_map[sp]:
-                            sp_size_list.remove(sp)
-                            sp_bucket_map.pop(sp)
-                
-                bucket_plan.batch_size += increment_bs
-                bucket_plan.exec_time += increment_time
-
             this_bucket_acc_list = []
             for bucket_plan in cur_batch_bucket_id_list:
                 self.effective_samples += bucket_plan.batch_size
@@ -792,7 +779,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             logging.info(
                 f"iter {len(bucket_id_access_order)}\nbuckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
                 f"\npoped: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in poped]}"
-                f"\nmin time: {min_time:.2f}, max time: {max_time:.2f}"
+                f"\nmin time: {min_time:.2f}"
             )
 
         return bucket_id_access_order
