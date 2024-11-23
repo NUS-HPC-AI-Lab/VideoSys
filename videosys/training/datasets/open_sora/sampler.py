@@ -83,9 +83,10 @@ class VariableVideoBatchSampler(DistributedSampler):
         num_bucket_build_workers: int = 1,
         sp_balance_scope: str = "iter",
         auto_grad_accumulation: bool = False,
-        max_grad_accumulation_steps: int = 2,
+        max_grad_accumulation_steps: int = 5,
         parallel_mgr=None,
         calculate_imbalance: bool = False,
+        min_grad_accumulation_steps: int = 2,
     ) -> None:
         super().__init__(
             dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last
@@ -102,6 +103,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.sp_balance_scope = sp_balance_scope
         self.auto_grad_accumulation = auto_grad_accumulation
         self.max_grad_accumulation_steps = max_grad_accumulation_steps
+        self.min_grad_accumulation_steps = min_grad_accumulation_steps
         self.profiler = get_profiler()
         self.optimized_schedule = "local" if self.profiler.dynamic_sp else None
         self.generator = None
@@ -356,6 +358,11 @@ class VariableVideoBatchSampler(DistributedSampler):
                 if diff_outer < min_diff:
                     min_diff = diff_outer
                     num_gas = gas_outer
+
+        # if max grad accumulation is less than min grad accumulation, repeat the grad accumulation
+        if max(num_gas) < self.min_grad_accumulation_steps:
+            num_gas = [i * self.min_grad_accumulation_steps for i in num_gas]
+
         return num_gas
 
     def _build_local_bucket_id_access_order_acc(self, bucket_sample_dict):
@@ -456,12 +463,15 @@ class VariableVideoBatchSampler(DistributedSampler):
                         sp_size_list.remove(sp)
                         sp_bucket_map.pop(sp)
 
-                if not self.keep_last:
+                # to be more efficient, only pop when gpu is full
+                if not self.keep_last and remain_gpus <= 0:
+                    # get max grad accumulation
                     exec_time_list = [
                         self.profiler.get_execution_time(*i[0][:2]) for i in cur_first_batch_bucket_id_list
                     ]
                     num_gas = self._calculate_grad_accumulation_num(cur_first_batch_bucket_id_list)
                     max_time = max([exec_time * gas for exec_time, gas in zip(exec_time_list, num_gas)])
+                    # remove bucket that is not enough for grad accumulation
                     index = 0
                     while index < len(cur_first_batch_bucket_id_list):
                         bucket_id, bs = cur_first_batch_bucket_id_list[index]
@@ -475,6 +485,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                             len(bucket_sample_dict[bucket_id]) - bucket_sample_dict_last_access[bucket_id]
                         ) // max_bs
 
+                        # calculate repeat times for this bucket
                         bucket_id_list = [i[0] for i in cur_first_batch_bucket_id_list]
                         occur_times = bucket_id_list.count(bucket_id)
                         required_gas *= occur_times

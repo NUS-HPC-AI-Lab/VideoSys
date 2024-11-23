@@ -8,6 +8,7 @@ dummy_dataset: true
 dummy_data_size: 4000
 verbose: true
 calculate_imbalance: true
+max_grad_accumulation_steps: 5
 
 
 # ==== training config ====
