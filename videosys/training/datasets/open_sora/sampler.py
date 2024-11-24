@@ -723,10 +723,14 @@ class VariableVideoBatchSampler(DistributedSampler):
                         best_diff = cur_diff
                         best_exec_time = cur_exec_time
                         best_bs = cur_bs
-                        best_sp = cur_sp_size                        
-
+                        best_sp = cur_sp_size
+                    
+                        if abs(cur_exec_time / min_time - 1) < 0.1:
+                            break
                     cur_sp_size *= 2
-        
+                
+                assert best_bs > 0, f"best_bs: {best_bs} - {original_batch_size}, best sp: {best_sp} - {original_sp_size}, best time: {best_exec_time} - {original_exec_time}, min time: {min_time}"
+
                 # return left samples back to record
                 if best_bs < cur_batch_bucket_id_list[i].batch_size:
                     bucket_id = cur_batch_bucket_id_list[i].bucket_id
@@ -780,6 +784,65 @@ class VariableVideoBatchSampler(DistributedSampler):
                 poped.append(bucket_plan)
             assert total_gpus == wsize
 
+            # rebalance bs only
+            min_max_time, min_max_bucket = float('inf'), None
+            for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                bucket_id = bucket_plan.bucket_id
+                ar_name, num_frame = bucket_id[:2]
+                origin_bs = self.profiler.get_batch_size(ar_name, num_frame)
+                origin_sp = self.profiler.get_sp_size(ar_name, num_frame)
+
+                cur_bs = bucket_plan.batch_size
+                cur_sp = bucket_plan.sp_size
+                cur_time = bucket_plan.exec_time
+                unit_time = cur_time / cur_bs
+
+                multiplier = 0.8 if cur_sp > origin_sp else 1
+                max_bs = int(origin_bs * cur_sp / origin_sp * multiplier)
+                if max_bs - cur_bs > bucket_sample_counts[bucket_id]:
+                    max_bs = cur_bs + bucket_sample_counts[bucket_id]
+                
+                max_tmp_time = unit_time * max_bs
+                if max_tmp_time < min_max_time:
+                    min_max_time = max_tmp_time
+                    min_max_bucket = bucket_id
+
+            for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
+                bucket_id = bucket_plan.bucket_id
+                if bucket_id == min_max_bucket:
+                    continue
+
+                ar_name, num_frame = bucket_id[:2]
+                max_bs = self.profiler.get_batch_size(ar_name, num_frame)
+
+                cur_exec_time = bucket_plan.exec_time
+                cur_bs = bucket_plan.batch_size
+                unit_time = cur_exec_time / cur_bs
+
+                diff_time = min_max_time - cur_exec_time
+                if diff_time <= 0:
+                    continue
+
+                increment_bs = int(diff_time // unit_time)
+                if increment_bs+cur_bs > max_bs:
+                    increment_bs = max_bs - cur_bs
+                increment_bs = min(increment_bs, bucket_sample_counts[bucket_id])
+                increment_time = unit_time * increment_bs
+
+                if increment_bs > 0:
+                    sp = self.profiler.get_sp_size(ar_name, num_frame)
+                    bucket_sample_counts[bucket_id] -= increment_bs
+                    if bucket_sample_counts[bucket_id] == 0:
+                        sp_bucket_map[sp].remove(bucket_id)
+                        if not sp_bucket_map[sp]:
+                            sp_size_list.remove(sp)
+                            sp_bucket_map.pop(sp)
+                
+                bucket_plan.batch_size += increment_bs
+                bucket_plan.exec_time += increment_time
+                assert bucket_plan.batch_size > 0, \
+                    f"increment_bs: {increment_bs}, cur_bs: {cur_bs}, max_bs: {max_bs}, increment_time: {increment_time}, cur_time: {cur_exec_time}, min_max_time: {min_max_time}"
+
             this_bucket_acc_list = []
             for bucket_plan in cur_batch_bucket_id_list:
                 self.effective_samples += bucket_plan.batch_size
@@ -790,7 +853,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             logging.info(
                 f"iter {len(bucket_id_access_order)}\nbuckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
                 f"\npoped: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in poped]}"
-                f"\nmin time: {min_time:.2f}"
+                f"\nmin time: {min_time:.2f}, max time: {min_max_time:.2f}"
             )
 
         return bucket_id_access_order
