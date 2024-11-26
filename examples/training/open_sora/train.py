@@ -161,6 +161,7 @@ def main(args):
         bucket_config=args.bucket_config,
         text_max_seq_len=model.config.model_max_length,
         text_hidden_size=model.config.caption_channels,
+        global_interpolation=not args.no_global_interpolation,
         dynamic_sp=args.dynamic_sp,
         dynamic_recompute=args.dynamic_recompute,
         auto_grad_acc=args.auto_grad_accumulation,
@@ -489,6 +490,7 @@ if __name__ == "__main__":
     parser.add_argument("--image-mixing-frac", default=1, type=float)
     parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
+    parser.add_argument("--no-global-interpolation", action="store_false")
     parser.add_argument("--dynamic-sp", action="store_true")
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")

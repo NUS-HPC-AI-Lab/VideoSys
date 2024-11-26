@@ -713,7 +713,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         max_bs = original_batch_size + original_remain_samples
 
                     cur_unit_time = unit_time / (cur_sp_size / original_sp_size) 
-                    cur_bs = round(min_time / cur_unit_time)
+                    cur_bs = max(1, round(min_time / cur_unit_time))
                     if cur_bs > max_bs:
                         cur_bs = max_bs
                     

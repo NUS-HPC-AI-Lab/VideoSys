@@ -161,6 +161,7 @@ class Profiler:
         bucket_config,
         text_max_seq_len,
         text_hidden_size,
+        global_interpolation,
         dynamic_sp,
         dynamic_recompute,
         auto_grad_acc,
@@ -187,6 +188,7 @@ class Profiler:
         self.text_max_seq_len = text_max_seq_len
         self.text_hidden_size = text_hidden_size
 
+        self.global_interpolation = global_interpolation
         self.dynamic_sp = dynamic_sp
         self.dynamic_recompute = dynamic_recompute
         self.auto_grad_acc = auto_grad_acc
@@ -200,6 +202,7 @@ class Profiler:
         self.parallel_mgr = parallel_mgr
 
         self.max_sp = torch.cuda.device_count()
+        self.world_size = dist.get_world_size()
         # in bytes
         self.memory_cap = alloc_fraction * torch.cuda.mem_get_info()[1]
         self.logger = logging if verbose else None
@@ -243,7 +246,7 @@ class Profiler:
             for ar_name in self.profile_results:
                 self.profile_results[ar_name] = {int(k): v for k, v in self.profile_results[ar_name].items()}
 
-            if not self.dynamic_recompute and not self.auto_grad_acc:
+            if self.global_interpolation and not self.dynamic_recompute and not self.auto_grad_acc:
                 if not self.dynamic_sp or self.sp_balance_scope == "epoch":
                     self.interpolate_profile_results()
 
@@ -620,7 +623,7 @@ class Profiler:
                     if bs == 1:
                         if self.logger:
                             self.logger.info(
-                                f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into sp: {sp_size}"
+                                f">>> [Profiling] bucket {ar_name} {num_frame} cannot fit into sp: {sp_size}"
                             )
                     else:
                         assert self.latest_raw_result is not None
@@ -632,11 +635,21 @@ class Profiler:
                     self.next_bs = 1 if self.dynamic_recompute else max(1, bs//4)
                     self.next_warmup_iter = not self.auto_grad_acc
                 elif len(self.dp_results) == 0:
-                    if self.logger:
-                        self.logger.info(
-                            f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into the cluster"
-                        )
-                    self.update_next_data_plan()
+                    if sp_size < self.world_size:
+                        self.next_sp_size = sp_size * 2
+                        self.next_bs = 1 if self.dynamic_recompute else max(1, bs//4)
+                        self.next_warmup_iter = not self.auto_grad_acc
+                        
+                        if self.logger:
+                            self.logger.info(
+                                f">>> [Profiling] bucket {ar_name} {num_frame} cross nodes, increase sp size to {self.next_sp_size}"
+                            )
+                    else:
+                        if self.logger:
+                            self.logger.info(
+                                f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into the cluster"
+                            )
+                        self.update_next_data_plan()
                 else:
                     if self.logger:
                         self.logger.info(
@@ -803,6 +816,7 @@ def set_profiler(
     bucket_config,
     text_max_seq_len,
     text_hidden_size,
+    global_interpolation,
     dynamic_sp,
     dynamic_recompute,
     auto_grad_acc,
@@ -821,6 +835,7 @@ def set_profiler(
         bucket_config=bucket_config,
         text_max_seq_len=text_max_seq_len,
         text_hidden_size=text_hidden_size,
+        global_interpolation=global_interpolation,
         dynamic_sp=dynamic_sp,
         dynamic_recompute=dynamic_recompute,
         auto_grad_acc=auto_grad_acc,
