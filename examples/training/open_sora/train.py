@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import time
 from copy import deepcopy
 from datetime import timedelta
 from pprint import pformat
@@ -213,6 +214,7 @@ def main(args):
         calculate_imbalance=args.calculate_imbalance,
         verbose=args.verbose,
         max_grad_accumulation_steps=args.max_grad_accumulation_steps,
+        min_grad_accumulation_steps=args.min_grad_accumulation_steps,
     )
 
     # =======================================================
@@ -317,6 +319,8 @@ def main(args):
 
             total_gas = batch["gas"]
             iter_loss = 0.0
+            torch.cuda.synchronize()
+            iter_start_time = time.time()
             for gas in range(total_gas):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
@@ -420,6 +424,10 @@ def main(args):
                     f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
 
+            torch.cuda.synchronize()
+            iter_elapsed_time = time.time() - iter_start_time
+            logging.info(f"Iter: {step} / {epoch} elapsed: {iter_elapsed_time:.2f} s")
+
         token_counter.fill_(local_token_counter)
         dist.all_reduce(token_counter)
         if rank == 0 and not disable:
@@ -490,7 +498,7 @@ if __name__ == "__main__":
     parser.add_argument("--image-mixing-frac", default=1, type=float)
     parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
-    parser.add_argument("--no-global-interpolation", action="store_false")
+    parser.add_argument("--no-global-interpolation", action="store_true")
     parser.add_argument("--dynamic-sp", action="store_true")
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")
@@ -504,6 +512,7 @@ if __name__ == "__main__":
     parser.add_argument("--distributed-profile", action="store_true")
     parser.add_argument("--calculate-imbalance", action="store_true")
     parser.add_argument("--max-grad-accumulation-steps", default=3, type=int)
+    parser.add_argument("--min-grad-accumulation-steps", default=2, type=int)
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

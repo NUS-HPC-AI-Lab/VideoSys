@@ -348,7 +348,7 @@ if __name__ == "__main__":
     parser.add_argument("--image-mixing-frac", default=1, type=float)
     parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
-    parser.add_argument("--no-global-interpolation", action="store_false")
+    parser.add_argument("--no-global-interpolation", action="store_true")
     parser.add_argument("--dynamic-sp", action="store_true")
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")
@@ -362,6 +362,7 @@ if __name__ == "__main__":
     parser.add_argument("--distributed-profile", action="store_true")
     parser.add_argument("--calculate-imbalance", action="store_true")
     parser.add_argument("--max-grad-accumulation-steps", default=3, type=int)
+    parser.add_argument("--min-grad-accumulation-steps", default=2, type=int)
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

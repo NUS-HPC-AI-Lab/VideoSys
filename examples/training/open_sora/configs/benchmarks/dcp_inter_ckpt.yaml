@@ -1,15 +1,15 @@
-zipf_offset: 15
+zipf_offset: 5
 outputs: exp/dcp_inter_ckpt
 profile_path: exp/profile/dcp_inter_ckpt
 dynamic_sp: true
 dynamic_recompute: true
 auto_grad_accumulation: true
 dummy_dataset: true
-dummy_data_size: 4000
+dummy_data_size: 2000
 verbose: true
 calculate_imbalance: true
 max_grad_accumulation_steps: 5
-
+min_grad_accumulation_steps: 15
 
 # ==== training config ====
 

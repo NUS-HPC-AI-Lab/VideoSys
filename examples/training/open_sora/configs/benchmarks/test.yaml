@@ -1,11 +1,9 @@
 zipf_offset: 5
-outputs: exp/dcp_intra
-profile_path: exp/profile/dcp_intra
-dynamic_sp: true
-dynamic_recompute: false
-auto_grad_accumulation: false
+outputs: exp/test
+profile_path: exp/profile/test
+sp_size: 1
 dummy_dataset: true
-dummy_data_size: 2000
+dummy_data_size: 5000
 verbose: true
 calculate_imbalance: true
 
@@ -38,11 +36,11 @@ warmup_steps: 10
 # data
 num_bucket_build_workers: 16
 bucket_config:
-  "144p": {1: [1.0, 345], 51: [1.0, 48], 102: [1.0, 25], 204: [1.0, 12], 408: [1.0, 6]}
-  "240p": {1: [1.0, 128], 51: [1.0, 16], 102: [1.0, 8], 204: [1.0, 4], 408: [1.0, 2]}
-  "360p": {1: [1.0, 64], 51: [1.0, 7], 102: [1.0, 4], 204: [1.0, 2], 408: [1.0, 1]}
-  "480p": {1: [1.0, 32], 51: [1.0, 4], 102: [1.0, 2], 204: [1.0, 1], 408: [1.0, 1]}
-  "720p": {1: [1.0, 14], 51: [1.0, 1], 102: [1.0, 1], 204: [1.0, 1], 408: [1.0, 1]}
+  "144p": {1: [1.0, 345]}
+  # "240p": {1: [1.0, 128]}
+  # "360p": {1: [1.0, 64]}
+  # "480p": {1: [1.0, 32]}
+  # "720p": {1: [1.0, 14]}
 
 # override default common ar
 # for benchmark, we use single ar for all resolutions

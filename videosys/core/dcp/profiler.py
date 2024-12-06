@@ -256,8 +256,36 @@ class Profiler:
             self.next_warmup_iter = False
 
             self._need_profile = False
+
+            # {res: {frame: sp: {bs, time, memory}}}
+            self.detail_results = {}
+            if self.dynamic_sp and not self.dynamic_recompute and not self.auto_grad_acc:
+                for filename in os.listdir(self.profile_path):
+                    if filename.startswith("detail_profile") and filename.endswith(".csv"):
+                        detail_profile_file = os.path.join(self.profile_path, filename)
+                        detail_df = pd.read_csv(detail_profile_file)
+                        for _, row in detail_df.iterrows():
+                            ar_name = row["ar"]
+                            num_frame = row["num_frame"]
+                            sp_size = row["sp_size"]
+                            bs = row["bs"]
+                            pred_time = row["pred_time"]
+                            pred_memory = row["pred_memory"]
+
+                            if ar_name not in self.detail_results:
+                                self.detail_results[ar_name] = {}
+                            if num_frame not in self.detail_results[ar_name]:
+                                self.detail_results[ar_name][num_frame] = {}
+                            if sp_size not in self.detail_results[ar_name][num_frame]:
+                                self.detail_results[ar_name][num_frame][sp_size] = {}
+                            self.detail_results[ar_name][num_frame][sp_size] = {
+                                "bs": bs,
+                                "pred_time": pred_time,
+                                "pred_memory": pred_memory,
+                            }
         else:
             self.profile_results = {}
+            self.detail_results = []
 
             if self.distributed_profile:
                 num_buckets = len(self.bucket_config)
@@ -282,10 +310,11 @@ class Profiler:
         self.profile_ctx = None
         self.latest_raw_result = None
         self.raw_results = []
-        self.detail_results = []
         self.dp_results = []
 
         logging.info(f"Profile results: {pformat(self.profile_results, sort_dicts=False)}")
+        if self.dynamic_sp and not self.dynamic_recompute and not self.auto_grad_acc:
+            logging.info(f"Detail results: {pformat(self.detail_results, sort_dicts=False)}")
 
     def interpolate_profile_results(self):
         if not self.dynamic_recompute and not self.auto_grad_acc:

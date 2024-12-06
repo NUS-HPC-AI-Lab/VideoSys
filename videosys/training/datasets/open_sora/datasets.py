@@ -357,7 +357,7 @@ class DummyVariableVideoTextDataset(torch.utils.data.Dataset):
                 vid_candidate_cnts = np.bincount(idx, minlength=len(vid_candidates))
 
             elif distribution == "zipf":
-                zipf_alpha = 1.05
+                zipf_alpha = 3.0
                 # https://en.wikipedia.org/wiki/Zipf%27s_law#Formal_definition
                 ranks = np.power(np.arange(1, len(img_candidates) + 1 + zipf_offset), zipf_alpha)
                 H_N_s = np.sum(1 / ranks)

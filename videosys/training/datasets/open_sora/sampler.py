@@ -8,7 +8,7 @@ from typing import Iterator, List, Optional, Union
 import torch
 import torch.distributed as dist
 from torch.utils.data import Dataset, DistributedSampler
-
+import math
 from videosys.core.dcp.profiler import get_profiler
 
 from .bucket import Bucket
@@ -361,7 +361,8 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         # if max grad accumulation is less than min grad accumulation, repeat the grad accumulation
         if max(num_gas) < self.min_grad_accumulation_steps:
-            num_gas = [i * self.min_grad_accumulation_steps for i in num_gas]
+            grad_accumulation_steps = math.ceil(self.min_grad_accumulation_steps / max(num_gas))
+            num_gas = [i * grad_accumulation_steps for i in num_gas]
 
         return num_gas
 
@@ -691,11 +692,13 @@ class VariableVideoBatchSampler(DistributedSampler):
                         for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                             if bucket_plan.exec_time < min_time:
                                 skip_bucket_idx.append(i)
-            
+            logs = []
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                 if i in skip_bucket_idx or bucket_plan.bucket_id == min_bucket:
                     continue
-                
+
+                ar_name, num_frame = bucket_plan.bucket_id[:2]
+
                 original_exec_time = bucket_plan.exec_time
                 original_batch_size = bucket_plan.batch_size
                 original_sp_size = bucket_plan.sp_size
@@ -706,19 +709,21 @@ class VariableVideoBatchSampler(DistributedSampler):
                 best_diff = float('inf')
                 best_exec_time, best_bs, best_sp = original_exec_time, original_batch_size, original_sp_size
                 cur_sp_size = original_sp_size
+                log_str = f"\n>>> bucket {bucket_plan.bucket_id}, bs: {original_batch_size}, sp: {original_sp_size}, time: {original_exec_time}"
                 while cur_sp_size <= self.profiler.max_sp:
-                    multiplier = 0.8 if cur_sp_size > original_sp_size else 1
-                    max_bs = int(original_batch_size * cur_sp_size / original_sp_size * multiplier)
+                    max_bs = self.profiler.detail_results[ar_name][num_frame][cur_sp_size]["bs"]
+                    cur_unit_time = self.profiler.detail_results[ar_name][num_frame][cur_sp_size]["pred_time"] / max_bs
+
                     if max_bs - original_batch_size > original_remain_samples:
                         max_bs = original_batch_size + original_remain_samples
 
-                    cur_unit_time = unit_time / (cur_sp_size / original_sp_size) 
                     cur_bs = max(1, round(min_time / cur_unit_time))
                     if cur_bs > max_bs:
                         cur_bs = max_bs
                     
                     cur_exec_time = cur_unit_time * cur_bs
                     cur_diff = abs(cur_exec_time - min_time)
+                    log_str += f"\nCHECK sp: {cur_sp_size}, bs: {cur_bs}, time: {cur_exec_time}, diff: {cur_diff}/{best_diff}"                    
                     if cur_diff < best_diff:
                         best_diff = cur_diff
                         best_exec_time = cur_exec_time
@@ -728,7 +733,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                         if abs(cur_exec_time / min_time - 1) < 0.1:
                             break
                     cur_sp_size *= 2
-                
+                logs.append(log_str)
                 assert best_bs > 0, f"best_bs: {best_bs} - {original_batch_size}, best sp: {best_sp} - {original_sp_size}, best time: {best_exec_time} - {original_exec_time}, min time: {min_time}"
 
                 # return left samples back to record
@@ -789,16 +794,12 @@ class VariableVideoBatchSampler(DistributedSampler):
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                 bucket_id = bucket_plan.bucket_id
                 ar_name, num_frame = bucket_id[:2]
-                origin_bs = self.profiler.get_batch_size(ar_name, num_frame)
-                origin_sp = self.profiler.get_sp_size(ar_name, num_frame)
-
                 cur_bs = bucket_plan.batch_size
                 cur_sp = bucket_plan.sp_size
                 cur_time = bucket_plan.exec_time
                 unit_time = cur_time / cur_bs
-
-                multiplier = 0.8 if cur_sp > origin_sp else 1
-                max_bs = int(origin_bs * cur_sp / origin_sp * multiplier)
+                
+                max_bs = self.profiler.detail_results[ar_name][num_frame][cur_sp]["bs"]
                 if max_bs - cur_bs > bucket_sample_counts[bucket_id]:
                     max_bs = cur_bs + bucket_sample_counts[bucket_id]
                 
@@ -809,11 +810,12 @@ class VariableVideoBatchSampler(DistributedSampler):
 
             for i, bucket_plan in enumerate(cur_batch_bucket_id_list):
                 bucket_id = bucket_plan.bucket_id
-                if bucket_id == min_max_bucket:
-                    continue
+                # if bucket_id == min_max_bucket:
+                #     continue
 
                 ar_name, num_frame = bucket_id[:2]
-                max_bs = self.profiler.get_batch_size(ar_name, num_frame)
+                cur_sp = bucket_plan.sp_size
+                max_bs = self.profiler.detail_results[ar_name][num_frame][cur_sp]["bs"]
 
                 cur_exec_time = bucket_plan.exec_time
                 cur_bs = bucket_plan.batch_size
@@ -854,6 +856,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 f"iter {len(bucket_id_access_order)}\nbuckets: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in cur_batch_bucket_id_list]}"
                 f"\npoped: {[(each.bucket_id, each.batch_size, each.sp_size, each.exec_time) for each in poped]}"
                 f"\nmin time: {min_time:.2f}, max time: {min_max_time:.2f}"
+                f"\n{logs}"
             )
 
         return bucket_id_access_order
