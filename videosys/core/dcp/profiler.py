@@ -161,6 +161,7 @@ class Profiler:
         bucket_config,
         text_max_seq_len,
         text_hidden_size,
+        global_interpolation,
         dynamic_sp,
         dynamic_recompute,
         auto_grad_acc,
@@ -187,6 +188,7 @@ class Profiler:
         self.text_max_seq_len = text_max_seq_len
         self.text_hidden_size = text_hidden_size
 
+        self.global_interpolation = global_interpolation
         self.dynamic_sp = dynamic_sp
         self.dynamic_recompute = dynamic_recompute
         self.auto_grad_acc = auto_grad_acc
@@ -200,6 +202,7 @@ class Profiler:
         self.parallel_mgr = parallel_mgr
 
         self.max_sp = torch.cuda.device_count()
+        self.world_size = dist.get_world_size()
         # in bytes
         self.memory_cap = alloc_fraction * torch.cuda.mem_get_info()[1]
         self.logger = logging if verbose else None
@@ -243,7 +246,7 @@ class Profiler:
             for ar_name in self.profile_results:
                 self.profile_results[ar_name] = {int(k): v for k, v in self.profile_results[ar_name].items()}
 
-            if not self.dynamic_recompute and not self.auto_grad_acc:
+            if self.global_interpolation and not self.dynamic_recompute and not self.auto_grad_acc:
                 if not self.dynamic_sp or self.sp_balance_scope == "epoch":
                     self.interpolate_profile_results()
 
@@ -253,8 +256,36 @@ class Profiler:
             self.next_warmup_iter = False
 
             self._need_profile = False
+
+            # {res: {frame: sp: {bs, time, memory}}}
+            self.detail_results = {}
+            if self.dynamic_sp and not self.dynamic_recompute and not self.auto_grad_acc:
+                for filename in os.listdir(self.profile_path):
+                    if filename.startswith("detail_profile") and filename.endswith(".csv"):
+                        detail_profile_file = os.path.join(self.profile_path, filename)
+                        detail_df = pd.read_csv(detail_profile_file)
+                        for _, row in detail_df.iterrows():
+                            ar_name = row["ar"]
+                            num_frame = row["num_frame"]
+                            sp_size = row["sp_size"]
+                            bs = row["bs"]
+                            pred_time = row["pred_time"]
+                            pred_memory = row["pred_memory"]
+
+                            if ar_name not in self.detail_results:
+                                self.detail_results[ar_name] = {}
+                            if num_frame not in self.detail_results[ar_name]:
+                                self.detail_results[ar_name][num_frame] = {}
+                            if sp_size not in self.detail_results[ar_name][num_frame]:
+                                self.detail_results[ar_name][num_frame][sp_size] = {}
+                            self.detail_results[ar_name][num_frame][sp_size] = {
+                                "bs": bs,
+                                "pred_time": pred_time,
+                                "pred_memory": pred_memory,
+                            }
         else:
             self.profile_results = {}
+            self.detail_results = []
 
             if self.distributed_profile:
                 num_buckets = len(self.bucket_config)
@@ -279,10 +310,11 @@ class Profiler:
         self.profile_ctx = None
         self.latest_raw_result = None
         self.raw_results = []
-        self.detail_results = []
         self.dp_results = []
 
         logging.info(f"Profile results: {pformat(self.profile_results, sort_dicts=False)}")
+        if self.dynamic_sp and not self.dynamic_recompute and not self.auto_grad_acc:
+            logging.info(f"Detail results: {pformat(self.detail_results, sort_dicts=False)}")
 
     def interpolate_profile_results(self):
         if not self.dynamic_recompute and not self.auto_grad_acc:
@@ -587,6 +619,8 @@ class Profiler:
                         reduced_time,
                         avail_mem,
                     ] + best_trace
+
+                    self.dp_results.append(result_row)
                 else:
                     result_row = [
                         row.ar_name,
@@ -599,7 +633,11 @@ class Profiler:
                         avail_mem,
                     ]
 
-                self.dp_results.append(result_row)
+                    if self.auto_grad_acc:
+                        self.dp_results.append(result_row)
+                    else:
+                        self.latest_raw_result = result_row
+                
                 self.detail_results.append(result_row)
 
                 if self.logger:
@@ -610,16 +648,37 @@ class Profiler:
                 self.next_bs = bs * 2
                 self.next_warmup_iter = not self.auto_grad_acc
             else:
+                if not self.dynamic_recompute and not self.auto_grad_acc:
+                    if bs == 1:
+                        if self.logger:
+                            self.logger.info(
+                                f">>> [Profiling] bucket {ar_name} {num_frame} cannot fit into sp: {sp_size}"
+                            )
+                    else:
+                        assert self.latest_raw_result is not None
+                        self.dp_results.append(self.latest_raw_result)
+                    
                 if sp_size < self.max_sp:
                     self.next_sp_size = sp_size * 2
-                    self.next_bs = 1
+                    # bs // 2 is the previous successful bs
+                    self.next_bs = 1 if self.dynamic_recompute else max(1, bs//4)
                     self.next_warmup_iter = not self.auto_grad_acc
                 elif len(self.dp_results) == 0:
-                    if self.logger:
-                        self.logger.info(
-                            f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into the cluster"
-                        )
-                    self.update_next_data_plan()
+                    if sp_size < self.world_size:
+                        self.next_sp_size = sp_size * 2
+                        self.next_bs = 1 if self.dynamic_recompute else max(1, bs//4)
+                        self.next_warmup_iter = not self.auto_grad_acc
+                        
+                        if self.logger:
+                            self.logger.info(
+                                f">>> [Profiling] bucket {ar_name} {num_frame} cross nodes, increase sp size to {self.next_sp_size}"
+                            )
+                    else:
+                        if self.logger:
+                            self.logger.info(
+                                f">>> [Profiling] SKIP bucket {ar_name} {num_frame} which cannot fit into the cluster"
+                            )
+                        self.update_next_data_plan()
                 else:
                     if self.logger:
                         self.logger.info(
@@ -786,6 +845,7 @@ def set_profiler(
     bucket_config,
     text_max_seq_len,
     text_hidden_size,
+    global_interpolation,
     dynamic_sp,
     dynamic_recompute,
     auto_grad_acc,
@@ -804,6 +864,7 @@ def set_profiler(
         bucket_config=bucket_config,
         text_max_seq_len=text_max_seq_len,
         text_hidden_size=text_hidden_size,
+        global_interpolation=global_interpolation,
         dynamic_sp=dynamic_sp,
         dynamic_recompute=dynamic_recompute,
         auto_grad_acc=auto_grad_acc,

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+from copy import deepcopy
 from datetime import timedelta
 from pprint import pformat
 
@@ -10,15 +11,25 @@ import torch.distributed as dist
 import wandb
 from omegaconf import OmegaConf
 from tqdm import tqdm
+from transformers import AutoTokenizer, T5EncoderModel
 
 from videosys.core.dcp.profiler import Profiler, set_profiler
 from videosys.core.distributed.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
-from videosys.models.transformers.open_sora_transformer_3d import STDiT3Config
+from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
+from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2
+from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
 from videosys.training.ckpt_io import save_training_config
 from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
 from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
+from videosys.training.datasets.open_sora.utils import MaskGenerator
+from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
 from videosys.utils.logging import init_logger
-from videosys.utils.training import define_experiment_workspace
+from videosys.utils.training import (
+    define_experiment_workspace,
+    format_numel_str,
+    get_model_numel,
+    requires_grad,
+)
 from videosys.utils.utils import merge_args, set_seed, str_to_dtype
 
 
@@ -29,16 +40,15 @@ def main(args):
     # == device and dtype ==
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
     assert args.dtype in ["fp16", "bf16"], f"Unknown mixed precision {args.dtype}"
-    str_to_dtype(args.dtype)
+    dtype = str_to_dtype(args.dtype)
 
     # == init distributed training ==
-    # NOTE: A very large timeout is set to avoid some processes exit early
     rank, world_size, node_rank, node_size = set_distributed_state(args.distributed_profile)
     dist.init_process_group(
         rank=rank,
         world_size=world_size,
         backend="nccl",
-        timeout=timedelta(hours=24),
+        timeout=timedelta(minutes=10),
     )
     deepspeed.init_distributed(timeout=timedelta(seconds=10))
     torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
@@ -62,18 +72,12 @@ def main(args):
             wandb.init(project="Open-Sora", name=exp_name, config=vars(args), dir="./outputs/wandb")
 
     # == init parallel manager ==
+    torch.set_num_threads(1)
     if args.dynamic_sp:
         parallel_mgr = DynamicParallelManager()
     else:
         parallel_mgr = ParallelManager(dist.get_world_size() // args.sp_size, 1, args.sp_size)
-
-    torch.set_num_threads(1)
-
-    # =======================================================
-    # bonus: profile for better batching
-    # =======================================================
     preprocessed_data = args.preprocessed_data
-    model_config = STDiT3Config.from_pretrained(args.ckpt_path)
     if args.profile_path is None or not os.path.exists(args.profile_path):
         do_profile = True
         preprocessed_data = True
@@ -82,13 +86,80 @@ def main(args):
         )
     else:
         do_profile = False
+
+    # ======================================================
+    # 2. build model
+    # ======================================================
+    logging.info("Building models...")
+
+    # == build text-encoder and vae ==
+    if not preprocessed_data:
+        text_encoder = T5EncoderModel.from_pretrained("DeepFloyd/t5-v1_1-xxl", torch_dtype=dtype).to(device).eval()
+        tokenizer = AutoTokenizer.from_pretrained("DeepFloyd/t5-v1_1-xxl")
+        vae = (
+            OpenSoraVAE_V1_2(
+                from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
+                micro_frame_size=17,
+                micro_batch_size=4,
+            )
+            .to(device, dtype)
+            .eval()
+        )
+
+    # == build diffusion model ==
+    model = STDiT3_XL_2(from_pretrained=args.ckpt_path, enable_flash_attn=True, torch_dtype=dtype).to(device).train()
+    model_numel, model_numel_trainable = get_model_numel(model)
+    logging.info(
+        f"[Diffusion] Trainable model params: {format_numel_str(model_numel_trainable)}, "
+        f"Total model params: {format_numel_str(model_numel)}",
+    )
+
+    # == build ema for diffusion model ==
+    ema = deepcopy(model)
+    requires_grad(ema, False)
+    ema.eval()
+
+    # == setup loss function, build scheduler ==
+    scheduler = RFLOW(
+        use_timestep_transform=True,
+        sample_method="logit-normal",
+    )
+
+    # == setup optimizer ==
+    optimizer = torch.optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        eps=args.adam_eps,
+    )
+
+    # == setup learning rate scheduler ==
+    warmup_steps = args.warmup_steps
+    if warmup_steps is None:
+        lr_scheduler = None
+    else:
+        lr_scheduler = LinearWarmupLR(optimizer, warmup_steps=args.warmup_steps)
+
+    # == additional preparation ==
+    if args.grad_checkpoint:
+        model.enable_grad_checkpointing()
+    model.enable_parallel(parallel_mgr=parallel_mgr)
+
+    if args.mask_ratios is not None:
+        mask_generator = MaskGenerator(args.mask_ratios)
+
+    # ======================================================
+    # 3. build dataset and dataloader
+    # ======================================================
+    logging.info("Building dataset...")
+    # create dcp profiler
     # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
-        model_config=model_config,
-        total_layers=model_config.depth,
+        total_layers=model.config.depth,
         bucket_config=args.bucket_config,
-        text_max_seq_len=model_config.model_max_length,
-        text_hidden_size=model_config.caption_channels,
+        text_max_seq_len=model.config.model_max_length,
+        text_hidden_size=model.config.caption_channels,
+        global_interpolation=not args.no_global_interpolation,
         dynamic_sp=args.dynamic_sp,
         dynamic_recompute=args.dynamic_recompute,
         auto_grad_acc=args.auto_grad_accumulation,
@@ -102,10 +173,6 @@ def main(args):
         verbose=args.verbose,
     )
 
-    # ======================================================
-    # 2. build dataset and dataloader
-    # ======================================================
-    logging.info("Building dataset...")
     # == build dataset ==
     if args.dummy_dataset:
         dataset = DummyVariableVideoTextDataset(
@@ -142,6 +209,8 @@ def main(args):
         num_bucket_build_workers=args.num_bucket_build_workers,
         parallel_mgr=parallel_mgr,
         calculate_imbalance=args.calculate_imbalance,
+        verbose=args.verbose,
+        max_grad_accumulation_steps=args.max_grad_accumulation_steps,
     )
 
     # == global variables ==
@@ -267,6 +336,7 @@ if __name__ == "__main__":
     parser.add_argument("--start-from-scratch", action="store_true", help="start training from scratch")
     parser.add_argument("--warmup-steps", default=None, type=int, help="warmup steps")
     parser.add_argument("--verbose", action="store_true", help="verbose")
+    parser.add_argument("--save-optimizer", action="store_true", help="save optimizer")
 
     # experimental features
     parser.add_argument("--drop-last", action="store_true")
@@ -278,18 +348,21 @@ if __name__ == "__main__":
     parser.add_argument("--image-mixing-frac", default=1, type=float)
     parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
+    parser.add_argument("--no-global-interpolation", action="store_true")
     parser.add_argument("--dynamic-sp", action="store_true")
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")
     parser.add_argument(
         "--alloc-memory-fraction",
-        default=0.75,
+        default=0.70,
         type=float,
         help="This is an empirical value to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
     )
     parser.add_argument("--profile-path", default="exp/profile", type=str)
     parser.add_argument("--distributed-profile", action="store_true")
     parser.add_argument("--calculate-imbalance", action="store_true")
+    parser.add_argument("--max-grad-accumulation-steps", default=3, type=int)
+    parser.add_argument("--min-grad-accumulation-steps", default=2, type=int)
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

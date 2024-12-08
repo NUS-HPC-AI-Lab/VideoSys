@@ -1,9 +1,9 @@
-zipf_offset: 15
+zipf_offset: 5
 outputs: exp/baseline
 profile_path: exp/profile/baseline
 sp_size: 4
 dummy_dataset: true
-dummy_data_size: 4000
+dummy_data_size: 2000
 verbose: true
 calculate_imbalance: true
 
@@ -13,6 +13,7 @@ calculate_imbalance: true
 # preprocess embedding
 data_path: "./assets/example_data/demo_preprocess.csv"
 preprocessed_data: true
+drop_last: true
 
 # train
 ckpt_path: "hpcai-tech/OpenSora-STDiT-v3"
