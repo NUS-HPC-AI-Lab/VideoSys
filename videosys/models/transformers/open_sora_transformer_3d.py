@@ -201,12 +201,14 @@ class STDiT3Block(nn.Module):
                 x_m = rearrange(x_m, "(B S) T C -> B (T S) C", T=T, S=S)
             else:
                 if self.parallel_manager.sp_size > 1:
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False)
+                    is_image = T == 1
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False, is_image=is_image)
+
                 x_m = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
                 x_m = self.attn(x_m)
                 x_m = rearrange(x_m, "(B T) S C -> B (T S) C", T=T, S=S)
                 if self.parallel_manager.sp_size > 1:
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True)
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True, is_image=is_image)
 
             # modulate (attention)
             x_m_s = gate_msa * x_m
@@ -278,15 +280,21 @@ class STDiT3Block(nn.Module):
 
         return x
 
-    def dynamic_switch(self, x, s, t, to_spatial_shard: bool):
+    def dynamic_switch(self, x, s, t, to_spatial_shard: bool, is_image: bool = False):
         if to_spatial_shard:
             scatter_dim, gather_dim = 2, 1
             scatter_pad = get_pad("spatial")
             gather_pad = get_pad("temporal")
+            if is_image:
+                gather_dim = 0
+                gather_pad = 0
         else:
             scatter_dim, gather_dim = 1, 2
             scatter_pad = get_pad("temporal")
             gather_pad = get_pad("spatial")
+            if is_image:
+                scatter_dim = 0
+                scatter_pad = get_pad("batch")
 
         x = rearrange(x, "b (t s) d -> b t s d", t=t, s=s)
         x = all_to_all_with_pad(
