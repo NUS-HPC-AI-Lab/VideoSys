@@ -123,7 +123,7 @@ class STDiT3Block(nn.Module):
             rope=rope,
             enable_flash_attn=enable_flash_attn,
         )
-        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn)
+        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn, temporal=temporal)
         self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
@@ -143,6 +143,9 @@ class STDiT3Block(nn.Module):
         self.cross_count = 0
         self.last_cross = None
         self.mlp_count = 0
+
+        self.inp_comm_time = 0
+        self.oup_comm_time = 0
 
     def t_mask_select(self, x_mask, x, masked_x, T, S):
         # x: [B, (T, S), C]
@@ -287,7 +290,7 @@ class STDiT3Block(nn.Module):
             gather_pad = get_pad("temporal")
             if is_image:
                 gather_dim = 0
-                gather_pad = 0
+                gather_pad = get_pad("batch")
         else:
             scatter_dim, gather_dim = 1, 2
             scatter_pad = get_pad("temporal")
@@ -453,6 +456,10 @@ class STDiT3(PreTrainedModel):
 
         # parallel
         self.parallel_manager: ParallelManager = None
+        self.spatial_time = []
+        self.temporal_time = []
+        self.inp_time = []
+        self.oup_time = []
 
     def enable_parallel(self, dp_size=None, sp_size=None, enable_cp=None, parallel_mgr=None):
         if parallel_mgr is not None:
@@ -589,6 +596,7 @@ class STDiT3(PreTrainedModel):
         if self.parallel_manager.sp_size > 1:
             set_pad("temporal", T, self.parallel_manager.sp_group)
             set_pad("spatial", S, self.parallel_manager.sp_group)
+            set_pad("batch", x.shape[0], self.parallel_manager.sp_group)
             x = split_sequence(x, self.parallel_manager.sp_group, dim=2, grad_scale="down", pad=get_pad("spatial"))
             T, S = x.shape[1], x.shape[2]
 

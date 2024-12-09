@@ -319,8 +319,7 @@ def main(args):
 
             total_gas = batch["gas"]
             iter_loss = 0.0
-            torch.cuda.synchronize()
-            iter_start_time = time.time()
+
             for gas in range(total_gas):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
@@ -423,10 +422,6 @@ def main(args):
                 logging.info(
                     f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
-
-            torch.cuda.synchronize()
-            iter_elapsed_time = time.time() - iter_start_time
-            logging.info(f"Iter: {step} / {epoch} elapsed: {iter_elapsed_time:.2f} s")
 
         token_counter.fill_(local_token_counter)
         dist.all_reduce(token_counter)

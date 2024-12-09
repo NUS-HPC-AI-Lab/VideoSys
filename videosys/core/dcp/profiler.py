@@ -213,7 +213,6 @@ class Profiler:
 
         self.timers: Dict[str, GroupTimer] = dict()
         self.global_timer = None
-        self.registered_timer_keys = []
         if self.need_profile():
             self.timers["iteration"] = GroupTimer("iteration")
         self.dummy_timer = nullcontext()
@@ -712,7 +711,8 @@ class Profiler:
             if is_success:
                 # non warm up iter, record this result, increase bs
                 self.latest_raw_result = row
-
+                self.raw_results.append(row)
+                self.dp_results.append(row)
                 self.next_bs *= 2
                 self.next_warmup_iter = True
             else:
@@ -734,6 +734,18 @@ class Profiler:
                     sp_size = self.latest_raw_result.sp_size
 
                     pred_full_time, pred_full_mem = self.estimate_overhead(self.latest_raw_result)
+                    cur_throughput = bs/sp_size/pred_full_time
+                    if len(self.dp_results) > 0:
+                        prev_row = self.dp_results[-2]
+                        prev_time, prev_mem = self.estimate_overhead(prev_row)
+                        throughput = prev_row.bs / prev_row.sp_size / prev_time
+
+                        # override for empty cache operation caused slow down
+                        if (throughput / cur_throughput) > 2:
+                            bs = prev_row.bs
+                            sp_size = prev_row.sp_size
+                            pred_full_time = prev_time
+                            pred_full_mem = prev_mem
 
                     if ar_name not in self.profile_results:
                         self.profile_results[ar_name] = {}
@@ -745,8 +757,9 @@ class Profiler:
                             memory_consumed=pred_full_mem / GB,
                         ),
                     )
-                    self.raw_results.append(self.latest_raw_result)
+                    
                     self.latest_raw_result = None
+                    self.dp_results = []
 
                 self.update_next_data_plan()
 
@@ -822,6 +835,11 @@ class Profiler:
 
     ############################################################
     # Functionality: timing. Refer to args.register_timer_keys and train_step
+
+    def register_timer_keys(self, keys):
+        for key in keys:
+            assert key not in self.timers
+            self.timers[key] = GroupTimer(key)
 
     @contextmanager
     def timeit(self, name):
