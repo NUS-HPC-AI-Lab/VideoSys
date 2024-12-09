@@ -36,6 +36,7 @@ adam_eps: 1e-15
 warmup_steps: 10
 
 # data
+image_mixing_frac: 50
 num_bucket_build_workers: 16
 bucket_config:
   "144p": {1: [1.0, 345], 51: [1.0, 48], 102: [1.0, 25], 204: [1.0, 12], 408: [1.0, 6]}
