@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import time
 from copy import deepcopy
 from datetime import timedelta
 from pprint import pformat
@@ -161,6 +162,7 @@ def main(args):
         bucket_config=args.bucket_config,
         text_max_seq_len=model.config.model_max_length,
         text_hidden_size=model.config.caption_channels,
+        global_interpolation=not args.no_global_interpolation,
         dynamic_sp=args.dynamic_sp,
         dynamic_recompute=args.dynamic_recompute,
         auto_grad_acc=args.auto_grad_accumulation,
@@ -212,6 +214,7 @@ def main(args):
         calculate_imbalance=args.calculate_imbalance,
         verbose=args.verbose,
         max_grad_accumulation_steps=args.max_grad_accumulation_steps,
+        min_grad_accumulation_steps=args.min_grad_accumulation_steps,
     )
 
     # =======================================================
@@ -282,8 +285,10 @@ def main(args):
     # 5. training loop
     # =======================================================
     dist.barrier()
+    token_counter = torch.zeros((1,), dtype=torch.double, device=device)
 
     for epoch in range(start_epoch, cfg_epochs):
+        local_token_counter = 0.0
         if profiler.need_profile():
             # TODO: add timer for profile
             disable = True
@@ -314,6 +319,7 @@ def main(args):
 
             total_gas = batch["gas"]
             iter_loss = 0.0
+
             for gas in range(total_gas):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
@@ -332,6 +338,8 @@ def main(args):
                             x = vae.encode(x)  # [B, C, T, H/P, W/P]
                             # Prepare text inputs
                             model_args = encode_prompt(text_encoder, tokenizer, y)
+
+                    local_token_counter += x.shape[0] * x.shape[2] * x.shape[3] * x.shape[4] / parallel_mgr.sp_size
 
                     for k, v in batch_data.items():
                         if isinstance(v, torch.Tensor):
@@ -415,15 +423,19 @@ def main(args):
                     f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
                 )
 
+        token_counter.fill_(local_token_counter)
+        dist.all_reduce(token_counter)
         if rank == 0 and not disable:
+            elapsed_time = pbar.format_dict['elapsed']
             logging.info(
-                f"Epoch {epoch}: steps: {num_steps_per_epoch} effective samples: {sampler.effective_samples}, "
-                f"throughput: {sampler.effective_samples / pbar.format_dict['elapsed']} samples/s"
+                f"Epoch {epoch}: steps: {num_steps_per_epoch} elapsed time: {elapsed_time:.2f} s"
+                f", effective samples: {sampler.effective_samples}"
+                f", sample throughput: {sampler.effective_samples / elapsed_time:.2f} samples/s"
+                f", token throughput: {token_counter.item()/elapsed_time:.2f} token/s"
             )
 
         sampler.reset()
         start_step = 0
-
     dist.barrier()
 
     if do_profile:
@@ -481,6 +493,7 @@ if __name__ == "__main__":
     parser.add_argument("--image-mixing-frac", default=1, type=float)
     parser.add_argument("--distribution", default="zipf", type=str, choices=["zipf", "uniform"])
     parser.add_argument("--zipf-offset", type=int, default=5)
+    parser.add_argument("--no-global-interpolation", action="store_true")
     parser.add_argument("--dynamic-sp", action="store_true")
     parser.add_argument("--dynamic-recompute", action="store_true")
     parser.add_argument("--auto-grad-accumulation", action="store_true")
@@ -494,6 +507,7 @@ if __name__ == "__main__":
     parser.add_argument("--distributed-profile", action="store_true")
     parser.add_argument("--calculate-imbalance", action="store_true")
     parser.add_argument("--max-grad-accumulation-steps", default=3, type=int)
+    parser.add_argument("--min-grad-accumulation-steps", default=2, type=int)
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

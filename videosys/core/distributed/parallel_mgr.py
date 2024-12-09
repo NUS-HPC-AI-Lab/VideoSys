@@ -42,7 +42,8 @@ class ParallelManager(ProcessGroupMesh):
 class DynamicParallelManager:
     def __init__(self):
         self._rank = dist.get_rank()
-        self.dp_group: ProcessGroup = dist.new_group(list(range(0, dist.get_world_size())))
+        world_size = dist.get_world_size()
+        self.dp_group: ProcessGroup = dist.new_group(list(range(0, world_size)))
         self.dp_rank = dist.get_rank(self.dp_group)
 
         self.sp_rank = None
@@ -61,6 +62,8 @@ class DynamicParallelManager:
         self.sync_tensor = torch.tensor(
             [0, 0, 0], dtype=torch.int, device=torch.device(f"cuda:{torch.cuda.current_device()}")
         )
+
+        logging.info(f"Init dynamic parallel manager with world size: {world_size}")
 
     def _build_clusters(self):
         wsize = dist.get_world_size()
