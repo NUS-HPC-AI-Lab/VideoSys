@@ -57,7 +57,7 @@ def read_file(input_path):
 def split_df_by_rank(df):
     world_size = dist.get_world_size()
     rank = dist.get_rank()
-    chunk_size = len(df) // world_size
+    chunk_size = max(1, len(df) // world_size)
     return df.iloc[rank * chunk_size : (rank + 1) * chunk_size]
 
 
@@ -360,5 +360,4 @@ def get_text_embeddings(tokenizer, text_encoder, texts):
 def encode_prompt(text_encoder, tokenizer, text):
     caption_embs, emb_masks = get_text_embeddings(tokenizer, text_encoder, text)
     caption_embs = caption_embs[:, None]
-    emb_masks = None
     return dict(y=caption_embs, mask=emb_masks)
