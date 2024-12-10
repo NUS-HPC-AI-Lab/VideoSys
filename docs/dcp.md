@@ -3,8 +3,9 @@
 [[blog](https://oahzxl.github.io/DCP/)]
 
 - [Data-Centric Parallel (DCP)](#pyramid-attention-broadcastpab)
-  - [Insights](#insights)
-  - [Pyramid Attention Broadcast (PAB) Mechanism](#pyramid-attention-broadcast-pab-mechanism)
+  - [Motivation](#insights)
+  - [Data-Centric Parallel (DCP) Mechanism](#pyramid-attention-broadcast-pab-mechanism)
+  - [Pyramid Activation Checkpointing](#pyramid-activation-checkpointing)
   - [Experimental Results](#experimental-results)
   - [Usage](#usage)
     - [Supported Models](#supported-models)
@@ -15,27 +16,34 @@
 
 We introduce Data-Centric Parallel (DCP), a simple but effective approach to accelerate distributed training of varaible sequences (e.g., videos). Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime. This method significantly reduces communication overhead and computational inefficiencies, achieving up to 2.1x speedup. As a ease-of-use method, our method can enpower any models and most parallel methods within minimal code changes (10 lines).
 
-## Insights
+## Motivation
 
 ![method](../assets/figures/dcp_compare.png)
 
 Variable sequences training is commonly used in various tasks, such as video generation (Sora, Movie Gen, Open-Sora, HunyuanVideo), text generation (Llama-3), and scientific computing (AlphaFold). Such strategy offers them two advantages: enhanced generation quality and flexible output sizes.
 
-We compare two common parallel methods for variable sequences training in Figure 1. Bucket parallel fixes sequence parallel size based on the longest sequence, adjusting batch sizes for balance. Packed parallel, while also fixing sequence parallel size, concats multiple sequences in one batch.
+We compare two common parallel methods for variable sequences training in the above figure. Bucket parallel fixes sequence parallel size based on the longest sequence, adjusting batch sizes for balance. Packed parallel, while also fixing sequence parallel size, concats multiple sequences in one batch.
 
 However, bucket parallel struggles with workload imbalance at small batch sizes and communication inefficiency for shorter sequences, while packed parallel, despite better load balancing, incurs unnecessary communication overhead and requires complex implementation changes. Both approaches fail to addresses two critical challenges in variable sequences training: necessary sequence parallel for long sequences and the unbalanced workloads from diverse sequence sizes, due to their fixed settings and lack of data awareness.
 
 ## Data-Centric Parallel (DCP) Mechanism
 
-![method](../assets/figures/pab_method.png)
+![method](../assets/figures/dcp_overview.png)
 
-Building on these insights, we propose a **pyramid attention broadcast (PAB)** mechanism to minimize unnecessary computations and optimize the utility of each attention module, as shown in Figure[xx figure] below.
+To address these challenges, we propose Data-Centric Parallel, an innovative approach that transforms parallel training with data awareness. Instead of fixing all configs during training, our method adaptively change parallel and other settings driven by the incoming data, significantly improving computational efficiency and reducing communication overhead.
 
-In the middle segment, we broadcast one step's attention outputs to its subsequent several steps, thereby significantly reducing the computational cost on attention modules.
+As shown in the above figure, our method consists of two main stages: data profile and data-centric runtime. In data profile stage, we classify sequences by size and determine optimal settings for each sequence through fast dual-layer profile. At runtime, we first enqueue sequences into the batch until it's full, and then dynamically balance each sequences using two strategies:
 
-For more efficient broadcast and minimum influence to effect, we set varied broadcast ranges for different attentions based on their stability and differences.
-**The smaller the variation in attention, the broader the potential broadcast range.**
+DCP-intra: adjusts the intrinsic settings (e.g., batch size, sequence parallel size) of the sequence.
+DCP-inter: optimizes among multiple sequences (e.g., gradient accumulation) without changing intrinsic settings.
 
+## Pyramid Activation Checkpointing
+
+![method](../assets/figures/dcp_ckpt.png)
+
+As illustrated in the figure above, sequence sizes are highly varied in variable sequences training, with short sequences using less memory and long sequences using more. Selective activation checkpointing are limited by longer sequences, as they require multi-gpu or even intra-node sequence parallelism if reducing recomputing.
+
+Based on DCP, we propose Pyramid Activation Checkpointing (PAC), which adaptively applies different ckpt ratios based on sequence sizes. This approach significantly improves throughput for the shorter sequences by less recomputing, while maintaining communication overhead for longer sequences, which is even more beneficial in datasets where shorter sequences dominate.
 
 ## Experimental Results
 Here are the results of our experiments, more results are shown in https://oahzxl.github.io/DCP/:
