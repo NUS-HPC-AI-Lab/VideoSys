@@ -636,7 +636,7 @@ class Profiler:
                         self.dp_results.append(result_row)
                     else:
                         self.latest_raw_result = result_row
-                
+
                 self.detail_results.append(result_row)
 
                 if self.logger:
@@ -656,18 +656,18 @@ class Profiler:
                     else:
                         assert self.latest_raw_result is not None
                         self.dp_results.append(self.latest_raw_result)
-                    
+
                 if sp_size < self.max_sp:
                     self.next_sp_size = sp_size * 2
                     # bs // 2 is the previous successful bs
-                    self.next_bs = 1 if self.dynamic_recompute else max(1, bs//4)
+                    self.next_bs = 1 if self.dynamic_recompute else max(1, bs // 4)
                     self.next_warmup_iter = not self.auto_grad_acc
                 elif len(self.dp_results) == 0:
                     if sp_size < self.world_size:
                         self.next_sp_size = sp_size * 2
-                        self.next_bs = 1 if self.dynamic_recompute else max(1, bs//4)
+                        self.next_bs = 1 if self.dynamic_recompute else max(1, bs // 4)
                         self.next_warmup_iter = not self.auto_grad_acc
-                        
+
                         if self.logger:
                             self.logger.info(
                                 f">>> [Profiling] bucket {ar_name} {num_frame} cross nodes, increase sp size to {self.next_sp_size}"
@@ -734,7 +734,7 @@ class Profiler:
                     sp_size = self.latest_raw_result.sp_size
 
                     pred_full_time, pred_full_mem = self.estimate_overhead(self.latest_raw_result)
-                    cur_throughput = bs/sp_size/pred_full_time
+                    cur_throughput = bs / sp_size / pred_full_time
                     if len(self.dp_results) > 0:
                         prev_row = self.dp_results[-2]
                         prev_time, prev_mem = self.estimate_overhead(prev_row)
@@ -757,7 +757,7 @@ class Profiler:
                             memory_consumed=pred_full_mem / GB,
                         ),
                     )
-                    
+
                     self.latest_raw_result = None
                     self.dp_results = []
 

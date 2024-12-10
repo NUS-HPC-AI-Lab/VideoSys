@@ -5,20 +5,20 @@ export TOKENIZERS_PARALLELISM=false
 
 # =============== benchmark commands ================
 # If you run this for the first time, you need to run the program twice.
-# The first time is to profile the model, and the second time is to run the benchmark.
+# The first time is to profile the model and save results, and the second time is to run the benchmark.
 
 # baseline
 torchrun --standalone --nproc_per_node 8 examples/training/open_sora/train.py \
-    examples/training/open_sora/configs/benchmarks/baseline.yaml > baseline.log 2>& 1
+    examples/training/open_sora/configs/benchmarks/baseline.yaml
 
 # DCP intra
 torchrun --standalone --nproc_per_node 8 examples/training/open_sora/train.py \
-    examples/training/open_sora/configs/benchmarks/dcp_intra.yaml > dcp_intra.log 2>& 1
+    examples/training/open_sora/configs/benchmarks/dcp_intra.yaml
 
 # DCP inter
 torchrun --standalone --nproc_per_node 8 examples/training/open_sora/train.py \
-    examples/training/open_sora/configs/benchmarks/dcp_inter.yaml > dcp_inter.log 2>& 1
+    examples/training/open_sora/configs/benchmarks/dcp_inter.yaml
 
 # DCP inter + ckpt
 torchrun --standalone --nproc_per_node 8 examples/training/open_sora/train.py \
-    examples/training/open_sora/configs/benchmarks/dcp_inter_ckpt.yaml > dcp_inter_ckpt.log 2>& 1
+    examples/training/open_sora/configs/benchmarks/dcp_inter_ckpt.yaml

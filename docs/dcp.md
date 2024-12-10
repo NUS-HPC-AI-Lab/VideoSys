@@ -20,6 +20,9 @@ Quick start:
 ```bash
 # run benchmark
 bash examples/training/open_sora/benchmark.sh
+
+# train
+bash examples/training/open_sora/train.sh
 ```
 
 ## Motivation

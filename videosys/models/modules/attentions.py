@@ -127,7 +127,7 @@ TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO = None, None
 def reset_cross_attn_mask():
     # print(f"rank {torch.distributed.get_rank()} reset cross attention mask")
     global SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO, TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO
-    
+
     SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO = None, None
     TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO = None, None
 
@@ -187,7 +187,7 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
     def get_qk_mask(self, B, N, mask):
         global TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO, SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO
         device = torch.cuda.current_device()
-        if B*N > 200000 and self.training:
+        if B * N > 200000 and self.training:
             if self.temporal:
                 if TEMPORAL_Q_SEQINFO is None:
                     TEMPORAL_Q_SEQINFO = [_SeqLenInfo.from_seqlens([N] * 1) for _ in range(B)]
