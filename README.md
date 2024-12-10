@@ -118,7 +118,7 @@ You can also find easy demo with HuggingFace Space <a href="https://huggingface.
 <p align="center">
     <img src="./assets/figures/dcp_overview.png" alt="method" height="300">
 </p>
-Data-Centric Parallel (DCP) is a simple but effective approach to accelerate distributed training of any-size videos. Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime. This method significantly reduces communication overhead and computational inefficiencies, achieving up to 2.1x speedup. As a ease-of-use method, DCP can enpower any video models and parallel methods with minimal code changes.
+Data-Centric Parallel (DCP) is a simple but effective approach to accelerate distributed training of variable sequences. Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime, achieving up to 2.1x speedup. As a ease-of-use method, DCP can enpower any video models and parallel methods with minimal code changes.
 
 See its details [here](./docs/dcp.md).
 
