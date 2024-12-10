@@ -2,19 +2,25 @@
 
 [[blog](https://oahzxl.github.io/DCP/)]
 
-- [Data-Centric Parallel (DCP)](#pyramid-attention-broadcastpab)
-  - [Motivation](#insights)
-  - [Data-Centric Parallel (DCP) Mechanism](#pyramid-attention-broadcast-pab-mechanism)
+- [Data-Centric Parallel (DCP)](#data-centric-parallel-dcp)
+  - [Motivation](#motivation)
+  - [Data-Centric Parallel (DCP) Mechanism](#data-centric-parallel-dcp-mechanism)
   - [Pyramid Activation Checkpointing](#pyramid-activation-checkpointing)
   - [Experimental Results](#experimental-results)
   - [Usage](#usage)
     - [Supported Models](#supported-models)
-    - [Configuration for PAB](#configuration-for-pab)
+    - [Configuration for DCP](#configuration-for-dcp)
       - [Parameters](#parameters)
       - [Example Configuration](#example-configuration)
 
 
 We introduce Data-Centric Parallel (DCP), a simple but effective approach to accelerate distributed training of varaible sequences (e.g., videos). Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime. This method significantly reduces communication overhead and computational inefficiencies, achieving up to 2.1x speedup. As a ease-of-use method, our method can enpower any models and most parallel methods within minimal code changes (10 lines).
+
+Quick start:
+```bash
+# run benchmark
+bash examples/training/open_sora/benchmark.sh
+```
 
 ## Motivation
 
@@ -114,10 +120,10 @@ Explanation:
 
 Adjust these settings based on your specific needs to optimize the performance.
 
-For complete examples, please refer to [dcp_launch.sh](../examples/training/open_sora/dcp_launch.sh)
+For complete benchmark examples, please refer to [benchmark.sh](../examples/training/open_sora/benchmark.sh)
 
 #### Customization for new models
-The above example is for Open-Sora. 
+The above example is for Open-Sora.
 To customize DCP training with your own model, there are a few lines of code to adapt.
 
 1. import and create profiler
@@ -149,8 +155,8 @@ profiler: Profiler = set_profiler(
 ```python
     for epoch in range(epochs):
         # insert 4 lines:
-        # - build a fake dataloader and 
-        # - initialize the profiler to run data profiling    
+        # - build a fake dataloader and
+        # - initialize the profiler to run data profiling
         if profiler.need_profile():
             profiler.init_profiler()
             num_steps_per_epoch = None
