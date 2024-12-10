@@ -1,0 +1,8 @@
+deepspeed
+wandb
+pandas
+pandarallel
+av
+rotary-embedding-torch
+opencv-python-headless
+wheel

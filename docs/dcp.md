@@ -17,6 +17,31 @@
 We introduce Data-Centric Parallel (DCP), a simple but effective approach to accelerate distributed training of varaible sequences (e.g., videos). Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime. This method significantly reduces communication overhead and computational inefficiencies, achieving up to 2.1x speedup. As a ease-of-use method, our method can enpower any models and most parallel methods within minimal code changes (10 lines).
 
 Quick start:
+
+Install dependency:
+```shell
+# FIRST install basic depenencies for VideoSys
+git clone https://github.com/NUS-HPC-AI-Lab/VideoSys
+cd VideoSys
+pip install -e .
+
+# install dependencies for DCP
+pip install -r requirementx-dcp.txt
+
+# install flash attention
+pip install flash-attn --no-build-isolation
+
+# Install apex (optional but recommended):
+git clone https://github.com/NVIDIA/apex
+cd apex
+# if pip >= 23.1 (ref: https://pip.pypa.io/en/stable/news/#v23-1) which supports multiple `--config-settings` with the same key... 
+pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings "--build-option=--cpp_ext" --config-settings "--build-option=--cuda_ext" ./
+# otherwise
+pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --global-option="--cpp_ext" --global-option="--cuda_ext" ./
+rm -r apex
+```
+
+Run examples:
 ```bash
 # run benchmark
 bash examples/training/open_sora/benchmark.sh

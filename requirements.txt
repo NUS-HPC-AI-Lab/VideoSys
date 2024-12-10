@@ -3,7 +3,6 @@ bs4
 click
 colossalai
 contexttimer
-diffusers==0.30.0
 einops
 fabric
 ftfy
@@ -23,4 +22,6 @@ sentencepiece
 timm
 torch>=1.13
 tqdm
+diffusers==0.30.0
+peft==0.13.2
 transformers==4.39.3
