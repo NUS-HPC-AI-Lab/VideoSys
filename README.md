@@ -8,7 +8,7 @@ An easy and efficient system for video generation
 </p>
 
 ### Latest News 🔥
-- [2024/11] 🔥 <b>Propose Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)], a simple and efficient method for any-size videos training</b>.
+- [2024/11] 🔥 <b>Propose Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/dcp.md)], a simple and efficient method for any-size videos training</b>.
 - [2024/09] Support [CogVideoX](https://github.com/THUDM/CogVideo), [Vchitect-2.0](https://github.com/Vchitect/Vchitect-2.0) and [Open-Sora-Plan v1.2.0](https://github.com/PKU-YuanGroup/Open-Sora-Plan).
 - [2024/08] 🔥 Evole from [OpenDiT](https://github.com/NUS-HPC-AI-Lab/VideoSys/tree/v1.0.0) to <b>VideoSys: An easy and efficient system for video generation</b>.
 - [2024/08] 🔥 Release PAB paper: <b>[Real-Time Video Generation with Pyramid Attention Broadcast](https://arxiv.org/abs/2408.12588)</b>.
@@ -112,13 +112,15 @@ You can also find easy demo with HuggingFace Space <a href="https://huggingface.
 
 ## Acceleration Techniques
 
-### Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)]
+### Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/dcp.md)]
 
-![method](./assets/figures/dcp_overview.png)
-
+<!-- ![method](./assets/figures/dcp_overview.png) -->
+<p align="center">
+    <img src="./assets/figures/dcp_overview.png" alt="method" height="300">
+</p>
 Data-Centric Parallel (DCP) is a simple but effective approach to accelerate distributed training of any-size videos. Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime. This method significantly reduces communication overhead and computational inefficiencies, achieving up to 2.1x speedup. As a ease-of-use method, DCP can enpower any video models and parallel methods with minimal code changes.
 
-See its details [here](./docs/pab.md).
+See its details [here](./docs/dcp.md).
 
 ----
 

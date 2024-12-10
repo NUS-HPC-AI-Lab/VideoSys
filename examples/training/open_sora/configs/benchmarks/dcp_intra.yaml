@@ -1,11 +1,11 @@
-zipf_offset: 15
+zipf_offset: 5
 outputs: exp/dcp_intra
 profile_path: exp/profile/dcp_intra
 dynamic_sp: true
 dynamic_recompute: false
 auto_grad_accumulation: false
 dummy_dataset: true
-dummy_data_size: 4000
+dummy_data_size: 2000
 verbose: true
 calculate_imbalance: true
 
@@ -15,6 +15,7 @@ calculate_imbalance: true
 # preprocess embedding
 data_path: "./assets/example_data/demo_preprocess.csv"
 preprocessed_data: true
+drop_last: true
 
 # train
 ckpt_path: "hpcai-tech/OpenSora-STDiT-v3"
@@ -35,6 +36,7 @@ adam_eps: 1e-15
 warmup_steps: 10
 
 # data
+image_mixing_frac: 50
 num_bucket_build_workers: 16
 bucket_config:
   "144p": {1: [1.0, 345], 51: [1.0, 48], 102: [1.0, 25], 204: [1.0, 12], 408: [1.0, 6]}

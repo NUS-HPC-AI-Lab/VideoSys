@@ -123,7 +123,7 @@ class STDiT3Block(nn.Module):
             rope=rope,
             enable_flash_attn=enable_flash_attn,
         )
-        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn)
+        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn, temporal=temporal)
         self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
@@ -143,6 +143,9 @@ class STDiT3Block(nn.Module):
         self.cross_count = 0
         self.last_cross = None
         self.mlp_count = 0
+
+        self.inp_comm_time = 0
+        self.oup_comm_time = 0
 
     def t_mask_select(self, x_mask, x, masked_x, T, S):
         # x: [B, (T, S), C]
@@ -201,12 +204,14 @@ class STDiT3Block(nn.Module):
                 x_m = rearrange(x_m, "(B S) T C -> B (T S) C", T=T, S=S)
             else:
                 if self.parallel_manager.sp_size > 1:
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False)
+                    is_image = T == 1
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False, is_image=is_image)
+
                 x_m = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
                 x_m = self.attn(x_m)
                 x_m = rearrange(x_m, "(B T) S C -> B (T S) C", T=T, S=S)
                 if self.parallel_manager.sp_size > 1:
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True)
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True, is_image=is_image)
 
             # modulate (attention)
             x_m_s = gate_msa * x_m
@@ -278,15 +283,21 @@ class STDiT3Block(nn.Module):
 
         return x
 
-    def dynamic_switch(self, x, s, t, to_spatial_shard: bool):
+    def dynamic_switch(self, x, s, t, to_spatial_shard: bool, is_image: bool = False):
         if to_spatial_shard:
             scatter_dim, gather_dim = 2, 1
             scatter_pad = get_pad("spatial")
             gather_pad = get_pad("temporal")
+            if is_image:
+                gather_dim = 0
+                gather_pad = get_pad("batch")
         else:
             scatter_dim, gather_dim = 1, 2
             scatter_pad = get_pad("temporal")
             gather_pad = get_pad("spatial")
+            if is_image:
+                scatter_dim = 0
+                scatter_pad = get_pad("batch")
 
         x = rearrange(x, "b (t s) d -> b t s d", t=t, s=s)
         x = all_to_all_with_pad(
@@ -445,6 +456,10 @@ class STDiT3(PreTrainedModel):
 
         # parallel
         self.parallel_manager: ParallelManager = None
+        self.spatial_time = []
+        self.temporal_time = []
+        self.inp_time = []
+        self.oup_time = []
 
     def enable_parallel(self, dp_size=None, sp_size=None, enable_cp=None, parallel_mgr=None):
         if parallel_mgr is not None:
@@ -581,6 +596,7 @@ class STDiT3(PreTrainedModel):
         if self.parallel_manager.sp_size > 1:
             set_pad("temporal", T, self.parallel_manager.sp_group)
             set_pad("spatial", S, self.parallel_manager.sp_group)
+            set_pad("batch", x.shape[0], self.parallel_manager.sp_group)
             x = split_sequence(x, self.parallel_manager.sp_group, dim=2, grad_scale="down", pad=get_pad("spatial"))
             T, S = x.shape[1], x.shape[2]
 
