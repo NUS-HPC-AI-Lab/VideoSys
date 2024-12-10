@@ -1,4 +1,4 @@
-from videosys.utils.logging import logger
+import logging
 
 PAB_MANAGER = None
 
@@ -49,7 +49,7 @@ class PABManager:
         init_prompt += f" temporal broadcast: {config.temporal_broadcast}, temporal range: {config.temporal_range}, temporal_threshold: {config.temporal_threshold}."
         init_prompt += f" cross broadcast: {config.cross_broadcast}, cross range: {config.cross_range}, cross threshold: {config.cross_threshold}."
         init_prompt += f" mlp broadcast: {config.mlp_broadcast}."
-        logger.info(init_prompt)
+        logging.info(init_prompt)
 
     def if_broadcast_cross(self, timestep: int, count: int):
         if (

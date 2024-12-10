@@ -20,8 +20,10 @@ from timm.models.vision_transformer import Mlp
 from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 from transformers import PretrainedConfig, PreTrainedModel
 
-from videosys.core.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
-from videosys.core.pab_mgr import (
+from videosys.core.dcp.recompute import auto_recompute
+from videosys.core.distributed.comm import all_to_all_with_pad, gather_sequence, get_pad, set_pad, split_sequence
+from videosys.core.distributed.parallel_mgr import ParallelManager
+from videosys.core.pab.pab_mgr import (
     enable_pab,
     get_mlp_output,
     if_broadcast_cross,
@@ -30,7 +32,6 @@ from videosys.core.pab_mgr import (
     if_broadcast_temporal,
     save_mlp_output,
 )
-from videosys.core.parallel_mgr import ParallelManager
 from videosys.models.modules.activations import approx_gelu
 from videosys.models.modules.attentions import OpenSoraAttention, OpenSoraMultiHeadCrossAttention
 from videosys.models.modules.embeddings import (
@@ -122,7 +123,7 @@ class STDiT3Block(nn.Module):
             rope=rope,
             enable_flash_attn=enable_flash_attn,
         )
-        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn)
+        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn, temporal=temporal)
         self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
@@ -133,6 +134,8 @@ class STDiT3Block(nn.Module):
         # parallel
         self.parallel_manager: ParallelManager = None
 
+        self.grad_checkpointing = True
+
         # pab
         self.block_idx = block_idx
         self.attn_count = 0
@@ -140,6 +143,9 @@ class STDiT3Block(nn.Module):
         self.cross_count = 0
         self.last_cross = None
         self.mlp_count = 0
+
+        self.inp_comm_time = 0
+        self.oup_comm_time = 0
 
     def t_mask_select(self, x_mask, x, masked_x, T, S):
         # x: [B, (T, S), C]
@@ -169,6 +175,7 @@ class STDiT3Block(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.scale_shift_table[None] + t.reshape(B, 6, -1)
         ).chunk(6, dim=1)
+
         if x_mask is not None:
             shift_msa_zero, scale_msa_zero, gate_msa_zero, shift_mlp_zero, scale_mlp_zero, gate_mlp_zero = (
                 self.scale_shift_table[None] + t0.reshape(B, 6, -1)
@@ -184,24 +191,27 @@ class STDiT3Block(nn.Module):
             x_m_s = self.last_attn
         else:
             # modulate (attention)
-            x_m = t2i_modulate(self.norm1(x), shift_msa, scale_msa)
+            normed1_x = self.norm1(x)
+            x_m = t2i_modulate(normed1_x, shift_msa, scale_msa)
             if x_mask is not None:
-                x_m_zero = t2i_modulate(self.norm1(x), shift_msa_zero, scale_msa_zero)
+                x_m_zero = t2i_modulate(normed1_x, shift_msa_zero, scale_msa_zero)
                 x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
             # attention
             if self.temporal:
-                if self.parallel_manager.sp_size > 1:
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True)
                 x_m = rearrange(x_m, "B (T S) C -> (B S) T C", T=T, S=S)
                 x_m = self.attn(x_m)
                 x_m = rearrange(x_m, "(B S) T C -> B (T S) C", T=T, S=S)
-                if self.parallel_manager.sp_size > 1:
-                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False)
             else:
+                if self.parallel_manager.sp_size > 1:
+                    is_image = T == 1
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=False, is_image=is_image)
+
                 x_m = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
                 x_m = self.attn(x_m)
                 x_m = rearrange(x_m, "(B T) S C -> B (T S) C", T=T, S=S)
+                if self.parallel_manager.sp_size > 1:
+                    x_m, S, T = self.dynamic_switch(x_m, S, T, to_spatial_shard=True, is_image=is_image)
 
             # modulate (attention)
             x_m_s = gate_msa * x_m
@@ -245,9 +255,10 @@ class STDiT3Block(nn.Module):
             )
         else:
             # modulate (MLP)
-            x_m = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
+            normed2_x = self.norm2(x)
+            x_m = t2i_modulate(normed2_x, shift_mlp, scale_mlp)
             if x_mask is not None:
-                x_m_zero = t2i_modulate(self.norm2(x), shift_mlp_zero, scale_mlp_zero)
+                x_m_zero = t2i_modulate(normed2_x, shift_mlp_zero, scale_mlp_zero)
                 x_m = self.t_mask_select(x_mask, x_m, x_m_zero, T, S)
 
             # MLP
@@ -272,15 +283,21 @@ class STDiT3Block(nn.Module):
 
         return x
 
-    def dynamic_switch(self, x, s, t, to_spatial_shard: bool):
+    def dynamic_switch(self, x, s, t, to_spatial_shard: bool, is_image: bool = False):
         if to_spatial_shard:
             scatter_dim, gather_dim = 2, 1
             scatter_pad = get_pad("spatial")
             gather_pad = get_pad("temporal")
+            if is_image:
+                gather_dim = 0
+                gather_pad = get_pad("batch")
         else:
             scatter_dim, gather_dim = 1, 2
             scatter_pad = get_pad("temporal")
             gather_pad = get_pad("spatial")
+            if is_image:
+                scatter_dim = 0
+                scatter_pad = get_pad("batch")
 
         x = rearrange(x, "b (t s) d -> b t s d", t=t, s=s)
         x = all_to_all_with_pad(
@@ -439,21 +456,35 @@ class STDiT3(PreTrainedModel):
 
         # parallel
         self.parallel_manager: ParallelManager = None
+        self.spatial_time = []
+        self.temporal_time = []
+        self.inp_time = []
+        self.oup_time = []
 
-    def enable_parallel(self, dp_size, sp_size, enable_cp):
-        # update cfg parallel
-        if enable_cp and sp_size % 2 == 0:
-            sp_size = sp_size // 2
-            cp_size = 2
+    def enable_parallel(self, dp_size=None, sp_size=None, enable_cp=None, parallel_mgr=None):
+        if parallel_mgr is not None:
+            self.parallel_manager = parallel_mgr
         else:
-            cp_size = 1
+            # update cfg parallel
+            if enable_cp and sp_size % 2 == 0:
+                sp_size = sp_size // 2
+                cp_size = 2
+            else:
+                cp_size = 1
 
-        self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
+            self.parallel_manager = ParallelManager(dp_size, cp_size, sp_size)
 
         for name, module in self.named_modules():
             if "spatial_blocks" in name or "temporal_blocks" in name:
                 if hasattr(module, "parallel_manager"):
                     module.parallel_manager = self.parallel_manager
+
+    def enable_grad_checkpointing(self):
+        for block in self.spatial_blocks:
+            block.grad_checkpointing = True
+
+        for block in self.temporal_blocks:
+            block.grad_checkpointing = True
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -504,18 +535,24 @@ class STDiT3(PreTrainedModel):
         return y, y_lens
 
     def forward(
-        self, x, timestep, all_timesteps, y, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
+        self, x, timestep, y, all_timesteps=None, mask=None, x_mask=None, fps=None, height=None, width=None, **kwargs
     ):
+        _, _, Tx, Hx, Wx = x.size()
+        T, H, W = self.get_dynamic_size(x)
+
         # === Split batch ===
         if self.parallel_manager.cp_size > 1:
-            x, timestep, y, x_mask, mask = batch_func(
-                partial(split_sequence, process_group=self.parallel_manager.cp_group, dim=0),
+            assert not self.training, "Batch split is not supported in training"
+            set_pad("batch", x.shape[0], self.parallel_manager.cp_group)
+            x, timestep, y, x_mask, fps = batch_func(
+                partial(split_sequence, process_group=self.parallel_manager.cp_group, dim=0, pad=get_pad("batch")),
                 x,
                 timestep,
                 y,
                 x_mask,
-                mask,
+                fps,
             )
+            mask = split_sequence(mask, self.parallel_manager.cp_group, dim=0, pad=get_pad("batch"), pad_val=1)
 
         dtype = self.x_embedder.proj.weight.dtype
         B = x.size(0)
@@ -524,8 +561,6 @@ class STDiT3(PreTrainedModel):
         y = y.to(dtype)
 
         # === get pos embed ===
-        _, _, Tx, Hx, Wx = x.size()
-        T, H, W = self.get_dynamic_size(x)
         S = H * W
         base_size = round(S**0.5)
         resolution_sq = (height[0].item() * width[0].item()) ** 0.5
@@ -561,62 +596,36 @@ class STDiT3(PreTrainedModel):
         if self.parallel_manager.sp_size > 1:
             set_pad("temporal", T, self.parallel_manager.sp_group)
             set_pad("spatial", S, self.parallel_manager.sp_group)
-            x = split_sequence(x, self.parallel_manager.sp_group, dim=1, grad_scale="down", pad=get_pad("temporal"))
-            T = x.shape[1]
-            x_mask_org = x_mask
-            x_mask = split_sequence(
-                x_mask, self.parallel_manager.sp_group, dim=1, grad_scale="down", pad=get_pad("temporal")
-            )
+            set_pad("batch", x.shape[0], self.parallel_manager.sp_group)
+            x = split_sequence(x, self.parallel_manager.sp_group, dim=2, grad_scale="down", pad=get_pad("spatial"))
+            T, S = x.shape[1], x.shape[2]
 
         x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
 
         # === blocks ===
-        for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
-            x = auto_grad_checkpoint(
-                spatial_block,
-                x,
-                y,
-                t_mlp,
-                y_lens,
-                x_mask,
-                t0_mlp,
-                T,
-                S,
-                timestep,
-                all_timesteps=all_timesteps,
-            )
-
-            x = auto_grad_checkpoint(
-                temporal_block,
-                x,
-                y,
-                t_mlp,
-                y_lens,
-                x_mask,
-                t0_mlp,
-                T,
-                S,
-                timestep,
-                all_timesteps=all_timesteps,
-            )
+        valid_depth = kwargs.get("valid_depth", self.depth)
+        for depth in range(valid_depth):
+            spatial_block = self.spatial_blocks[depth]
+            temporal_block = self.temporal_blocks[depth]
+            x = auto_recompute(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
+            x = auto_recompute(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S, timestep)
 
         if self.parallel_manager.sp_size > 1:
             x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
-            x = gather_sequence(x, self.parallel_manager.sp_group, dim=1, grad_scale="up", pad=get_pad("temporal"))
+            x = gather_sequence(x, self.parallel_manager.sp_group, dim=2, grad_scale="up", pad=get_pad("spatial"))
             T, S = x.shape[1], x.shape[2]
             x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
-            x_mask = x_mask_org
 
         # === final layer ===
         x = self.final_layer(x, t, x_mask, t0, T, S)
         x = self.unpatchify(x, T, H, W, Tx, Hx, Wx)
 
-        # cast to float32 for better accuracy
-        x = x.to(torch.float32)
-
         # === Gather Output ===
         if self.parallel_manager.cp_size > 1:
-            x = gather_sequence(x, self.parallel_manager.cp_group, dim=0)
+            x = gather_sequence(x, self.parallel_manager.cp_group, dim=0, pad=get_pad("batch"))
+
+        # cast to float32 for better accuracy
+        x = x.to(torch.float32)
 
         return x
 
@@ -645,3 +654,12 @@ class STDiT3(PreTrainedModel):
         # unpad
         x = x[:, :, :R_t, :R_h, :R_w]
         return x
+
+
+def STDiT3_XL_2(from_pretrained=None, **kwargs):
+    if from_pretrained is not None:
+        model = STDiT3.from_pretrained(from_pretrained, **kwargs)
+    else:
+        config = STDiT3Config(depth=28, hidden_size=1152, patch_size=(1, 2, 2), num_heads=16, **kwargs)
+        model = STDiT3(config)
+    return model

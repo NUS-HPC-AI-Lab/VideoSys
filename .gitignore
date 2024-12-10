@@ -161,8 +161,9 @@ coverage.xml
 .coverage
 .testmondata*
 
+# videosys ignore
 pretrained
 samples
 cache_dir
 test_outputs
-datasets
+eval/pab/webvid/datasets

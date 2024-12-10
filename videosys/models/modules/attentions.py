@@ -1,4 +1,5 @@
 import inspect
+import logging
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 
@@ -9,13 +10,11 @@ import torch.utils.checkpoint
 from diffusers.models.attention import Attention
 from diffusers.models.attention_processor import AttnProcessor
 from einops import rearrange
-from torch import nn
 from torch.amp import autocast
 
-from videosys.core.comm import all_to_all_with_pad, get_pad, set_pad
-from videosys.core.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
-from videosys.models.modules.normalization import LlamaRMSNorm, VchitectSpatialNorm
-from videosys.utils.logging import logger
+from videosys.core.distributed.comm import all_to_all_with_pad, get_pad, set_pad
+from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_cross, if_broadcast_spatial, if_broadcast_temporal
+from videosys.models.modules.normalization import VchitectSpatialNorm, get_rms_norm
 
 
 class OpenSoraAttention(nn.Module):
@@ -27,7 +26,7 @@ class OpenSoraAttention(nn.Module):
         qk_norm: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        norm_layer: nn.Module = LlamaRMSNorm,
+        norm_layer: nn.Module = get_rms_norm(),
         enable_flash_attn: bool = False,
         rope=None,
         qk_norm_legacy: bool = False,
@@ -56,52 +55,85 @@ class OpenSoraAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
         # flash attn is not memory efficient for small sequences, this is empirical
-        enable_flash_attn = self.enable_flash_attn and (N > B)
+        use_flash_attn = N >= 30
         qkv = self.qkv(x)
         qkv_shape = (B, N, 3, self.num_heads, self.head_dim)
 
         qkv = qkv.view(qkv_shape).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
-        if self.qk_norm_legacy:
-            # WARNING: this may be a bug
-            if self.rope:
-                q = self.rotary_emb(q)
-                k = self.rotary_emb(k)
-            q, k = self.q_norm(q), self.k_norm(k)
-        else:
-            q, k = self.q_norm(q), self.k_norm(k)
-            if self.rope:
-                q = self.rotary_emb(q)
-                k = self.rotary_emb(k)
 
-        if enable_flash_attn:
-            from flash_attn import flash_attn_func
-
-            # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
-            q = q.permute(0, 2, 1, 3)
-            k = k.permute(0, 2, 1, 3)
-            v = v.permute(0, 2, 1, 3)
-            x = flash_attn_func(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-                softmax_scale=self.scale,
-            )
+        if N == 1:
+            x = v
         else:
-            x = F.scaled_dot_product_attention(q, k, v)
+            if self.qk_norm_legacy:
+                # WARNING: this may be a bug
+                if self.rope:
+                    q = self.rotary_emb(q)
+                    k = self.rotary_emb(k)
+                q, k = self.q_norm(q), self.k_norm(k)
+            else:
+                q, k = self.q_norm(q), self.k_norm(k)
+                if self.rope:
+                    q = self.rotary_emb(q)
+                    k = self.rotary_emb(k)
+
+            if self.enable_flash_attn and use_flash_attn:
+                from flash_attn import flash_attn_func
+
+                # print(f"rank: {torch.distributed.get_rank()} Using flash attn with B={B}, N={N}")
+                # (B, #heads, N, #dim) -> (B, N, #heads, #dim)
+                q = q.permute(0, 2, 1, 3)
+                k = k.permute(0, 2, 1, 3)
+                v = v.permute(0, 2, 1, 3)
+                x = flash_attn_func(
+                    q,
+                    k,
+                    v,
+                    dropout_p=self.attn_drop.p if self.training else 0.0,
+                    softmax_scale=self.scale,
+                )
+            elif not use_flash_attn:
+                # print(f"rank: {torch.distributed.get_rank()} Using torch attn with B={B}, N={N}")
+                x = self.native_attention(q, k, v)
+                # x = checkpoint(self.native_attention, q, k, v, use_reentrant=False)
+            else:
+                x = F.scaled_dot_product_attention(q, k, v)
 
         x_output_shape = (B, N, C)
-        if not enable_flash_attn:
+        if not (self.enable_flash_attn and use_flash_attn):
             x = x.transpose(1, 2)
+
         x = x.reshape(x_output_shape)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
 
+    def native_attention(self, q, k, v):
+        dtype = q.dtype
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)  # translate attn to float32
+        attn = attn.to(torch.float32)
+        attn = attn.softmax(dim=-1)
+        attn = attn.to(dtype)  # cast back attn to original dtype
+        attn = self.attn_drop(attn)
+        x = attn @ v
+        return x
+
+
+SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO = None, None
+TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO = None, None
+
+
+def reset_cross_attn_mask():
+    # print(f"rank {torch.distributed.get_rank()} reset cross attention mask")
+    global SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO, TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO
+    
+    SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO = None, None
+    TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO = None, None
+
 
 class OpenSoraMultiHeadCrossAttention(nn.Module):
-    def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, enable_flash_attn=False):
+    def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, enable_flash_attn=False, temporal=False):
         super(OpenSoraMultiHeadCrossAttention, self).__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
@@ -115,6 +147,7 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
         self.proj = nn.Linear(d_model, d_model)
         self.proj_drop = nn.Dropout(proj_drop)
         self.enable_flash_attn = enable_flash_attn
+        self.temporal = temporal
 
     def forward(self, x, cond, mask=None):
         # query/value: img tokens; key: condition; mask: if padding tokens
@@ -125,13 +158,84 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
         k, v = kv.unbind(2)
 
         if self.enable_flash_attn:
-            x = self.flash_attn_impl(q, k, v, mask, B, N, C)
+            if B * N > 200000 and self.training:
+                # too large for flash attn kernel
+                out = []
+                seq_len = int(k.shape[1] // B)
+                for i in range(B):
+                    out.append(
+                        self.flash_attn_impl(
+                            q[:, i * N : (i + 1) * N],
+                            k[:, i * seq_len : (i + 1) * seq_len],
+                            v[:, i * seq_len : (i + 1) * seq_len],
+                            [mask[i]],
+                            1,
+                            N,
+                            C,
+                        )
+                    )
+                x = torch.cat(out, dim=0)
+            else:
+                x = self.flash_attn_impl(q, k, v, mask, B, N, C)
         else:
             x = self.torch_impl(q, k, v, mask, B, N, C)
 
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+
+    def get_qk_mask(self, B, N, mask):
+        global TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO, SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO
+        device = torch.cuda.current_device()
+        if B*N > 200000 and self.training:
+            if self.temporal:
+                if TEMPORAL_Q_SEQINFO is None:
+                    TEMPORAL_Q_SEQINFO = [_SeqLenInfo.from_seqlens([N] * 1) for _ in range(B)]
+                    TEMPORAL_K_SEQINFO = [_SeqLenInfo.from_seqlens([mask[i]]) for i in range(B)]
+                    for i in range(B):
+                        TEMPORAL_Q_SEQINFO[i].to(device)
+                        TEMPORAL_K_SEQINFO[i].to(device)
+                    event = torch.cuda.Event()
+                    event.record()
+                else:
+                    event = None
+                q_seq, k_seq = TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO
+            else:
+                if SPATIAL_Q_SEQINFO is None:
+                    SPATIAL_Q_SEQINFO = [_SeqLenInfo.from_seqlens([N] * 1) for _ in range(B)]
+                    SPATIAL_K_SEQINFO = [_SeqLenInfo.from_seqlens([mask[i]]) for i in range(B)]
+                    for i in range(B):
+                        SPATIAL_Q_SEQINFO[i].to(device)
+                        SPATIAL_K_SEQINFO[i].to(device)
+                    event = torch.cuda.Event()
+                    event.record()
+                else:
+                    event = None
+                q_seq, k_seq = SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO
+        else:
+            if self.temporal:
+                if TEMPORAL_Q_SEQINFO is None:
+                    TEMPORAL_Q_SEQINFO = _SeqLenInfo.from_seqlens([N] * B)
+                    TEMPORAL_K_SEQINFO = _SeqLenInfo.from_seqlens(mask)
+                    TEMPORAL_Q_SEQINFO.to(device)
+                    TEMPORAL_K_SEQINFO.to(device)
+                    event = torch.cuda.Event()
+                    event.record()
+                else:
+                    event = None
+                q_seq, k_seq = TEMPORAL_Q_SEQINFO, TEMPORAL_K_SEQINFO
+            else:
+                if SPATIAL_Q_SEQINFO is None:
+                    SPATIAL_Q_SEQINFO = _SeqLenInfo.from_seqlens([N] * B)
+                    SPATIAL_K_SEQINFO = _SeqLenInfo.from_seqlens(mask)
+                    SPATIAL_Q_SEQINFO.to(device)
+                    SPATIAL_K_SEQINFO.to(device)
+                    event = torch.cuda.Event()
+                    event.record()
+                else:
+                    event = None
+                q_seq, k_seq = SPATIAL_Q_SEQINFO, SPATIAL_K_SEQINFO
+        return q_seq, k_seq, event
 
     def flash_attn_impl(self, q, k, v, mask, B, N, C):
         from flash_attn import flash_attn_varlen_func
@@ -140,9 +244,9 @@ class OpenSoraMultiHeadCrossAttention(nn.Module):
         k_seqinfo = _SeqLenInfo.from_seqlens(mask)
 
         x = flash_attn_varlen_func(
-            q.view(-1, self.num_heads, self.head_dim),
-            k.view(-1, self.num_heads, self.head_dim),
-            v.view(-1, self.num_heads, self.head_dim),
+            q.reshape(-1, self.num_heads, self.head_dim),
+            k.reshape(-1, self.num_heads, self.head_dim),
+            v.reshape(-1, self.num_heads, self.head_dim),
             cu_seqlens_q=q_seqinfo.seqstart.cuda(),
             cu_seqlens_k=k_seqinfo.seqstart.cuda(),
             max_seqlen_q=q_seqinfo.max_seqlen,
@@ -444,7 +548,7 @@ class VchitectAttention(nn.Module):
             and isinstance(self.processor, torch.nn.Module)
             and not isinstance(processor, torch.nn.Module)
         ):
-            logger.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
+            logging.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
             self._modules.pop("processor")
         self.processor = processor
 
@@ -485,7 +589,7 @@ class VchitectAttention(nn.Module):
             k for k, _ in cross_attention_kwargs.items() if k not in attn_parameters and k not in quiet_attn_parameters
         ]
         if len(unused_kwargs) > 0:
-            logger.warning(
+            logging.warning(
                 f"cross_attention_kwargs {unused_kwargs} are not expected by {self.processor.__class__.__name__} and will be ignored."
             )
         cross_attention_kwargs = {k: w for k, w in cross_attention_kwargs.items() if k in attn_parameters}
