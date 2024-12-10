@@ -115,3 +115,60 @@ Explanation:
 Adjust these settings based on your specific needs to optimize the performance.
 
 For complete examples, please refer to [dcp_launch.sh](examples/training/open_sora/dcp_launch.sh)
+
+#### Customization for new models
+The above example is for Open-Sora. 
+To customize DCP training with your own model, there are a few lines of code to adapt.
+
+1. import and create profiler
+
+```python
+from videosys.core.dcp.profiler import Profiler, set_profiler
+
+profiler: Profiler = set_profiler(
+        total_layers=model.config.depth,
+        bucket_config=args.bucket_config,
+        text_max_seq_len=model.config.model_max_length,
+        text_hidden_size=model.config.caption_channels,
+        global_interpolation=not args.no_global_interpolation,
+        dynamic_sp=args.dynamic_sp,
+        dynamic_recompute=args.dynamic_recompute,
+        auto_grad_acc=args.auto_grad_accumulation,
+        do_profile=do_profile,
+        distributed_profile=args.distributed_profile,
+        node_rank=node_rank,
+        node_size=node_size,
+        alloc_fraction=args.alloc_memory_fraction,
+        profile_path=args.profile_path,
+        parallel_mgr=parallel_mgr,
+        verbose=args.verbose,
+    )
+```
+
+2. hack the training loop
+```python
+    for epoch in range(epochs):
+        # insert 4 lines:
+        # - build a fake dataloader and 
+        # - initialize the profiler to run data profiling    
+        if profiler.need_profile():
+            profiler.init_profiler()
+            num_steps_per_epoch = None
+            dataloader_iter = profiler.get_data_iter()
+        else:
+            sampler.set_epoch(epoch)
+            num_steps_per_epoch = len(dataloader)
+            dataloader_iter = iter(dataloader)
+
+        for step, batch in enumerate(dataloader_iter):
+          # Insert 2 lines to enable DCP
+          # - change sequence parallel size
+          # - change gradient accumulation steps
+          # - change recomputation
+          profiler.optimize_dynamics(batch, model)
+          with profiler.profile(batch, model, gas):
+            batch = batch.cuda()
+            loss = model(batch)
+            model.backward(loss)
+            model.step()
+```
