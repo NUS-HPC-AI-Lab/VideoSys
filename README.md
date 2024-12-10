@@ -112,13 +112,14 @@ You can also find easy demo with HuggingFace Space <a href="https://huggingface.
 
 ## Acceleration Techniques
 
-### Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/pab.md)]
+### Data-Centric Parallel (DCP) [[blog](https://oahzxl.github.io/DCP/)][[doc](./docs/dcp.md)]
 
-![method](./assets/figures/dcp_overview.png)
+<!-- ![method](./assets/figures/dcp_overview.png) -->
+<img src="./assets/figures/dcp_overview.png" alt="method" height="300">
 
 Data-Centric Parallel (DCP) is a simple but effective approach to accelerate distributed training of any-size videos. Unlike previous methods that fix training settings, DCP dyanmically adjusts parallelism and other configs driven by incoming data during runtime. This method significantly reduces communication overhead and computational inefficiencies, achieving up to 2.1x speedup. As a ease-of-use method, DCP can enpower any video models and parallel methods with minimal code changes.
 
-See its details [here](./docs/pab.md).
+See its details [here](./docs/dcp.md).
 
 ----
 

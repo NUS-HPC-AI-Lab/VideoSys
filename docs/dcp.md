@@ -114,7 +114,7 @@ Explanation:
 
 Adjust these settings based on your specific needs to optimize the performance.
 
-For complete examples, please refer to [dcp_launch.sh](examples/training/open_sora/dcp_launch.sh)
+For complete examples, please refer to [dcp_launch.sh](../examples/training/open_sora/dcp_launch.sh)
 
 #### Customization for new models
 The above example is for Open-Sora. 
