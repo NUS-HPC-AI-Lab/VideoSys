@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-import time
 from copy import deepcopy
 from datetime import timedelta
 from pprint import pformat
@@ -279,7 +278,7 @@ def main(args):
     else:
         cfg_epochs = args.epochs
     running_loss = 0.0
-    logging.info(f"Training for {args.epochs} epochs{' with profiling' if profiler.need_profile() else ''}.")
+    logging.info(f"Training for {cfg_epochs} epochs{' with profiling' if profiler.need_profile() else ''}.")
 
     # =======================================================
     # 5. training loop
@@ -426,7 +425,7 @@ def main(args):
         token_counter.fill_(local_token_counter)
         dist.all_reduce(token_counter)
         if rank == 0 and not disable:
-            elapsed_time = pbar.format_dict['elapsed']
+            elapsed_time = pbar.format_dict["elapsed"]
             logging.info(
                 f"Epoch {epoch}: steps: {num_steps_per_epoch} elapsed time: {elapsed_time:.2f} s"
                 f", effective samples: {sampler.effective_samples}"

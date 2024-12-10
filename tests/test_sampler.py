@@ -24,12 +24,7 @@ from videosys.training.datasets.open_sora.datasets import DummyVariableVideoText
 from videosys.training.datasets.open_sora.utils import MaskGenerator
 from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
 from videosys.utils.logging import init_logger
-from videosys.utils.training import (
-    define_experiment_workspace,
-    format_numel_str,
-    get_model_numel,
-    requires_grad,
-)
+from videosys.utils.training import define_experiment_workspace, format_numel_str, get_model_numel, requires_grad
 from videosys.utils.utils import merge_args, set_seed, str_to_dtype
 
 
@@ -95,7 +90,7 @@ def main(args):
     # == build text-encoder and vae ==
     if not preprocessed_data:
         text_encoder = T5EncoderModel.from_pretrained("DeepFloyd/t5-v1_1-xxl", torch_dtype=dtype).to(device).eval()
-        tokenizer = AutoTokenizer.from_pretrained("DeepFloyd/t5-v1_1-xxl")
+        AutoTokenizer.from_pretrained("DeepFloyd/t5-v1_1-xxl")
         vae = (
             OpenSoraVAE_V1_2(
                 from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
@@ -146,7 +141,7 @@ def main(args):
     model.enable_parallel(parallel_mgr=parallel_mgr)
 
     if args.mask_ratios is not None:
-        mask_generator = MaskGenerator(args.mask_ratios)
+        MaskGenerator(args.mask_ratios)
 
     # ======================================================
     # 3. build dataset and dataloader

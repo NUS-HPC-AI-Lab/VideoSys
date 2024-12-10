@@ -123,7 +123,9 @@ class STDiT3Block(nn.Module):
             rope=rope,
             enable_flash_attn=enable_flash_attn,
         )
-        self.cross_attn = OpenSoraMultiHeadCrossAttention(hidden_size, num_heads, enable_flash_attn=enable_flash_attn, temporal=temporal)
+        self.cross_attn = OpenSoraMultiHeadCrossAttention(
+            hidden_size, num_heads, enable_flash_attn=enable_flash_attn, temporal=temporal
+        )
         self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
