@@ -10,6 +10,7 @@ from .pipelines.open_sora_plan import (
     OpenSoraPlanV120PABConfig,
 )
 from .pipelines.vchitect import VchitectConfig, VchitectPABConfig, VchitectXLPipeline
+from .pipelines.allegro import AllegroConfig, AllegroPABConfig, AllegroPipeline
 
 __all__ = [
     "initialize",
@@ -18,5 +19,6 @@ __all__ = [
     "OpenSoraPlanPipeline", "OpenSoraPlanConfig", "OpenSoraPlanV110PABConfig", "OpenSoraPlanV120PABConfig",
     "OpenSoraPipeline", "OpenSoraConfig", "OpenSoraPABConfig",
     "CogVideoXPipeline", "CogVideoXConfig", "CogVideoXPABConfig",
-    "VchitectXLPipeline", "VchitectConfig", "VchitectPABConfig"
+    "VchitectXLPipeline", "VchitectConfig", "VchitectPABConfig",
+    "AllegroPipeline", "AllegroConfig", "AllegroPABConfig"
 ]  # fmt: skip
