@@ -125,6 +125,7 @@ def set_distributed_state(distributed_profile=None):
     node_rank = int(os.getenv("NODE_RANK", os.getenv("OMPI_COMM_WORLD_NODE_RANK", "0")))
     node_size = int(os.getenv("NNODES", "1"))
 
+    print(f">>> [Distributed] Rank: {rank}/{world_size}, local rank: {os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', None)}")
     if distributed_profile:
         "launch multiple single-node instances for fast profile"
         assert world_size % device_count == 0

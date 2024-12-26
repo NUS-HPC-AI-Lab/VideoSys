@@ -310,6 +310,7 @@ class Profiler:
         self.latest_raw_result = None
         self.raw_results = []
         self.dp_results = []
+        self.sp_detail_results = []
 
         logging.info(f"Profile results: {pformat(self.profile_results, sort_dicts=False)}")
         if self.dynamic_sp and not self.dynamic_recompute and not self.auto_grad_acc:
@@ -635,7 +636,7 @@ class Profiler:
                     if self.auto_grad_acc:
                         self.dp_results.append(result_row)
                     else:
-                        self.latest_raw_result = result_row
+                        self.sp_detail_results.append(result_row)
 
                 self.detail_results.append(result_row)
 
@@ -648,14 +649,23 @@ class Profiler:
                 self.next_warmup_iter = not self.auto_grad_acc
             else:
                 if not self.dynamic_recompute and not self.auto_grad_acc:
-                    if bs == 1:
-                        if self.logger:
-                            self.logger.info(
-                                f">>> [Profiling] bucket {ar_name} {num_frame} cannot fit into sp: {sp_size}"
-                            )
+                    if bs == 1 and self.logger:
+                        self.logger.info(
+                            f">>> [Profiling] bucket {ar_name} {num_frame} cannot fit into sp: {sp_size}"
+                        )
                     else:
-                        assert self.latest_raw_result is not None
-                        self.dp_results.append(self.latest_raw_result)
+                        last = self.sp_detail_results[-1]
+                        throughput = last[2] / last[3] / last[4]
+                        if len(self.sp_detail_results)>1:
+                            prev = self.sp_detail_results[-2]
+                            prev_throughput = prev[2] / prev[3] / prev[4]
+                            if prev_throughput > throughput:
+                                self.dp_results.append(prev)
+                            else:
+                                self.dp_results.append(last)
+                        else:
+                            self.dp_results.append(last)
+                        self.sp_detail_results = []
 
                 if sp_size < self.max_sp:
                     self.next_sp_size = sp_size * 2
@@ -735,13 +745,13 @@ class Profiler:
 
                     pred_full_time, pred_full_mem = self.estimate_overhead(self.latest_raw_result)
                     cur_throughput = bs / sp_size / pred_full_time
-                    if len(self.dp_results) > 0:
+                    if len(self.dp_results) > 1:
                         prev_row = self.dp_results[-2]
                         prev_time, prev_mem = self.estimate_overhead(prev_row)
                         throughput = prev_row.bs / prev_row.sp_size / prev_time
 
                         # override for empty cache operation caused slow down
-                        if (throughput / cur_throughput) > 2:
+                        if (throughput / cur_throughput) > 1.5:
                             bs = prev_row.bs
                             sp_size = prev_row.sp_size
                             pred_full_time = prev_time
