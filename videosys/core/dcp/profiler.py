@@ -15,11 +15,27 @@ from tqdm import tqdm
 
 from videosys.core.dcp.recompute import disable_profile, enable_profile, get_profile_context
 from videosys.core.distributed.parallel_mgr import DynamicParallelManager
-from videosys.training.datasets.open_sora.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
 from videosys.utils.training import GroupTimer, set_grad_accumulation_steps
 
 PROFILER = None
 GB = 1024**3
+BATCH_SYHTHESIZER = None
+LOCAL_ASPECT_RATIOS = None
+LOCAL_DEFAULT_AR_MAP = None
+
+def setup_batch_synthesizer(model_type):
+    global BATCH_SYHTHESIZER, LOCAL_ASPECT_RATIOS, LOCAL_DEFAULT_AR_MAP
+    if "OpenSora" in model_type:
+        BATCH_SYHTHESIZER = open_sora_synthesizer
+        from videosys.training.datasets.open_sora.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
+        LOCAL_ASPECT_RATIOS = ASPECT_RATIOS
+        LOCAL_DEFAULT_AR_MAP = DEFAULT_AR_MAP
+
+    elif "CogVideoX" in model_type:
+        BATCH_SYHTHESIZER = cogvideox_synthesizer
+        from videosys.training.datasets.cogvideox.aspect import ASPECT_RATIOS, DEFAULT_AR_MAP
+        LOCAL_ASPECT_RATIOS = ASPECT_RATIOS
+        LOCAL_DEFAULT_AR_MAP = DEFAULT_AR_MAP
 
 
 def clean_cache():
@@ -91,14 +107,85 @@ class ProfileResult:
         return ret
 
 
+def open_sora_synthesizer(data_plan, auto_grad_acc, data_idx, text_max_seq_len, text_hidden_size):
+    height, width = LOCAL_DEFAULT_AR_MAP[data_plan.ar_name]
+    nf = 1
+    if data_plan.num_frame > 1:
+        nf = data_plan.num_frame * 5 // 17
+
+    ret = dict(
+        ar_name=data_plan.ar_name,
+        num_frame=data_plan.num_frame,
+        sp_size=data_plan.sp_size,
+        gas=data_plan.gas,
+        data=[],
+        profile_grad_acc=auto_grad_acc and data_idx > 0,
+    )
+
+    for _ in range(data_plan.gas):
+        ret["data"].append(
+            dict(
+                video=torch.rand(data_plan.bs, 4, nf, height // 8, width // 8),
+                text=torch.rand(
+                    data_plan.bs,
+                    1,
+                    text_max_seq_len,
+                    text_hidden_size,
+                ),
+                mask=torch.ones(data_plan.bs, text_max_seq_len, dtype=torch.long),
+                num_frames=torch.tensor([data_plan.num_frame] * data_plan.bs),
+                height=torch.tensor([height] * data_plan.bs),
+                width=torch.tensor([width] * data_plan.bs),
+                fps=torch.tensor([24 if data_plan.num_frame > 1 else 120] * data_plan.bs),
+                ar=torch.tensor([height / width] * data_plan.bs),
+                plan_idx=data_idx,
+                warmup_iter=data_plan.warmup_iter,
+            )
+        )
+
+    return ret
+
+
+def cogvideox_synthesizer(data_plan, auto_grad_acc, data_idx, text_max_seq_len, text_hidden_size):
+    height, width = LOCAL_DEFAULT_AR_MAP[data_plan.ar_name]
+    nf = max(1, data_plan.num_frame // 4)
+
+    ret = dict(
+        ar_name=data_plan.ar_name,
+        num_frame=data_plan.num_frame,
+        sp_size=data_plan.sp_size,
+        gas=data_plan.gas,
+        data=[],
+        profile_grad_acc=auto_grad_acc and data_idx > 0,
+    )
+
+    for _ in range(data_plan.gas):
+        ret["data"].append(
+            dict(
+                video=torch.rand(data_plan.bs, 16, nf, height // 8, width // 8),
+                text=torch.rand(
+                    data_plan.bs,
+                    text_max_seq_len,
+                    text_hidden_size,
+                ),
+                height=torch.tensor([height] * data_plan.bs),
+                width=torch.tensor([width] * data_plan.bs),
+                plan_idx=data_idx,
+                warmup_iter=data_plan.warmup_iter,
+            )
+        )
+
+    return ret
+
+
 class ProfileDataIter:
-    def __init__(self, profiler):
+    def __init__(self, profiler, init_bucket):
         self.profiler: Profiler = profiler
 
         self.data_plan = [
             DataPlan(
-                ar_name="144p",
-                num_frame=51,
+                ar_name=init_bucket[0],
+                num_frame=init_bucket[1],
                 sp_size=self.profiler.max_sp,
                 gas=1,
                 bs=1,
@@ -113,41 +200,10 @@ class ProfileDataIter:
             data_idx = self.next_idx
             self.next_idx += 1
 
-            height, width = DEFAULT_AR_MAP[data_plan.ar_name]
-            nf = 1
-            if data_plan.num_frame > 1:
-                nf = data_plan.num_frame * 5 // 17
-
-            ret = dict(
-                ar_name=data_plan.ar_name,
-                num_frame=data_plan.num_frame,
-                sp_size=data_plan.sp_size,
-                gas=data_plan.gas,
-                data=[],
-                profile_grad_acc=self.profiler.auto_grad_acc and data_idx > 0,
+            yield BATCH_SYHTHESIZER(
+                data_plan, self.profiler.auto_grad_acc, data_idx, 
+                self.profiler.text_max_seq_len, self.profiler.text_hidden_size
             )
-
-            for _ in range(data_plan.gas):
-                ret["data"].append(
-                    dict(
-                        video=torch.rand(data_plan.bs, 4, nf, height // 8, width // 8),
-                        text=torch.rand(
-                            data_plan.bs,
-                            1,
-                            self.profiler.text_max_seq_len,
-                            self.profiler.text_hidden_size,
-                        ),
-                        mask=torch.ones(data_plan.bs, self.profiler.text_max_seq_len, dtype=torch.long),
-                        num_frames=torch.tensor([data_plan.num_frame] * data_plan.bs),
-                        height=torch.tensor([height] * data_plan.bs),
-                        width=torch.tensor([width] * data_plan.bs),
-                        fps=torch.tensor([24 if data_plan.num_frame > 1 else 120] * data_plan.bs),
-                        ar=torch.tensor([height / width] * data_plan.bs),
-                        plan_idx=data_idx,
-                        warmup_iter=data_plan.warmup_iter,
-                    )
-                )
-            yield ret
 
             if self.profiler.has_next_data_plan():
                 self.data_plan.append(self.profiler.next_data_plan())
@@ -157,6 +213,7 @@ class ProfileDataIter:
 class Profiler:
     def __init__(
         self,
+        model_type,
         total_layers,
         bucket_config,
         text_max_seq_len,
@@ -176,6 +233,7 @@ class Profiler:
         profile_depth=2,
         parallel_mgr=None,
     ):
+        setup_batch_synthesizer(model_type)
         self.total_layers = total_layers
 
         # [(ar_name, num_frame)]
@@ -183,7 +241,7 @@ class Profiler:
         for ar_name in bucket_config:
             for num_frame in bucket_config[ar_name]:
                 self.bucket_config.append((ar_name, num_frame))
-        self.bucket_config = sorted(self.bucket_config, key=lambda x: ASPECT_RATIOS[x[0]][0] * x[1], reverse=True)
+        self.bucket_config = sorted(self.bucket_config, key=lambda x: LOCAL_ASPECT_RATIOS[x[0]][0] * x[1], reverse=True)
 
         self.text_max_seq_len = text_max_seq_len
         self.text_hidden_size = text_hidden_size
@@ -387,7 +445,7 @@ class Profiler:
     ############################################################
     # Key functionality: profiling and planning for bs, sp size, and recompute cfg
     def get_data_iter(self):
-        return ProfileDataIter(self)
+        return ProfileDataIter(self, self.bucket_config[-1])
 
     def has_next_data_plan(self):
         "Move to next bucket"
@@ -869,6 +927,7 @@ class Profiler:
 
 
 def set_profiler(
+    model_type,
     total_layers,
     bucket_config,
     text_max_seq_len,
@@ -888,6 +947,7 @@ def set_profiler(
 ) -> Profiler:
     global PROFILER
     PROFILER = Profiler(
+        model_type=model_type,
         total_layers=total_layers,
         bucket_config=bucket_config,
         text_max_seq_len=text_max_seq_len,
