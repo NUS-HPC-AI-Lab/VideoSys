@@ -85,11 +85,7 @@ def main(args):
         )
     else:
         do_profile = False
-    
-    # import pdb
-    # if torch.distributed.get_rank() == 0:
-    #     pdb.set_trace()
-    
+
     # ======================================================
     # 2. build model
     # ======================================================
@@ -339,7 +335,10 @@ def main(args):
                         #     x = vae.encode(x)  # [B, C, T, H/P, W/P]
                         #     # Prepare text inputs
                         #     model_args = encode_prompt(text_encoder, tokenizer, y)
-                     # for k, v in batch_data.items():
+                    
+                    local_token_counter += x.shape[0] * x.shape[1] * x.shape[3] * x.shape[4] / parallel_mgr.sp_size
+
+                    # for k, v in batch_data.items():
                     #     if isinstance(v, torch.Tensor):
                     #         model_args[k] = v.to(device, dtype)
                     # # TODO: polish

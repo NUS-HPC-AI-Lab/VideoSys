@@ -1,7 +1,7 @@
 zipf_offset: 5
 outputs: exp/cogvideox/baseline
 profile_path: exp/cogvideox/profile/baseline
-sp_size: 1
+sp_size: 8
 dummy_dataset: true
 dummy_data_size: 2000
 verbose: true
@@ -12,7 +12,7 @@ calculate_imbalance: true
 
 # preprocess embedding
 data_path: "./assets/example_data/demo_preprocess.csv"
-preprocessed_data: false
+preprocessed_data: true
 drop_last: true
 
 # train
