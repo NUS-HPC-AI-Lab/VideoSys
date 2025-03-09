@@ -157,6 +157,7 @@ def main(args):
     # create dcp profiler
     # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
+        model_type=model.config._name_or_path,
         total_layers=model.config.depth,
         bucket_config=args.bucket_config,
         text_max_seq_len=model.config.model_max_length,
