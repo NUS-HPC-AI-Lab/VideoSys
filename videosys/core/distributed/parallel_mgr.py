@@ -73,7 +73,7 @@ class DynamicParallelManager:
             group_start_indices = list(range(0, wsize, _s))
             for group_start_idx in group_start_indices:
                 group_ranks = global_ranks[group_start_idx : group_start_idx + _s]
-                gpu_group = dist.new_group(group_ranks, use_local_synchronization=True, timeout=timedelta(seconds=60))
+                gpu_group = dist.new_group(group_ranks, use_local_synchronization=True, timeout=timedelta(minutes=5))
                 cpu_group = dist.new_group(group_ranks, backend="gloo", use_local_synchronization=True)
                 if self._rank in group_ranks:
                     self.sp_clusters[_s] = gpu_group

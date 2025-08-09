@@ -132,7 +132,7 @@ def open_sora_synthesizer(data_plan, auto_grad_acc, data_idx, text_max_seq_len, 
                     text_max_seq_len,
                     text_hidden_size,
                 ),
-                mask=torch.ones(data_plan.bs, text_max_seq_len, dtype=torch.long),
+                mask=None,  # torch.ones(data_plan.bs, text_max_seq_len, dtype=torch.long),
                 num_frames=torch.tensor([data_plan.num_frame] * data_plan.bs),
                 height=torch.tensor([height] * data_plan.bs),
                 width=torch.tensor([width] * data_plan.bs),
@@ -286,7 +286,7 @@ class Profiler:
         if not self.do_profile:
             assert os.path.isdir(self.profile_path)
             self.profile_results = {}
-
+            max_sp = 0
             # Iterate through all profile_*.json files in the directory
             for filename in os.listdir(self.profile_path):
                 if filename.startswith("profile") and filename.endswith(".json"):
@@ -298,6 +298,11 @@ class Profiler:
                             if ar_name not in self.profile_results:
                                 self.profile_results[ar_name] = {}
                             self.profile_results[ar_name].update(num_frame_dict)
+                            for num_frame in num_frame_dict:
+                                sp_size = num_frame_dict[num_frame]["sp_size"]
+                                if sp_size > max_sp:
+                                    max_sp = sp_size
+            self.max_sp = max_sp
 
             # Convert frame numbers from strings to integers
             for ar_name in self.profile_results:
@@ -517,7 +522,7 @@ class Profiler:
         clean_cache()
 
     def init_profiler(self):
-        torch.cuda.set_per_process_memory_fraction(self.alloc_fraction)
+        # torch.cuda.set_per_process_memory_fraction(self.alloc_fraction)
         self.profile_pbar = tqdm(
             range(self.next_bucket_idx, self.bucket_partition_boundary),
             desc="Profiling",

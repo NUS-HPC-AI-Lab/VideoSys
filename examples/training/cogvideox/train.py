@@ -496,7 +496,7 @@ if __name__ == "__main__":
     parser.add_argument("--auto-grad-accumulation", action="store_true")
     parser.add_argument(
         "--alloc-memory-fraction",
-        default=0.70,
+        default=0.56,
         type=float,
         help="This is an empirical value to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
     )

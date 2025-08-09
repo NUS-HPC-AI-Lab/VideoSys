@@ -52,7 +52,7 @@ def main(args):
         backend="nccl",
         timeout=timedelta(minutes=10),
     )
-    deepspeed.init_distributed(timeout=timedelta(seconds=10))
+    deepspeed.init_distributed(timeout=timedelta(minutes=5))
     torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
     set_seed(args.seed)
     device = torch.cuda.current_device()
@@ -153,7 +153,7 @@ def main(args):
     # ======================================================
     # 3. build dataset and dataloader
     # ======================================================
-    logging.info("Building dataset...")
+    logging.info(f"Building dataset... model max length: {model.config.model_max_length}, ")
     # create dcp profiler
     # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
@@ -328,7 +328,9 @@ def main(args):
                         # move data
                         x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
                         y = batch_data.pop("text").to(device, dtype)
-                        mask = batch_data.pop("mask").to(device)
+                        mask = batch_data.pop("mask")
+                        if mask is not None:
+                            mask = mask.to(device)
                         model_args = dict(y=y, mask=mask)
                     else:
                         with torch.no_grad():
@@ -499,7 +501,7 @@ if __name__ == "__main__":
     parser.add_argument("--auto-grad-accumulation", action="store_true")
     parser.add_argument(
         "--alloc-memory-fraction",
-        default=0.70,
+        default=0.56,
         type=float,
         help="This is an empirical value to cap the allocated memory during profiling with dynamic sp. Communication in different ranks can cause free memory discrepancy, which can leads to comm deadlock. So you need to leave enough space to bear this discrepancy. If you meet this problem during profiling, try to decrease this value.",
     )
