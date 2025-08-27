@@ -2,7 +2,7 @@
 #PBS -P CFP02-CF-004
 #PBS -l select=1:ngpus=8
 #PBS -l place=vscatter
-#PBS -l walltime=96:00:00
+#PBS -l walltime=24:00:00
 #PBS -j oe
 #PBS -o 1x8-cogvideox-dcp-inter-ckpt.log
 
@@ -45,7 +45,7 @@ mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
     python examples/training/cogvideox/train.py \
     examples/training/cogvideox/configs/benchmarks/dcp_inter_ckpt.yaml \
-    --image-mixing-frac 1
+    --image-mixing-frac 1 --profile-flops
 "
 
 # =============== zipf-10 ================
@@ -54,7 +54,7 @@ mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
     python examples/training/cogvideox/train.py \
     examples/training/cogvideox/configs/benchmarks/dcp_inter_ckpt.yaml \
-    --image-mixing-frac 10
+    --image-mixing-frac 10 --profile-flops
 "
 
 # =============== zipf-50 ================
@@ -63,7 +63,7 @@ mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
     python examples/training/cogvideox/train.py \
     examples/training/cogvideox/configs/benchmarks/dcp_inter_ckpt.yaml \
-    --image-mixing-frac 50
+    --image-mixing-frac 50 --profile-flops
 "
 
 rm $HOSTFILE

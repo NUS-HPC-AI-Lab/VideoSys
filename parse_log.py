@@ -7,17 +7,20 @@ import pandas as pd
 def parse_log(file_path):
     imbalance_pattern = r'Total imbalance for this epoch:.*?\((\d+\.\d+)%\)'
     throughput_pattern = r'token throughput: (\d+\.\d+) token/s'
+    flops_pattern = r'Final FLOPS: (\d+\.\d+)'  # Extracts the first number after 'Final FLOPS:'
 
     with open(file_path, 'r') as file:
         log_lines = file.read()
-    
+
     imbalance_match = re.search(imbalance_pattern, log_lines)
     throughput_match = re.search(throughput_pattern, log_lines)
+    flops_match = re.search(flops_pattern, log_lines)
 
     imbalance_percent = float(imbalance_match.group(1)) if imbalance_match else None
     token_throughput = float(throughput_match.group(1)) if throughput_match else None
+    flops = float(flops_match.group(1)) if flops_match else None
 
-    return imbalance_percent, token_throughput
+    return imbalance_percent, token_throughput, flops
 
 
 def main():
@@ -29,7 +32,7 @@ def main():
         if 'log.txt' in filenames:
             log_path = os.path.join(dirpath, 'log.txt')
             try:
-                imbalance_percent, token_throughput = parse_log(log_path)
+                imbalance_percent, token_throughput, flops = parse_log(log_path)
 
                 relative_path = os.path.relpath(dirpath, args.log_dir)
 
@@ -38,7 +41,8 @@ def main():
                     'run': relative_path.split('/')[-1],        # 000-OpenSora, etc.
                     'log_path': relative_path,
                     'imbalance_percent': imbalance_percent,
-                    'token_throughput': token_throughput
+                    'token_throughput': token_throughput,
+                    'flops': flops
                 })
 
             except Exception as e:

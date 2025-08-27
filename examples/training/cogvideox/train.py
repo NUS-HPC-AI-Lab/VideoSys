@@ -3,6 +3,8 @@ import logging
 import os
 from datetime import timedelta
 from pprint import pformat
+import numpy as np
+import time
 
 import deepspeed
 import torch
@@ -277,6 +279,8 @@ def main(args):
     running_loss = 0.0
     logging.info(f"Training for {cfg_epochs} epochs{' with profiling' if profiler.need_profile() else ''}.")
 
+    if args.profile_flops:
+        prof = deepspeed.profiling.flops_profiler.FlopsProfiler(model)
     # =======================================================
     # 5. training loop
     # =======================================================
@@ -300,7 +304,7 @@ def main(args):
             dataloader_iter = iter(dataloader)
             epoch_desc = f"Epoch {epoch}"
         logging.info(f"Beginning {epoch_desc}...")
-
+        flops_list = []
         # == training loop in an epoch ==
         pbar = tqdm(
             enumerate(dataloader_iter, start=start_step),
@@ -316,6 +320,9 @@ def main(args):
             total_gas = batch["gas"]
             iter_loss = 0.0
 
+            if args.profile_flops:
+                prof.start_profile()
+                start_time = time.time()
             for gas in range(total_gas):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
@@ -365,6 +372,13 @@ def main(args):
 
                     iter_loss += loss.detach()
 
+            if args.profile_flops:
+                prof.stop_profile()
+                flops = prof.get_total_flops()
+                prof.end_profile()
+                step_elapsed = time.time() - start_time
+                flops = flops / step_elapsed / 1e12
+                flops_list.append(flops)
             if profiler.need_profile():
                 continue
 
@@ -430,6 +444,9 @@ def main(args):
                 f", sample throughput: {sampler.effective_samples / elapsed_time:.2f} samples/s"
                 f", token throughput: {token_counter.item()/elapsed_time:.2f} token/s"
             )
+            if args.profile_flops:
+                logging.info(f"Final FLOPS: {np.mean(flops_list):.2f} +- {np.std(flops_list):.2f} [ {np.min(flops_list):.2f} - {np.max(flops_list):.2f} ]")
+                flops_list.clear()
 
         sampler.reset()
         start_step = 0
@@ -505,6 +522,7 @@ if __name__ == "__main__":
     parser.add_argument("--calculate-imbalance", action="store_true")
     parser.add_argument("--max-grad-accumulation-steps", default=3, type=int)
     parser.add_argument("--min-grad-accumulation-steps", default=2, type=int)
+    parser.add_argument("--profile-flops", action="store_true", help="enable flops profiler")
 
     args = parser.parse_args()
     config_args = OmegaConf.load(args.config)

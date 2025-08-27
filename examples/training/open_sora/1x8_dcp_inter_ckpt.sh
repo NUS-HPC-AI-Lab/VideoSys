@@ -39,23 +39,23 @@ export PYTHONPATH=$PYTHONPATH:$PWD
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TOKENIZERS_PARALLELISM=false
 
-# # =============== zipf-1 ================
-# mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
-#     singularity exec --nv /app1/common/singularity-img/hopper/cuda/cuda_12.1.1-cudnn8-devel-ubuntu22.04.sif \
-#     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
-#     python examples/training/open_sora/train.py \
-#     examples/training/open_sora/configs/benchmarks-sp4/dcp_inter_ckpt.yaml \
-#     --image-mixing-frac 1
-# "
+# =============== zipf-1 ================
+mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
+    singularity exec --nv /app1/common/singularity-img/hopper/cuda/cuda_12.1.1-cudnn8-devel-ubuntu22.04.sif \
+    /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
+    python examples/training/open_sora/train.py \
+    examples/training/open_sora/configs/benchmarks-sp4/dcp_inter_ckpt.yaml \
+    --image-mixing-frac 1 --profile-flops
+"
 
-# # =============== zipf-10 ================
-# mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
-#     singularity exec --nv /app1/common/singularity-img/hopper/cuda/cuda_12.1.1-cudnn8-devel-ubuntu22.04.sif \
-#     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
-#     python examples/training/open_sora/train.py \
-#     examples/training/open_sora/configs/benchmarks-sp4/dcp_inter_ckpt.yaml \
-#     --image-mixing-frac 10
-# "
+# =============== zipf-10 ================
+mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
+    singularity exec --nv /app1/common/singularity-img/hopper/cuda/cuda_12.1.1-cudnn8-devel-ubuntu22.04.sif \
+    /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
+    python examples/training/open_sora/train.py \
+    examples/training/open_sora/configs/benchmarks-sp4/dcp_inter_ckpt.yaml \
+    --image-mixing-frac 10 --profile-flops
+"
 
 # =============== zipf-50 ================
 mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
@@ -63,7 +63,7 @@ mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
     python examples/training/open_sora/train.py \
     examples/training/open_sora/configs/benchmarks-sp4/dcp_inter_ckpt.yaml \
-    --image-mixing-frac 50
+    --image-mixing-frac 50 --profile-flops
 "
 
 rm $HOSTFILE

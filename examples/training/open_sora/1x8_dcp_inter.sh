@@ -45,7 +45,7 @@ mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
     python examples/training/open_sora/train.py \
     examples/training/open_sora/configs/benchmarks-sp4/dcp_inter.yaml \
-    --image-mixing-frac 1
+    --image-mixing-frac 1 --profile-flops
 "
 
 # =============== zipf-10 ================
@@ -54,7 +54,7 @@ mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
     python examples/training/open_sora/train.py \
     examples/training/open_sora/configs/benchmarks-sp4/dcp_inter.yaml \
-    --image-mixing-frac 10
+    --image-mixing-frac 10 --profile-flops
 "
 
 # =============== zipf-50 ================
@@ -63,7 +63,7 @@ mpirun --hostfile $HOSTFILE --np $WORLD_SIZE -N $GPUS_PER_NODE --oversubscribe \
     /bin/bash -c "source /hpctmp/e1154485/venvs/videosys/bin/activate && \
     python examples/training/open_sora/train.py \
     examples/training/open_sora/configs/benchmarks-sp4/dcp_inter.yaml \
-    --image-mixing-frac 50
+    --image-mixing-frac 50 --profile-flops
 "
 
 rm $HOSTFILE
