@@ -590,7 +590,7 @@ class STDiT3(PreTrainedModel):
             y, y_lens = self.encode_text(y, mask)
 
         # === get x embed ===
-        x = self.x_embedder(x)  # [B, N, C]
+        x = self.x_embedder(x).contiguous()  # [B, N, C]
         x = rearrange(x, "B (T S) C -> B T S C", T=T, S=S)
         x = x + pos_emb
 

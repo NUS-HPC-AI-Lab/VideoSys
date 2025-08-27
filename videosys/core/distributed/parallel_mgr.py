@@ -73,7 +73,7 @@ class DynamicParallelManager:
             group_start_indices = list(range(0, wsize, _s))
             for group_start_idx in group_start_indices:
                 group_ranks = global_ranks[group_start_idx : group_start_idx + _s]
-                gpu_group = dist.new_group(group_ranks, use_local_synchronization=True, timeout=timedelta(seconds=60))
+                gpu_group = dist.new_group(group_ranks, use_local_synchronization=True, timeout=timedelta(minutes=5))
                 cpu_group = dist.new_group(group_ranks, backend="gloo", use_local_synchronization=True)
                 if self._rank in group_ranks:
                     self.sp_clusters[_s] = gpu_group
@@ -125,6 +125,7 @@ def set_distributed_state(distributed_profile=None):
     node_rank = int(os.getenv("NODE_RANK", os.getenv("OMPI_COMM_WORLD_NODE_RANK", "0")))
     node_size = int(os.getenv("NNODES", "1"))
 
+    print(f">>> [Distributed] Rank: {rank}/{world_size}, local rank: {os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', None)}")
     if distributed_profile:
         "launch multiple single-node instances for fast profile"
         assert world_size % device_count == 0

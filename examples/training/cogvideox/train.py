@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-from copy import deepcopy
 from datetime import timedelta
 from pprint import pformat
 import numpy as np
@@ -17,14 +16,12 @@ from transformers import AutoTokenizer, T5EncoderModel
 
 from videosys.core.dcp.profiler import Profiler, set_profiler
 from videosys.core.distributed.parallel_mgr import DynamicParallelManager, ParallelManager, set_distributed_state
-from videosys.models.autoencoders.autoencoder_kl_open_sora import OpenSoraVAE_V1_2
-from videosys.models.transformers.open_sora_transformer_3d import STDiT3_XL_2
-from videosys.schedulers.scheduling_rflow_open_sora import RFLOW
+from videosys.models.autoencoders.autoencoder_kl_cogvideox import AutoencoderKLCogVideoX
+from videosys.models.transformers.cogvideox_transformer_3d import CogVideoXTransformer3DModel
+from videosys.schedulers.scheduling_dpm_cogvideox import CogVideoXDPMScheduler
 from videosys.training.ckpt_io import load, save, save_training_config
-from videosys.training.datasets.open_sora.dataloader import prepare_dataloader
-from videosys.training.datasets.open_sora.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
-from videosys.training.datasets.open_sora.utils import MaskGenerator, encode_prompt
-from videosys.training.ema_distributed import ema_gathering, ema_sharding, update_ema
+from videosys.training.datasets.cogvideox.dataloader import prepare_dataloader
+from videosys.training.datasets.cogvideox.datasets import DummyVariableVideoTextDataset, VariableVideoTextDataset
 from videosys.training.lr_schedulers.linear_warmup_open_sora import LinearWarmupLR
 from videosys.utils.logging import init_logger
 from videosys.utils.training import (
@@ -54,7 +51,7 @@ def main(args):
         backend="nccl",
         timeout=timedelta(minutes=10),
     )
-    deepspeed.init_distributed(timeout=timedelta(minutes=5))
+    deepspeed.init_distributed(timeout=timedelta(seconds=10))
     torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
     set_seed(args.seed)
     device = torch.cuda.current_device()
@@ -96,37 +93,42 @@ def main(args):
     # ======================================================
     logging.info("Building models...")
 
+    model_path = args.ckpt_path
     # == build text-encoder and vae ==
     if not preprocessed_data:
-        text_encoder = T5EncoderModel.from_pretrained("DeepFloyd/t5-v1_1-xxl", torch_dtype=dtype).to(device).eval()
-        tokenizer = AutoTokenizer.from_pretrained("DeepFloyd/t5-v1_1-xxl")
-        vae = (
-            OpenSoraVAE_V1_2(
-                from_pretrained="hpcai-tech/OpenSora-VAE-v1.2",
-                micro_frame_size=17,
-                micro_batch_size=4,
-            )
-            .to(device, dtype)
-            .eval()
-        )
+        text_encoder = T5EncoderModel.from_pretrained(
+            model_path, subfolder="text_encoder", torch_dtype=dtype
+        ).to(device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(model_path, subfolder="tokenizer")
+        vae = AutoencoderKLCogVideoX.from_pretrained(
+            model_path, subfolder="vae", torch_dtype=dtype
+        ).to(device).eval()
+        vae.enable_slicing()
+        vae.enable_tiling()
+
+        text_encoder.requires_grad_(False)
+        vae.requires_grad_(False)
+
+        vae_scale_factor_spatial = 2 ** (len(vae.config.block_out_channels) - 1)
+    else:
+        vae_scale_factor_spatial = 2 ** 3
 
     # == build diffusion model ==
-    model = STDiT3_XL_2(from_pretrained=args.ckpt_path, enable_flash_attn=True, torch_dtype=dtype).to(device).train()
+    model = CogVideoXTransformer3DModel.from_pretrained(
+        model_path, subfolder="transformer", torch_dtype=dtype, 
+        # override for 720p, 408 frame
+        sample_height=90, sample_width=160, sample_frames=409,
+    ).to(device).train()
     model_numel, model_numel_trainable = get_model_numel(model)
     logging.info(
         f"[Diffusion] Trainable model params: {format_numel_str(model_numel_trainable)}, "
         f"Total model params: {format_numel_str(model_numel)}",
     )
 
-    # == build ema for diffusion model ==
-    ema = deepcopy(model)
-    requires_grad(ema, False)
-    ema.eval()
-
     # == setup loss function, build scheduler ==
-    scheduler = RFLOW(
-        use_timestep_transform=True,
-        sample_method="logit-normal",
+    scheduler = CogVideoXDPMScheduler.from_pretrained(
+        model_path,
+        subfolder="scheduler",
     )
 
     # == setup optimizer ==
@@ -149,21 +151,18 @@ def main(args):
         model.enable_grad_checkpointing()
     model.enable_parallel(parallel_mgr=parallel_mgr)
 
-    if args.mask_ratios is not None:
-        mask_generator = MaskGenerator(args.mask_ratios)
-
     # ======================================================
     # 3. build dataset and dataloader
     # ======================================================
-    logging.info(f"Building dataset... model max length: {model.config.model_max_length}, ")
+    logging.info("Building dataset...")
     # create dcp profiler
     # TODO: scheduler is a better name?
     profiler: Profiler = set_profiler(
         model_type=model.config._name_or_path,
-        total_layers=model.config.depth,
+        total_layers=model.config.num_layers,
         bucket_config=args.bucket_config,
-        text_max_seq_len=model.config.model_max_length,
-        text_hidden_size=model.config.caption_channels,
+        text_max_seq_len=model.config.max_text_seq_length,
+        text_hidden_size=model.config.text_embed_dim,
         global_interpolation=not args.no_global_interpolation,
         dynamic_sp=args.dynamic_sp,
         dynamic_recompute=args.dynamic_recompute,
@@ -192,6 +191,8 @@ def main(args):
             zipf_offset=args.zipf_offset,
             image_mixing_type=args.image_mixing_type,
             image_mixing_frac=args.image_mixing_frac,
+            text_max_seq_len=model.config.max_text_seq_length,
+            text_hidden_size=model.config.text_embed_dim,
         )
     else:
         dataset = VariableVideoTextDataset(
@@ -251,29 +252,24 @@ def main(args):
     logging.info("Boosting model for distributed training")
     profiler.register_modules(
         {
-            "spatial": model.module.spatial_blocks,
-            "temporal": model.module.temporal_blocks,
+            "layer": model.module.transformer_blocks,
         }
     )
 
     start_epoch = start_step = log_step = acc_step = 0
     # TODO: resume functionality should consider the profiler status
     # == resume ==
-    if args.load is not None:
-        logging.info("Loading checkpoint")
-        ret = load(
-            args.load,
-            model=model,
-            ema=ema,
-            sampler=None if args.start_from_scratch else sampler,
-        )
-        if not args.start_from_scratch:
-            start_epoch, start_step = ret
-        logging.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
-
-    # == ema model sharding ==
-    ema_sharding(model.module, ema)
-    ema = ema.to(device, torch.float32)
+    # if args.load is not None:
+    #     logging.info("Loading checkpoint")
+    #     ret = load(
+    #         args.load,
+    #         model=model,
+    #         ema=ema,
+    #         sampler=None if args.start_from_scratch else sampler,
+    #     )
+    #     if not args.start_from_scratch:
+    #         start_epoch, start_step = ret
+    #     logging.info(f"Loaded checkpoint {args.load} at epoch {start_epoch} step {start_step}")
 
     # == global variables ==
     if do_profile:
@@ -330,40 +326,39 @@ def main(args):
             for gas in range(total_gas):
                 with profiler.profile(batch, model, gas) as valid_depth:
                     batch_data = batch["data"][gas]
-
+                    height = batch_data.pop("height")[0].item()
+                    width = batch_data.pop("width")[0].item()
+                    
                     if preprocessed_data:
                         # move data
-                        x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
+                        x = batch_data.pop("video").permute(0, 2, 1, 3, 4).to(device, dtype)  # [B, T, C, H, W]
                         y = batch_data.pop("text").to(device, dtype)
-                        mask = batch_data.pop("mask")
-                        if mask is not None:
-                            mask = mask.to(device)
-                        model_args = dict(y=y, mask=mask)
                     else:
-                        with torch.no_grad():
-                            x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
-                            y = batch_data.pop("text")
-                            # Prepare visual inputs
-                            x = vae.encode(x)  # [B, C, T, H/P, W/P]
-                            # Prepare text inputs
-                            model_args = encode_prompt(text_encoder, tokenizer, y)
+                        raise NotImplementedError("Not implemented for non-preprocessed data")
+                        # with torch.no_grad():
+                        #     x = batch_data.pop("video").to(device, dtype)  # [B, C, T, H, W]
+                        #     y = batch_data.pop("text")
+                        #     # Prepare visual inputs
+                        #     x = vae.encode(x)  # [B, C, T, H/P, W/P]
+                        #     # Prepare text inputs
+                        #     model_args = encode_prompt(text_encoder, tokenizer, y)
+                    
+                    local_token_counter += x.shape[0] * x.shape[1] * x.shape[3] * x.shape[4] / parallel_mgr.sp_size
 
-                    local_token_counter += x.shape[0] * x.shape[2] * x.shape[3] * x.shape[4] / parallel_mgr.sp_size
-
-                    for k, v in batch_data.items():
-                        if isinstance(v, torch.Tensor):
-                            model_args[k] = v.to(device, dtype)
-                    # TODO: polish
-                    model_args["valid_depth"] = valid_depth
+                    # for k, v in batch_data.items():
+                    #     if isinstance(v, torch.Tensor):
+                    #         model_args[k] = v.to(device, dtype)
+                    # # TODO: polish
+                    model_args = dict(valid_depth=valid_depth)
 
                     # mask
-                    mask = None
-                    if mask_generator is not None:
-                        mask = mask_generator.get_masks(x)
-                        model_args["x_mask"] = mask
+                    # mask = None
+                    # if mask_generator is not None:
+                    #     mask = mask_generator.get_masks(x)
+                    #     model_args["x_mask"] = mask
 
                     # diffusion
-                    loss_dict = scheduler.training_losses(model, x, model_args, mask=mask)
+                    loss_dict = scheduler.training_losses(model, x, y, height, width, vae_scale_factor_spatial, model_args)
 
                     # backward
                     profiler.set_gradient_accumulation_boundary(model, batch, gas)
@@ -388,7 +383,7 @@ def main(args):
                 continue
 
             # == update EMA ==
-            update_ema(ema, model.module, decay=args.ema_decay)
+            # update_ema(ema, model.module, decay=args.ema_decay)
 
             # == update log info ==
             all_reduce_mean(iter_loss)
@@ -421,23 +416,23 @@ def main(args):
                 log_step = 0
 
             # == checkpoint saving ==
-            if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
-                ema_gathering(model.module, ema)
-                save_dir = save(
-                    save_dir=exp_dir,
-                    save_optimizer=args.save_optimizer,
-                    model=model,
-                    ema=ema,
-                    sampler=sampler,
-                    epoch=epoch,
-                    step=step + 1,
-                    global_step=global_step + 1,
-                    batch_size=args.batch_size,
-                )
-                ema_sharding(model.module, ema)
-                logging.info(
-                    f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
-                )
+            # if args.ckpt_every > 0 and (global_step + 1) % args.ckpt_every == 0:
+            #     ema_gathering(model.module, ema)
+            #     save_dir = save(
+            #         save_dir=exp_dir,
+            #         save_optimizer=args.save_optimizer,
+            #         model=model,
+            #         ema=ema,
+            #         sampler=sampler,
+            #         epoch=epoch,
+            #         step=step + 1,
+            #         global_step=global_step + 1,
+            #         batch_size=args.batch_size,
+            #     )
+            #     ema_sharding(model.module, ema)
+            #     logging.info(
+            #         f"Saved checkpoint at epoch {epoch}, step {step + 1}, global_step {global_step + 1} to {save_dir}"
+            #     )
 
         token_counter.fill_(local_token_counter)
         dist.all_reduce(token_counter)

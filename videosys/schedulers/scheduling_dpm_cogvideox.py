@@ -17,6 +17,8 @@ import numpy as np
 import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.schedulers.scheduling_utils import KarrasDiffusionSchedulers, SchedulerMixin
+from diffusers.pipelines.cogvideo.pipeline_cogvideox import get_resize_crop_region_for_grid
+from diffusers.models.embeddings import get_3d_rotary_pos_embed
 from diffusers.utils import BaseOutput
 from diffusers.utils.torch_utils import randn_tensor
 
@@ -114,6 +116,39 @@ def rescale_zero_terminal_snr(alphas_cumprod):
     alphas_bar = alphas_bar_sqrt**2  # Revert sqrt
 
     return alphas_bar
+
+
+def prepare_rotary_positional_embeddings(
+    height: int,
+    width: int,
+    num_frames: int,
+    vae_scale_factor_spatial: int = 8,
+    patch_size: int = 2,
+    patch_size_t: int = 1,
+    attention_head_dim: int = 64,
+    device: Optional[torch.device] = None,
+    base_height: int = 480,
+    base_width: int = 720,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    grid_height = (height // vae_scale_factor_spatial + patch_size - 1) // patch_size
+    grid_width = (width // vae_scale_factor_spatial + patch_size - 1) // patch_size
+    base_size_width = base_width // (vae_scale_factor_spatial * patch_size)
+    base_size_height = base_height // (vae_scale_factor_spatial * patch_size)
+
+    p_t = patch_size_t
+    base_num_frames = (num_frames + p_t - 1) // p_t
+
+    grid_crops_coords = get_resize_crop_region_for_grid((grid_height, grid_width), base_size_width, base_size_height)
+    freqs_cos, freqs_sin = get_3d_rotary_pos_embed(
+        embed_dim=attention_head_dim,
+        crops_coords=grid_crops_coords,
+        grid_size=(grid_height, grid_width),
+        temporal_size=base_num_frames,
+    )
+
+    freqs_cos = freqs_cos.to(device=device)
+    freqs_sin = freqs_sin.to(device=device)
+    return freqs_cos, freqs_sin
 
 
 class CogVideoXDPMScheduler(SchedulerMixin, ConfigMixin):
@@ -481,3 +516,47 @@ class CogVideoXDPMScheduler(SchedulerMixin, ConfigMixin):
 
     def __len__(self):
         return self.config.num_train_timesteps
+
+    def training_losses(self, model, model_input, prompt_embeds, height, width, vae_scale_factor_spatial, model_args):
+        model_config = model.module.config
+        noise = torch.randn_like(model_input)
+        batch_size, num_frames = model_input.shape[:2]
+        timesteps = torch.randint(
+            0, self.config.num_train_timesteps, (batch_size,), 
+            device=model_input.device, dtype=torch.long,
+        )
+
+        image_rotary_emb = (
+            prepare_rotary_positional_embeddings(
+                height=height,
+                width=width,
+                num_frames=num_frames,
+                vae_scale_factor_spatial=vae_scale_factor_spatial,
+                patch_size=model_config.patch_size,
+                #model_config.patch_size_t if model_config.patch_size_t is not None else 1,
+                patch_size_t=getattr(model_config, "patch_size_t", 1),  
+                attention_head_dim=model_config.attention_head_dim,
+                device=torch.cuda.current_device(),
+            )
+            if model_config.use_rotary_positional_embeddings
+            else None
+        )
+        noisy_model_input = self.add_noise(model_input, noise, timesteps)
+
+        model_output = model(
+            hidden_states=noisy_model_input,
+            encoder_hidden_states=prompt_embeds,
+            timestep=timesteps,
+            image_rotary_emb=image_rotary_emb,
+            return_dict=False,
+            **model_args)[0]
+        model_pred = self.get_velocity(model_output, noisy_model_input, timesteps)
+        alphas_cumprod = self.alphas_cumprod[timesteps]
+        weights = 1 / (1 - alphas_cumprod)
+        while len(weights.shape) < len(model_pred.shape):
+            weights = weights.unsqueeze(-1)
+
+        target = model_input
+
+        loss = torch.mean((weights * (model_pred - target) ** 2).reshape(batch_size, -1), dim=1)
+        return {"loss": loss}

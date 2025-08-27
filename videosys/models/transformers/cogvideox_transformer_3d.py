@@ -25,6 +25,7 @@ from torch import nn
 from videosys.core.distributed.comm import all_to_all_comm, gather_sequence, get_pad, set_pad, split_sequence
 from videosys.core.distributed.parallel_mgr import ParallelManager
 from videosys.core.pab.pab_mgr import enable_pab, if_broadcast_spatial
+from videosys.core.dcp.recompute import auto_recompute
 from videosys.models.modules.embeddings import apply_rotary_emb
 from videosys.utils.utils import batch_func
 
@@ -265,6 +266,8 @@ class CogVideoXBlock(nn.Module):
         self.last_attn = None
         self.block_idx = block_idx
 
+        self.grad_checkpointing = True
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -459,15 +462,18 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
         # parallel
         self.parallel_manager = None
 
-    def enable_parallel(self, dp_size, sp_size, enable_cp):
-        # update cfg parallel
-        if enable_cp and sp_size % 2 == 0:
-            sp_size = sp_size // 2
-            cp_size = 2
+    def enable_parallel(self, dp_size=None, sp_size=None, enable_cp=None, parallel_mgr=None):
+        if parallel_mgr:
+            self.parallel_manager = parallel_mgr
         else:
-            cp_size = 1
+            # update cfg parallel
+            if enable_cp and sp_size % 2 == 0:
+                sp_size = sp_size // 2
+                cp_size = 2
+            else:
+                cp_size = 1
 
-        self.parallel_manager: ParallelManager = ParallelManager(dp_size, cp_size, sp_size)
+            self.parallel_manager: ParallelManager = ParallelManager(dp_size, cp_size, sp_size)
 
         for _, module in self.named_modules():
             if hasattr(module, "parallel_manager"):
@@ -475,6 +481,10 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
 
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value
+
+    def enable_grad_checkpointing(self):
+        for block in self.transformer_blocks:
+            block.grad_checkpointing = True
 
     def forward(
         self,
@@ -484,6 +494,7 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
         timestep_cond: Optional[torch.Tensor] = None,
         image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         return_dict: bool = True,
+        **kwargs,
     ):
         if self.parallel_manager.cp_size > 1:
             (
@@ -500,8 +511,16 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
                 timestep_cond,
                 image_rotary_emb,
             )
-
+        
         batch_size, num_frames, channels, height, width = hidden_states.shape
+        height_pad, width_pad = 0, 0
+        if height % self.config.patch_size != 0:
+            height_pad = height % self.config.patch_size
+            height = height + self.config.patch_size - height_pad
+        if width % self.config.patch_size != 0:
+            width_pad = width % self.config.patch_size
+            width = width + self.config.patch_size - width_pad
+        hidden_states = F.pad(hidden_states, (0, width_pad, 0, height_pad), value=0)
 
         # 1. Time embedding
         timesteps = timestep
@@ -519,6 +538,7 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
         # 3. Position embedding
         text_seq_length = encoder_hidden_states.shape[1]
         if not self.config.use_rotary_positional_embeddings:
+            # TODO: fix odd dims for CogVideoX-2b
             seq_length = height * width * num_frames // (self.config.patch_size**2)
 
             pos_embeds = self.pos_embedding[:, : text_seq_length + seq_length]
@@ -533,23 +553,12 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
             hidden_states = split_sequence(hidden_states, self.parallel_manager.sp_group, dim=1, pad=get_pad("pad"))
 
         # 4. Transformer blocks
-        for i, block in enumerate(self.transformer_blocks):
-            if self.training and self.gradient_checkpointing:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
-                hidden_states, encoder_hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    encoder_hidden_states,
-                    emb,
-                    image_rotary_emb,
-                    **ckpt_kwargs,
+        valid_depth = kwargs.get("valid_depth", len(self.transformer_blocks))
+        for i in range(valid_depth):
+            block = self.transformer_blocks[i]
+            if self.training:
+                hidden_states, encoder_hidden_states = auto_recompute(
+                    block, hidden_states, encoder_hidden_states, emb, image_rotary_emb
                 )
             else:
                 hidden_states, encoder_hidden_states = block(
@@ -579,8 +588,14 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
         # 6. Unpatchify
         p = self.config.patch_size
         output = hidden_states.reshape(batch_size, num_frames, height // p, width // p, channels, p, p)
+        # b, f, c, h, w
         output = output.permute(0, 1, 4, 2, 5, 3, 6).flatten(5, 6).flatten(3, 4)
-
+        if height_pad > 0:
+            # unpad
+            output = output[:, :, :, :-height_pad]
+        if  width_pad > 0:
+            output = output[:, :, :, :, :-width_pad]
+        
         if self.parallel_manager.cp_size > 1:
             output = gather_sequence(output, self.parallel_manager.cp_group, dim=0)
 

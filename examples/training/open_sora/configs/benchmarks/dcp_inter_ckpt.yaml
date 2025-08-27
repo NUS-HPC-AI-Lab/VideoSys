@@ -1,6 +1,6 @@
 zipf_offset: 5
-outputs: exp/dcp_inter_ckpt
-profile_path: exp/profile/dcp_inter_ckpt
+outputs: exp/opensora/dcp_inter_ckpt
+profile_path: exp/opensora/profile/dcp_inter_ckpt
 dynamic_sp: true
 dynamic_recompute: true
 auto_grad_accumulation: true

@@ -1,14 +1,15 @@
 zipf_offset: 5
-outputs: exp/opensora/dcp_intra
-profile_path: exp/opensora/profile/dcp_intra
+outputs: exp/opensora/dcp_inter_ckpt
+profile_path: exp/opensora/profile-sp4/dcp_inter_ckpt
 dynamic_sp: true
-dynamic_recompute: false
-auto_grad_accumulation: false
+dynamic_recompute: true
+auto_grad_accumulation: true
 dummy_dataset: true
-dummy_data_size: 2000
+dummy_data_size: 5000
 verbose: true
 calculate_imbalance: true
-
+max_grad_accumulation_steps: 5
+min_grad_accumulation_steps: 15
 
 # ==== training config ====
 
@@ -36,7 +37,7 @@ adam_eps: 1e-15
 warmup_steps: 10
 
 # data
-image_mixing_frac: 50
+# image_mixing_frac: 50
 num_bucket_build_workers: 16
 bucket_config:
   "144p": {1: [1.0, 345], 51: [1.0, 48], 102: [1.0, 25], 204: [1.0, 12], 408: [1.0, 6]}
